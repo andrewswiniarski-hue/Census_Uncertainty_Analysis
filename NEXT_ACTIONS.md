@@ -1,6 +1,6 @@
 # NEXT_ACTIONS.md — Phase 1, Step 1: Data & API Setup
 
-**Status (updated 2026-07-09):** Steps 1–3 complete ✅ — repo on GitHub, API key verified working, environment installed, scaffolding committed. Next: Step 4, first data pull.
+**Status (updated 2026-07-09):** Steps 1–4 complete ✅ — repo on GitHub, API key verified, environment installed, first ACS pull scripted and sanity-checked (finding: poverty/subgroup tables end at tract level). Next: Step 5, matching geometries.
 
 **Note for Claude:** Walk the project lead through these steps **one at a time, in order**. Explain what each step does in plain English before doing it, confirm it worked before moving on, and check off items as they're completed. Do not skip ahead. If a step fails, troubleshoot it before proceeding. Per CLAUDE.md: check in before running anything, and summarize at each checkpoint.
 
@@ -127,16 +127,16 @@ At **county, tract, and block group** level, ACS 5-year (latest available vintag
 
 **How to proceed (Claude drives, per CLAUDE.md check-in rules):**
 
-1. [ ] Claude proposes the ingestion script plan in plain English (what it pulls, where it saves, what format) — project lead approves
-2. [ ] Claude writes `ingestion/pull_acs_nj.py`, with:
+1. [x] Claude proposes the ingestion script plan in plain English (what it pulls, where it saves, what format) — project lead approves
+2. [x] Claude writes `ingestion/pull_acs_nj.py`, with:
    - Docstring: what it does, what it needs (`.env` key), what it produces
    - Loads key via `dotenv`
    - Pulls estimates + MOEs at all three geography levels
    - Saves to `data/raw/` as parquet, one file per geography level
    - Prints sanity checks on completion: row counts (NJ has 21 counties — verify), null rates, min/max of each variable
-3. [ ] Run it; review the sanity-check output together. **NJ county count must equal 21** or something is wrong with the query.
-4. [ ] Claude explains in plain English what the MOE column means for one example row (e.g., "Mercer County median income is $X ± $Y at 90% confidence")
-5. [ ] Commit the script (not the data)
+3. [x] Run it; review the sanity-check output together. **NJ county count must equal 21** or something is wrong with the query. *(Passed: 21 counties, 2,181 tracts, 6,599 block groups. Findings: poverty B17001 and race×age B01001B not published below tract; annotation codes arrive as blanks via censusdis; income top-coded at 250,001.)*
+4. [x] Claude explains in plain English what the MOE column means for one example row (e.g., "Mercer County median income is $X ± $Y at 90% confidence")
+5. [x] Commit the script (not the data)
 
 ✅ **Checkpoint:** Three parquet files in `data/raw/`, sanity checks pass, script committed. Summarize findings before continuing.
 
@@ -172,7 +172,7 @@ At **county, tract, and block group** level, ACS 5-year (latest available vintag
 - [x] Census API key working, stored safely in `.env` (verified with a live API call, 2026-07-09)
 - [x] Reproducible Python environment (`requirements.txt`)
 - [x] Clean repo structure with secrets protected
-- [ ] Scripted ACS pull: 4 variables × 3 geography levels × NJ, with MOEs, sanity-checked
+- [x] Scripted ACS pull: 4 variables × 3 geography levels × NJ, with MOEs, sanity-checked
 - [ ] Matching geometries, verified with a test map
 - [ ] DAS demonstration file located and documented
 

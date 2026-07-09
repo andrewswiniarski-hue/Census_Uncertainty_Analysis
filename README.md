@@ -153,6 +153,7 @@ Each analysis answers a specific question — keep notebooks organized by questi
 - Are there internal precedents/prior work on composite quality scores we should review?
 - Preferred dashboard technology, or is that our call? (Sponsor doc: use professional judgment, open source encouraged)
 - Which DAS demonstration product vintage is best for the noise analysis?
+- Poverty (B17001) and detailed race×age tables aren't published below tract level (confirmed empirically, 2026-07-09). Is tract acceptable as the floor for poverty/subgroup analysis, or should we swap in a block-group-available alternative (e.g., C17002 income-to-poverty ratio) where BG granularity matters?
 
 ## Guardrails / Lessons to Remember
 

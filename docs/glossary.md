@@ -79,3 +79,24 @@ geography level. They're what let us join estimates to maps.
 **Vintage** — The release year/edition of a dataset (e.g., the 2019–2023 ACS 5-year
 estimates). Always record the vintage: numbers differ across vintages for the
 same geography and variable.
+
+**Annotation codes (sentinel values)** — Giant negative numbers (e.g., `-555555555`,
+`-666666666`) the Census API returns *in place of* a real value, each encoding a
+reason: estimate controlled, insufficient sample, etc. They must be treated as
+missing, never as data (a naive CV calculation on one produces nonsense). Note:
+our client library (censusdis) converts them to blanks automatically — convenient,
+but it erases *which* reason applied. *Source: "Notes on ACS Estimate and
+Annotation Values," census.gov.*
+
+**Controlled estimate** — An estimate pinned to an official benchmark (the
+Population Estimates Program) rather than measured by the survey — e.g., state
+and county total population. No sampling MOE is published (annotation
+`-555555555`). Important: a controlled estimate's missing MOE means *extremely
+reliable*, the opposite of an estimate suppressed for insufficient sample —
+two blank MOEs with opposite meanings.
+
+**Top-coding** — Capping a published value at a threshold to avoid revealing
+extremes: ACS median household income above $250,000 is published as `250,001`,
+meaning "somewhere above $250k." A form of deliberate censoring — uncertainty
+that isn't sampling noise. First seen in our NJ tract pull (several tracts at
+exactly 250,001).
