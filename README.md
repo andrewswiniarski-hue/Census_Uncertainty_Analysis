@@ -1,0 +1,133 @@
+# Census Uncertainty Analytics: From Collection to Decision Making
+
+**MSBA Capstone Project — Sponsor: U.S. Census Bureau (USCB)**
+Kickoff: July 8, 2026 | First biweekly status meeting: ~2 weeks after kickoff
+
+---
+
+## Project Summary
+
+The Census Bureau wants to understand and communicate the **uncertainty** in its published estimates. Uncertainty enters at multiple points in the statistical product lifecycle (sampling, nonresponse, imputation, disclosure avoidance noise), and today there is no unified way for a non-technical user to judge whether an estimate is reliable enough for their decision.
+
+Our job: **decompose the sources of uncertainty, explore a composite reliability score, and build visualizations that tell users whether an estimate is fit for their use.**
+
+All data is **public** — no NDA or special sworn status required.
+
+## Key Research Questions (anchor every phase to these)
+
+| # | Question |
+|---|----------|
+| Q1 | How is uncertainty introduced across the statistical product lifecycle? |
+| Q2 | Can multiple uncertainty components be combined into one interpretable score? |
+| Q3 | Which existing public uncertainty metrics are fit for which uses? |
+| Q4 | How should uncertainty be visualized and communicated to non-technical users? |
+
+## Deliverables
+
+**Must-have:**
+1. **Uncertainty Analysis Report** — decomposition, composite score (with reliability tiers/thresholds), fit-for-use guidance across 3–5 statistical products (chosen with Census mentor)
+2. **Reproducible Codebase** — ingestion → processing → uncertainty computation → composite score → geospatial layers; fully documented
+3. **Executive Dashboard** — linked micro-maps (tract / block group / county) with composite scores, color-coded reliability tiers, and explanatory tooltips
+
+**Nice-to-have (if time allows):** plain-language interpretive aids; interactive sliders for methodology/privacy tradeoffs; side-by-side comparisons; counterfactual tuning toolkit; uncertainty hot-spot maps.
+
+## Semester Milestones
+
+| Weeks | Phase | Exit criteria |
+|-------|-------|---------------|
+| 1–3 | Data Exploration & Research | Data sources catalogued; methodology & literature reviewed |
+| 4–6 | Concept Pitch & Wireframe | Composite score approach + dashboard wireframe presented to mentors |
+| 7–10 | MVP Product Demo | Working prototype: score logic, sample geographies, draft visuals |
+| 11–12 | Stakeholder Feedback | Formal review with Census leadership; feedback incorporated |
+| 13–14 | Launch Tool | Final dashboard, codebase, and report delivered |
+
+**Cadence:** biweekly status meetings with mentors. Ground rule: bring a one-slide status update — what worked, what's blocked, what you need from us.
+
+## Candidate Datasets (confirm shortlist with mentor)
+
+**Decennial & Disclosure Avoidance:** Demographic Profile; DHC / DHC-A / DHC-B; Supplemental DHC (SDHC); Privacy-Protected Microdata File (PPMF); DAS demonstration products; TIGER/Line shapefiles
+
+**Metadata & Methodology:** sampling design documentation; disclosure avoidance technical documentation; editing & imputation methodology; error measurement / quality indicator documentation
+
+**Likely additions:** ACS 5-year estimates (ships with margins of error — best starting point for empirical work)
+
+Data portal: [data.census.gov](https://data.census.gov) | Documentation: [census.gov](https://www.census.gov)
+
+---
+
+# Phase 1 Checklist — Getting Set Up & Familiar with the Data
+
+Work through these in order. Each step has a concrete "done when" so we can track progress.
+
+### Step 1: Infrastructure setup (Day 1)
+
+- [ ] **Create the GitHub repo** (one team member creates, adds others as collaborators)
+  - Suggested structure:
+    ```
+    /data          (raw + processed; .gitignore large raw files)
+    /ingestion     (API pull scripts)
+    /notebooks     (EDA, exploratory work)
+    /analysis      (reusable analysis code)
+    /docs          (data dictionary, methodology notes, this README)
+    ```
+  - Add a `.gitignore` (Python template + `/data/raw/`) and commit this README to the root
+- [ ] **Request a Census API key** — free and instant: https://api.census.gov/data/key_signup.html (each member can get their own)
+- [ ] **Set up the Python environment** — create `requirements.txt` with initial packages: `pandas`, `geopandas`, `matplotlib`, `censusdis` (or `census` + `us`), `jupyter`
+- [ ] **Done when:** everyone has cloned the repo, installed the environment, and stored their API key locally (in a `.env` file — never commit keys)
+
+### Step 2: Methodology grounding (Days 1–4, parallel with Step 1)
+
+Read before analyzing — this project's core insight is *where* uncertainty comes from:
+
+- [ ] **ACS "Accuracy of the Data" documentation** — how margins of error are computed and what they mean (search census.gov: "ACS accuracy of the data")
+- [ ] **2020 Disclosure Avoidance System (DAS) technical docs** — how the TopDown Algorithm injects privacy noise into Decennial counts (search: "2020 Census disclosure avoidance")
+- [ ] **ACS item allocation rates** — how imputation is measured (search: "ACS item allocation rates")
+- [ ] Note the key contrast: **Decennial = full count, so privacy noise + coverage error dominate; ACS = sample, so sampling error dominates**
+- [ ] **Done when:** each member can explain in one paragraph the 3–4 major sources of uncertainty and which products they affect. Write these paragraphs into `/docs/uncertainty-sources.md`
+
+### Step 3: First data pull (Days 4–7)
+
+Start small and concrete — one state, a few variables:
+
+- [ ] Pull **ACS 5-year estimates with MOEs** via the API for one state (e.g., New Jersey) at **county, tract, and block group** levels
+  - Suggested starter variables: total population, median household income, poverty rate, plus one small-subgroup count (e.g., a specific age × race cell)
+- [ ] Download the matching **TIGER/Line shapefiles** for those geographies
+- [ ] Download one **DAS demonstration product / PPMF comparison file** to see privacy noise empirically
+- [ ] **Done when:** raw data is saved, the pull is scripted (not manual downloads where avoidable), and the script is committed to `/ingestion`
+
+### Step 4: Data inventory / data dictionary (Week 2)
+
+- [ ] Build `/docs/data-dictionary.md` cataloguing each product: geography levels available, what uncertainty measures ship with it (MOE? CV? nothing?), update frequency, file format, access method
+- [ ] **Done when:** the dictionary covers ACS, DHC, Demographic Profile, PPMF/DAS demo, and TIGER/Line — this becomes the "data sources catalogued" milestone evidence
+
+### Step 5: First-pass EDA (Week 2–3)
+
+Each analysis answers a specific question — keep notebooks organized by question:
+
+- [ ] **How does uncertainty scale with geography size?** Compute CV = (MOE / 1.645) / estimate; plot the distribution at county vs. tract vs. block group. (Expect it to explode at small geographies — this is the project's central empirical fact.)
+- [ ] **How does uncertainty vary by variable type?** Compare CVs for median income vs. small subgroup counts
+- [ ] **Where is uncertainty geographically concentrated?** Choropleth of tract-level CVs for one variable — this is a crude prototype of the final dashboard view; great to show at the first biweekly
+- [ ] **What does privacy noise look like?** Using DAS demonstration data, compare noisy vs. baseline counts by geography size
+- [ ] **How prevalent is imputation?** Pull ACS allocation rates for a few variables; check whether they correlate with high-MOE geographies (if independent → justifies a multi-component composite score)
+- [ ] **Done when:** notebooks are committed with markdown commentary, and we have 2–3 charts worth showing mentors
+
+### Step 6: Prep for first biweekly
+
+- [ ] One-slide status: what worked, what's blocked, what we need
+- [ ] Bring the product shortlist question to mentors: *"We're leaning toward ACS 5-year + DHC + Demographic Profile as our 3 core products — is that the right mix?"*
+- [ ] Confirm recurring biweekly meeting slot
+
+---
+
+## Open Questions for Mentors
+
+- Which 3–5 statistical products should we prioritize?
+- Are there internal precedents/prior work on composite quality scores we should review?
+- Preferred dashboard technology, or is that our call? (Sponsor doc: use professional judgment, open source encouraged)
+- Which DAS demonstration product vintage is best for the noise analysis?
+
+## Guardrails / Lessons to Remember
+
+- **Timebox the statistical rabbit hole.** Uncertainty decomposition can go arbitrarily deep (total survey error literature is vast). Get a workable composite by week 6; save real energy for the dashboard and fit-for-use guidance — that's what leadership will remember.
+- **Reproducibility from day one.** The codebase is a graded deliverable; script every data pull.
+- **Actionable vs. structural error.** If our decomposition can separate undercount (fixable via get-out-the-count campaigns) from privacy noise (a policy choice), that directly serves the sponsor's stated goal.
