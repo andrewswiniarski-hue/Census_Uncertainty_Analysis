@@ -1,6 +1,6 @@
 # NEXT_ACTIONS.md — Phase 1, Step 1: Data & API Setup
 
-**Status (updated 2026-07-09):** Steps 1–4 complete ✅ — repo on GitHub, API key verified, environment installed, first ACS pull scripted and sanity-checked (finding: poverty/subgroup tables end at tract level). Next: Step 5, matching geometries.
+**Status (updated 2026-07-09):** Steps 1–5 complete ✅ — repo on GitHub, API key verified, environment installed, ACS pull + matching geometries scripted and verified (1:1 join checks passed at all three levels). Next: Step 6, locate DAS demonstration data.
 
 **Note for Claude:** Walk the project lead through these steps **one at a time, in order**. Explain what each step does in plain English before doing it, confirm it worked before moving on, and check off items as they're completed. Do not skip ahead. If a step fails, troubleshoot it before proceeding. Per CLAUDE.md: check in before running anything, and summarize at each checkpoint.
 
@@ -146,9 +146,9 @@ At **county, tract, and block group** level, ACS 5-year (latest available vintag
 
 **Why:** Every uncertainty number eventually goes on a map. Pulling geography now means our EDA choropleths (and later, the dashboard) join cleanly.
 
-1. [ ] Claude proposes approach: `censusdis` can return geometry with the data pull (simplest), or we pull TIGER/Line separately. Recommend the censusdis route unless there's a reason not to.
-2. [ ] Extend or add a script so we have NJ county, tract, and block group geometries saved to `data/raw/` (GeoParquet or GeoJSON)
-3. [ ] Quick verification plot: a blank map of NJ tracts — if it looks like New Jersey, the join keys work
+1. [x] Claude proposes approach: `censusdis` can return geometry with the data pull (simplest), or we pull TIGER/Line separately. Recommend the censusdis route unless there's a reason not to. *(Went with censusdis — cartographic boundary files, vintage-matched to the data.)*
+2. [x] Extend or add a script so we have NJ county, tract, and block group geometries saved to `data/raw/` (GeoParquet or GeoJSON) *(`ingestion/pull_nj_geometry.py`; GeoParquet; 1:1 join check against the data files passed at all three levels; 6 invalid geometries at tract & BG noted for the processing layer)*
+3. [x] Quick verification plot: a blank map of NJ tracts — if it looks like New Jersey, the join keys work *(it does — `data/raw/verification_map_nj_tracts.png`)*
 
 ✅ **Checkpoint:** Geometry saved; verification map looks right.
 
@@ -173,7 +173,7 @@ At **county, tract, and block group** level, ACS 5-year (latest available vintag
 - [x] Reproducible Python environment (`requirements.txt`)
 - [x] Clean repo structure with secrets protected
 - [x] Scripted ACS pull: 4 variables × 3 geography levels × NJ, with MOEs, sanity-checked
-- [ ] Matching geometries, verified with a test map
+- [x] Matching geometries, verified with a test map
 - [ ] DAS demonstration file located and documented
 
 **Next up after this file:** Phase 1, Step 5 of the README — first-pass EDA, starting with the CV-by-geography-size analysis (our first real finding and first biweekly chart).
