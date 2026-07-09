@@ -3,10 +3,18 @@
 .env
 
 # Data (regenerate via scripts — never commit raw data)
-data/raw/
-data/processed/
+# The * + ! pattern ignores all contents but keeps the .gitkeep placeholders,
+# so the folder structure survives a fresh clone.
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
 
 # Python cruft
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
+
+# OS cruft
+.DS_Store
+Thumbs.db

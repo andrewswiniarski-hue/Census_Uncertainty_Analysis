@@ -1,0 +1,15 @@
+# Census Uncertainty Analytics — Python dependencies
+#
+# Setup (from repo root):
+#   python -m venv .venv
+#   .venv\Scripts\activate           (Windows)
+#   source .venv/bin/activate        (Mac/Linux)
+#   pip install -r requirements.txt
+
+pandas            # tabular data wrangling
+geopandas         # spatial data: joins estimates to map geometries
+matplotlib        # charts and maps
+censusdis         # Census API client: pulls estimates, MOEs, and boundaries in one call
+python-dotenv     # loads CENSUS_API_KEY from the local .env file
+jupyter           # notebooks for exploratory analysis
+pyarrow           # fast, compact parquet file storage
