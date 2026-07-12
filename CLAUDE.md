@@ -12,7 +12,7 @@ Read `README.md` in this folder first, every session. It contains the project re
 
 - **Before writing code:** state in 2–4 plain-English sentences what you plan to build, what approach you'll take, and why. Wait for a go-ahead.
 - **Before any statistical/methodological choice** (e.g., which CV formula, how to normalize composite score components, which reliability thresholds): present the options, the tradeoffs, and your recommendation. Let the lead choose.
-- **At every checkpoint** (a script finished, an analysis complete, a notebook done): stop, summarize what was done and what was found, and ask what to do next. Do not chain into the next task automatically.
+- **At every checkpoint** (a script finished, an analysis complete, a notebook done): stop, summarize what was done and what was found, log it in `WORKLOG.md` (see Technical Standards), and ask what to do next. Do not chain into the next task automatically.
 - **Before anything destructive or hard to undo:** deleting files, overwriting data, force-pushing, large downloads, or anything touching `/data/raw/`. Always ask.
 - **When results look surprising:** flag it immediately rather than smoothing over it. A weird distribution or an impossible value is a finding, not an inconvenience.
 
@@ -35,6 +35,7 @@ The project lead is an MSBA student — smart, learning, and busy. Every explana
 - **Python defaults:** pandas, geopandas, matplotlib, censusdis (or census + us) unless there's a reason to deviate — and if there is, explain the reason.
 - **Statistical rigor:** cite the source for every formula or threshold (e.g., "CV > 0.30 flagged as low reliability, following the practice at [agency/doc]"). When we invent something (like the composite score), clearly label it as our methodology and document the assumptions.
 - **Validate before trusting:** after every data pull, run sanity checks (row counts, geography counts against known totals, null rates, value ranges) and report them before doing analysis on the data.
+- **Keep the team work log current:** `WORKLOG.md` at the repo root is the team's shared record of who did what, when, and what was found. Every finished piece of work (script, analysis, notebook, document) gets an entry — contributor, date, plain-English summary, findings, files — using the template at the top of that file, newest entry first, committed alongside the work itself. Surprising results and data quirks belong in the entry's findings line, not just in chat.
 
 ## Project Judgment
 
