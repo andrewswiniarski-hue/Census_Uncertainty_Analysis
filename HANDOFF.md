@@ -18,7 +18,8 @@
 - **First-pass EDA (README Step 5 core) is done and committed:** three notebooks, four mentor-ready charts. Step 5's "done when" is satisfied; EDA #4 (privacy noise) and #5 (allocation rates) remain open — #4 is now unblocked.
 - **The project is ACTIVE** — the lead gave the EDA go-ahead on 2026-07-15 (the pause noted in the original handoff is over).
 - **First mentor biweekly: July 22, 2026.** Bring a one-slide status; chart candidates are ready (see below).
-- Remote: <https://github.com/andrewswiniarski-hue/Census_Uncertainty_Analysis> (branch `main`). **Five commits are local-only, not pushed** (`537a66e` … housekeeping); `docs/team-recap-2026-07-12.pptx` is untracked pending the lead's call on committing binaries.
+- Remote: <https://github.com/andrewswiniarski-hue/Census_Uncertainty_Analysis> (branch `main`). Everything is committed and pushed as of 2026-07-15; only `docs/team-recap-2026-07-12.pptx` is untracked, pending the lead's call on committing binaries.
+- **Teammates are contributing via the GitHub web UI** — fetch before you push. Katie Christiansen added a national-level ACS + boundaries pull ([`ingestion/pull_acs_us.py`](ingestion/pull_acs_us.py), state/county only) and [`ingestion/Explore.py`](ingestion/Explore.py) on 2026-07-14; see her WORKLOG entry.
 
 ## What exists
 
