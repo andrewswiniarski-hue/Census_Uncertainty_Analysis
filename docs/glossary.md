@@ -113,6 +113,12 @@ our client library (censusdis) converts them to blanks automatically — conveni
 but it erases *which* reason applied. *Source: "Notes on ACS Estimate and
 Annotation Values," census.gov.*
 
+**Choropleth** — A map in which each area (here: census tract) is shaded by a data
+value — in our case, by reliability tier. Classed bins (a handful of labeled
+color steps) communicate to non-technical readers better than continuous color
+ramps, which is why the dashboard deliverable specifies color-coded tiers.
+First used in `notebooks/03-cv-choropleth-nj-tracts.ipynb`.
+
 **Controlled estimate** — An estimate pinned to an official benchmark (the
 Population Estimates Program) rather than measured by the survey — e.g., state
 and county total population. No sampling MOE is published (annotation
