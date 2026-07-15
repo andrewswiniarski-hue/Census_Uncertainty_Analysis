@@ -41,6 +41,15 @@ across variables of totally different scales (income vs. population counts).
 Reliability thresholds (e.g., "CV > 0.30 = low reliability") vary by agency — we
 will cite the source when we adopt ours.
 
+**Reliability threshold conventions** — Common CV cutoffs other organizations use
+to label estimate reliability: ESRI's ACS documentation calls CV < 0.12 *high
+reliability*, 0.12–0.40 *medium*, and > 0.40 *low*; the National Center for
+Health Statistics (NCHS Data Presentation Standards) flags estimates with
+CV > 0.30 as unreliable. Our EDA charts show these lines for orientation only —
+this project's own tiers are a deliberate, mentor-reviewed decision scheduled
+for the composite-score phase (weeks 4–6). First used in
+`notebooks/01-cv-by-geography-size.ipynb`.
+
 **Sampling error** — Uncertainty that exists because a sample was measured instead
 of everyone. Shrinks as sample size grows; explodes for small geographies and
 small subgroups. The dominant uncertainty source in the ACS.

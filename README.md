@@ -136,7 +136,7 @@ Start small and concrete — one state, a few variables:
 
 Each analysis answers a specific question — keep notebooks organized by question:
 
-- [ ] **How does uncertainty scale with geography size?** Compute CV = (MOE / 1.645) / estimate; plot the distribution at county vs. tract vs. block group. (Expect it to explode at small geographies — this is the project's central empirical fact.)
+- [x] **How does uncertainty scale with geography size?** Compute CV = (MOE / 1.645) / estimate; plot the distribution at county vs. tract vs. block group. (Expect it to explode at small geographies — this is the project's central empirical fact.) *(done 2026-07-15 — `notebooks/01-cv-by-geography-size.ipynb`; confirmed: median income CV 0.014 county → 0.128 tract → 0.204 block group)*
 - [ ] **How does uncertainty vary by variable type?** Compare CVs for median income vs. small subgroup counts
 - [ ] **Where is uncertainty geographically concentrated?** Choropleth of tract-level CVs for one variable — this is a crude prototype of the final dashboard view; great to show at the first biweekly
 - [ ] **What does privacy noise look like?** Using DAS demonstration data, compare noisy vs. baseline counts by geography size
