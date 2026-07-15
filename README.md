@@ -129,7 +129,7 @@ Start small and concrete — one state, a few variables:
 
 ### Step 4: Data inventory / data dictionary (Week 2)
 
-- [ ] Build `/docs/data-dictionary.md` cataloguing each product: geography levels available, what uncertainty measures ship with it (MOE? CV? nothing?), update frequency, file format, access method
+- [ ] Build `/docs/data-dictionary.md` cataloguing each product: geography levels available, what uncertainty measures ship with it (MOE? CV? nothing?), update frequency, file format, access method *(started 2026-07-15 — ACS, cartographic boundaries, and DAS demo entries done; DHC, Demographic Profile, PPMF pending mentor shortlist confirmation)*
 - [ ] **Done when:** the dictionary covers ACS, DHC, Demographic Profile, PPMF/DAS demo, and TIGER/Line — this becomes the "data sources catalogued" milestone evidence
 
 ### Step 5: First-pass EDA (Week 2–3)
@@ -141,7 +141,7 @@ Each analysis answers a specific question — keep notebooks organized by questi
 - [x] **Where is uncertainty geographically concentrated?** Choropleth of tract-level CVs for one variable — this is a crude prototype of the final dashboard view; great to show at the first biweekly *(done 2026-07-15 — `notebooks/03-cv-choropleth-nj-tracts.ipynb`; income vs. poverty side by side; poverty reliability maps as the inverse of poverty itself — most reliable in urban cores, least in affluent tracts)*
 - [ ] **What does privacy noise look like?** Using DAS demonstration data, compare noisy vs. baseline counts by geography size
 - [ ] **How prevalent is imputation?** Pull ACS allocation rates for a few variables; check whether they correlate with high-MOE geographies (if independent → justifies a multi-component composite score)
-- [ ] **Done when:** notebooks are committed with markdown commentary, and we have 2–3 charts worth showing mentors
+- [x] **Done when:** notebooks are committed with markdown commentary, and we have 2–3 charts worth showing mentors *(satisfied 2026-07-15 — notebooks 01–03 committed, four mentor-ready charts in `data/processed/`; the DAS-noise and allocation-rate questions above remain open as EDA #4/#5)*
 
 ### Step 6: Prep for first biweekly
 

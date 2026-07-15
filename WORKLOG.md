@@ -29,6 +29,12 @@ Ground rules:
 
 ## Log
 
+### 2026-07-15 — Andrew Swiniarski — Housekeeping: progress-tracking docs synced to end of first EDA session
+- **Area:** docs / project management
+- **What was done:** Rewrote [HANDOFF.md](HANDOFF.md) to the current state (runbook complete, EDA 01–03 done, DAS file on disk, decisions 4–9 and new landmines recorded, next-work list refreshed — the stale "project is PAUSED" language is gone). Ticked README's Step 5 "done when" and noted Step 4 as started; refreshed the docs/README status table; extended CLAUDE.md's session reading list to include WORKLOG.md and HANDOFF.md.
+- **Findings / decisions:** None — bookkeeping.
+- **Files:** HANDOFF.md, README.md, docs/README.md, CLAUDE.md, WORKLOG.md
+
 ### 2026-07-15 — Andrew Swiniarski — DAS demonstration data located + downloaded; data dictionary started (runbook Step 6)
 - **Area:** ingestion / docs
 - **What was done:** Surveyed the Census Bureau's 2010 Demonstration Data Products archive (all five product folders), picked a provisional release, and scripted the download: [ingestion/pull_das_demo_nj.py](ingestion/pull_das_demo_nj.py) pulls the New Jersey summary file from the **2022-08-25 DHC demonstration release** (nj2010.dhc.zip, 250 MB, integrity-verified: 44 table segments + geo header, 2.0 GB uncompressed) plus the four companion docs needed to parse it (README, technical document, state geoheader layout, table matrix) into `data/raw/das_demo/`. Started [docs/data-dictionary.md](docs/data-dictionary.md) (README Step 4) with ACS, boundary, and DAS-demo entries. This closes the NEXT_ACTIONS runbook (Steps 1–6 all done).
