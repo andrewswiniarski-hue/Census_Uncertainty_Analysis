@@ -31,9 +31,9 @@ Ground rules:
 
 ### 2026-07-14 — Katie Christiansen — US boundary pull & exploration
 - **Area:** ingestion
-- **What was done:** Wrote and ran [ingestion/pull_acs_us.py](ingestion/pull_acs_us.py) — pulls 2024 ACS 5-year estimates and matching cartographic boundaries for all US states and counties. The script saves separate ACS Parquet and GeoParquet files, verifies a 1:1 join on Census geography IDs, and renders a nationwide county verification map. Added [Explore.py](Explore.py) to join the national county data to its geometry and save a median-household-income map. This is very similar to Andrew's NJ analysis, but at a US level. 
+- **What was done:** Wrote and ran [ingestion/pull_acs_us.py](ingestion/pull_acs_us.py) — pulls 2024 ACS 5-year estimates and matching cartographic boundaries for all US states and counties. The script saves separate ACS Parquet and GeoParquet files, verifies a 1:1 join on Census geography IDs, and renders a nationwide county verification map. Added [ingestion/Explore.py](ingestion/Explore.py) to join the national county data to its geometry and save a median-household-income map. This is very similar to Andrew's NJ analysis, but at a US level. 
 - **Findings / decisions:** National analysis is limited to state and county levels for now because nationwide tract and block-group geometry is substantially larger and slower to manage. Estimates include 90% margin-of-error columns.
-- **Files:** ingestion/pull_acs_us.py; Explore.py; outputs `data/raw/acs5_2024_us_*.parquet`, `data/raw/geo_2024_us_*.parquet`, `data/raw/verification_map_us_counties.png`, and `data/raw/us_county_median_household_income.png` (local only, regenerable). I uploaded these files manually for now, so if the above hyperlinks do not work, they are both in the ingestion folder. 
+- **Files:** ingestion/pull_acs_us.py; Explore.py; outputs `data/raw/acs5_2024_us_*.parquet`, `data/raw/geo_2024_us_*.parquet`, `data/raw/verification_map_us_counties.png`, and `data/raw/us_county_median_household_income.png` (local only, regenerable). I uploaded these files manually for now.
 
 ### 2026-07-12 — Andrew Swiniarski — Team sync recap deck; work log started
 - **Area:** project management / docs
