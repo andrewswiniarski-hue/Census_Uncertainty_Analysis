@@ -124,8 +124,8 @@ Start small and concrete — one state, a few variables:
 - [x] Pull **ACS 5-year estimates with MOEs** via the API for one state (e.g., New Jersey) at **county, tract, and block group** levels *(done 2026-07-09 — `ingestion/pull_acs_nj.py`, vintage 2024, sanity checks pass)*
   - Suggested starter variables: total population, median household income, poverty rate, plus one small-subgroup count (e.g., a specific age × race cell)
 - [x] Download the matching **TIGER/Line shapefiles** for those geographies *(done 2026-07-09 — `ingestion/pull_nj_geometry.py`, cartographic boundaries via censusdis, 1:1 join verified)*
-- [ ] Download one **DAS demonstration product / PPMF comparison file** to see privacy noise empirically *(open — see NEXT_ACTIONS.md Step 6)*
-- [ ] **Done when:** raw data is saved, the pull is scripted (not manual downloads where avoidable), and the script is committed to `/ingestion` *(ACS + geometry: done and committed; DAS file still outstanding)*
+- [x] Download one **DAS demonstration product / PPMF comparison file** to see privacy noise empirically *(done 2026-07-15 — `ingestion/pull_das_demo_nj.py`; 2010 Demonstration Data Product–DHC, release 2022-08-25, NJ summary file + parsing docs; documented in `docs/data-dictionary.md`)*
+- [x] **Done when:** raw data is saved, the pull is scripted (not manual downloads where avoidable), and the script is committed to `/ingestion` *(ACS + geometry done 2026-07-09; DAS demo file done 2026-07-15 — all three pulls scripted and committed)*
 
 ### Step 4: Data inventory / data dictionary (Week 2)
 
@@ -156,7 +156,7 @@ Each analysis answers a specific question — keep notebooks organized by questi
 - Which 3–5 statistical products should we prioritize?
 - Are there internal precedents/prior work on composite quality scores we should review?
 - Preferred dashboard technology, or is that our call? (Sponsor doc: use professional judgment, open source encouraged)
-- Which DAS demonstration product vintage is best for the noise analysis?
+- Which DAS demonstration product vintage is best for the noise analysis? *(Provisional pick made 2026-07-15: the 2022-08-25 tabulated DHC demonstration summary file — newest tabulated release, closest to DHC production settings; the 2023-04-03 production suite is microdata-only and the 2022-03-16 release has a technical-issues alert. Please confirm or redirect.)*
 - Poverty (B17001) and detailed race×age tables aren't published below tract level (confirmed empirically, 2026-07-09). Is tract acceptable as the floor for poverty/subgroup analysis, or should we swap in a block-group-available alternative (e.g., C17002 income-to-poverty ratio) where BG granularity matters?
 - 131 NJ tracts (6%, in all 21 counties) publish total-population MOEs of ±14–143 people vs. a statewide median of ±546 — near-controlled precision, but with a published MOE rather than the controlled-estimate annotation (found 2026-07-15, EDA 02). What mechanism produces these (sub-county effects of population controls? administrative-records group quarters?), and should a reliability score treat them as their own class?
 

@@ -29,6 +29,12 @@ Ground rules:
 
 ## Log
 
+### 2026-07-15 — Andrew Swiniarski — DAS demonstration data located + downloaded; data dictionary started (runbook Step 6)
+- **Area:** ingestion / docs
+- **What was done:** Surveyed the Census Bureau's 2010 Demonstration Data Products archive (all five product folders), picked a provisional release, and scripted the download: [ingestion/pull_das_demo_nj.py](ingestion/pull_das_demo_nj.py) pulls the New Jersey summary file from the **2022-08-25 DHC demonstration release** (nj2010.dhc.zip, 250 MB, integrity-verified: 44 table segments + geo header, 2.0 GB uncompressed) plus the four companion docs needed to parse it (README, technical document, state geoheader layout, table matrix) into `data/raw/das_demo/`. Started [docs/data-dictionary.md](docs/data-dictionary.md) (README Step 4) with ACS, boundary, and DAS-demo entries. This closes the NEXT_ACTIONS runbook (Steps 1–6 all done).
+- **Findings / decisions:** Provisional vintage choice (mentor question updated in README): **2022-08-25** is the newest *tabulated* demonstration release and nearest to DHC production settings — the 2023-04-03 production suite ships only national microdata (15 GB + 9.4 GB CSVs, impractical) and the 2022-03-16 tabulated release has an April 2022 technical-issues ALERT in its folder, so it was skipped. Gotcha for teammates: the archive's directory-index pages frequently time out (Cloudflare 524) — deep-link to files directly, as the script does. Baseline for the noise comparison (EDA #4) will be published 2010 SF1 tables via the API.
+- **Files:** ingestion/pull_das_demo_nj.py, docs/data-dictionary.md, README.md (Step 3 checkboxes, vintage mentor question), NEXT_ACTIONS.md (Step 6 closed); data in data/raw/das_demo/ (local-only, regenerable)
+
 ### 2026-07-15 — Andrew Swiniarski — EDA 03: tract-level reliability choropleth, dashboard prototype (Phase 1, Step 5)
 - **Area:** notebooks
 - **What was done:** Third EDA notebook, [notebooks/03-cv-choropleth-nj-tracts.ipynb](notebooks/03-cv-choropleth-nj-tracts.ipynb): joins tract CVs to the vintage-matched boundaries (1:1 join re-asserted in-notebook), bins them into reference reliability tiers (ESRI/NCHS conventions, shown descriptively), and renders a side-by-side choropleth of median household income vs. poverty — a crude prototype of the executive-dashboard map (deliverable #3). Gray "no usable estimate" rendered as its own first-class category. Verified top-to-bottom with `jupyter nbconvert --execute`.

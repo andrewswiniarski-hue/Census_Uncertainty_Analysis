@@ -1,6 +1,6 @@
 # NEXT_ACTIONS.md — Phase 1, Step 1: Data & API Setup
 
-**Status (updated 2026-07-09):** Steps 1–5 complete ✅ — repo on GitHub, API key verified, environment installed, ACS pull + matching geometries scripted and verified (1:1 join checks passed at all three levels). Next: Step 6, locate DAS demonstration data.
+**Status (updated 2026-07-15):** Steps 1–6 complete ✅ — repo on GitHub, API key verified, environment installed, ACS pull + matching geometries scripted and verified, DAS demonstration file (2022-08-25 DHC release, NJ) downloaded by script and documented. This runbook is finished; live status now lives in [WORKLOG.md](WORKLOG.md).
 
 **Note for Claude:** Walk the project lead through these steps **one at a time, in order**. Explain what each step does in plain English before doing it, confirm it worked before moving on, and check off items as they're completed. Do not skip ahead. If a step fails, troubleshoot it before proceeding. Per CLAUDE.md: check in before running anything, and summarize at each checkpoint.
 
@@ -158,10 +158,10 @@ At **county, tract, and block group** level, ACS 5-year (latest available vintag
 
 **Why:** Privacy noise in the Decennial Census is the second major uncertainty source (after sampling error in the ACS), and the DAS demonstration products are the only way to observe it empirically. Today's goal is just **finding and downloading the right file** — analysis comes later.
 
-1. [ ] Search census.gov for "2020 DAS demonstration data" / "Privacy-Protected Microdata File"
-2. [ ] Identify which vintage/release to use — **add this to the Open Questions for Mentors list** in the README ("Which DAS demonstration product vintage should we use for the noise analysis?") and pick a provisional one
-3. [ ] Download one file for NJ (or a national file if state cuts aren't available) to `data/raw/das_demo/`
-4. [ ] Document in `/docs/data-dictionary.md`: what the file contains, its format, and the URL it came from
+1. [x] Search census.gov for "2020 DAS demonstration data" / "Privacy-Protected Microdata File" *(done 2026-07-15 — surveyed all five product folders in the 2010-demonstration-data-products archive)*
+2. [x] Identify which vintage/release to use — **add this to the Open Questions for Mentors list** in the README ("Which DAS demonstration product vintage should we use for the noise analysis?") and pick a provisional one *(provisional: 2022-08-25 DHC tabulated summary file — newest tabulated release, nearest production settings; 2023-04-03 suite is 15 GB national microdata only; 2022-03-16 has a technical-issues alert. Mentor question updated.)*
+3. [x] Download one file for NJ (or a national file if state cuts aren't available) to `data/raw/das_demo/` *(done 2026-07-15 — `ingestion/pull_das_demo_nj.py`: nj2010.dhc.zip ~239 MB + README, technical document, geoheader layout, table matrix)*
+4. [x] Document in `/docs/data-dictionary.md`: what the file contains, its format, and the URL it came from *(done 2026-07-15 — data dictionary started with ACS, boundaries, and DAS demo entries)*
 
 ✅ **Checkpoint:** File on disk, documented, mentor question logged.
 
@@ -174,6 +174,6 @@ At **county, tract, and block group** level, ACS 5-year (latest available vintag
 - [x] Clean repo structure with secrets protected
 - [x] Scripted ACS pull: 4 variables × 3 geography levels × NJ, with MOEs, sanity-checked
 - [x] Matching geometries, verified with a test map
-- [ ] DAS demonstration file located and documented
+- [x] DAS demonstration file located and documented (2026-07-15 — scripted download, data dictionary entry, provisional vintage logged for mentors)
 
 **Next up after this file:** Phase 1, Step 5 of the README — first-pass EDA, starting with the CV-by-geography-size analysis (our first real finding and first biweekly chart).
