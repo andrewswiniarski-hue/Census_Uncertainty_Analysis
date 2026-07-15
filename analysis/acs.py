@@ -26,6 +26,10 @@ Formulas and sources
   Measures of Error for Derived Estimates"). Approximate: it assumes the
   component estimates are independent, which the handbook notes tends to
   overstate the combined MOE for same-table cells.
+  Zero-cell rule (same source): when more than one component estimate is
+  zero, include only the LARGEST zero-cell MOE in the sum. Zero-estimate
+  MOEs are near-identical placeholder values, and root-sum-squaring many
+  of them overstates the aggregate MOE.
 """
 
 from __future__ import annotations
@@ -113,15 +117,40 @@ def flag_topcoded_income(df: pd.DataFrame) -> pd.Series:
     return df["B19013_001E"] == INCOME_TOP_CODE
 
 
-def aggregate_moe(df: pd.DataFrame, variables: list[str]) -> pd.Series:
-    """Root-sum-of-squares MOE for a sum of estimates (see module docstring).
+def aggregate_estimate(df: pd.DataFrame, variables: list[str]) -> pd.Series:
+    """Sum of component estimates for a derived estimate.
 
     `variables` are codes without the E/M suffix. Rows where any component
-    MOE is missing return NaN rather than a silently-partial aggregate.
+    estimate is missing return NaN rather than a silently-partial sum.
     """
-    moes = df[[f"{v}M" for v in variables]]
-    return pd.Series(np.sqrt((moes**2).sum(axis=1, min_count=len(variables))),
-                     index=df.index)
+    ests = df[[f"{v}E" for v in variables]]
+    return ests.sum(axis=1, min_count=len(variables))
+
+
+def aggregate_moe(
+    df: pd.DataFrame, variables: list[str], zero_rule: bool = True
+) -> pd.Series:
+    """Root-sum-of-squares MOE for a sum of estimates (see module docstring).
+
+    With `zero_rule=True` (default) the handbook's zero-cell refinement is
+    applied: nonzero-estimate components contribute their squared MOEs, and
+    of the zero-estimate components only the largest MOE is included, once.
+    `zero_rule=False` gives plain RSS over every component (used for
+    sensitivity comparison). `variables` are codes without the E/M suffix.
+    Rows where any component estimate or MOE is missing return NaN rather
+    than a silently-partial aggregate.
+    """
+    moes = df[[f"{v}M" for v in variables]].set_axis(variables, axis=1)
+    ests = df[[f"{v}E" for v in variables]].set_axis(variables, axis=1)
+    invalid = moes.isna().any(axis=1) | ests.isna().any(axis=1)
+    if zero_rule:
+        is_zero = ests.eq(0)
+        sum_sq = moes.where(~is_zero, 0.0).pow(2).sum(axis=1)
+        largest_zero_moe = moes.where(is_zero).max(axis=1).fillna(0.0)
+        sum_sq = sum_sq + largest_zero_moe.pow(2)
+    else:
+        sum_sq = moes.pow(2).sum(axis=1)
+    return pd.Series(np.sqrt(sum_sq), index=df.index).mask(invalid)
 
 
 def cv_long(df: pd.DataFrame, variables: list[str], level: str) -> pd.DataFrame:

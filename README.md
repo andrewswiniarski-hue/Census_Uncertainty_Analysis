@@ -137,7 +137,7 @@ Start small and concrete — one state, a few variables:
 Each analysis answers a specific question — keep notebooks organized by question:
 
 - [x] **How does uncertainty scale with geography size?** Compute CV = (MOE / 1.645) / estimate; plot the distribution at county vs. tract vs. block group. (Expect it to explode at small geographies — this is the project's central empirical fact.) *(done 2026-07-15 — `notebooks/01-cv-by-geography-size.ipynb`; confirmed: median income CV 0.014 county → 0.128 tract → 0.204 block group)*
-- [ ] **How does uncertainty vary by variable type?** Compare CVs for median income vs. small subgroup counts
+- [x] **How does uncertainty vary by variable type?** Compare CVs for median income vs. small subgroup counts *(done 2026-07-15 — `notebooks/02-cv-by-variable-type.ipynb`; tract medians span CV 0.079 (population) to 0.886 (subgroup single cells); size-driven counts follow the 1/√N sampling law, poverty doesn't; aggregating the 65+ cells helps 1.4× but doesn't rescue tract-level subgroup analysis)*
 - [ ] **Where is uncertainty geographically concentrated?** Choropleth of tract-level CVs for one variable — this is a crude prototype of the final dashboard view; great to show at the first biweekly
 - [ ] **What does privacy noise look like?** Using DAS demonstration data, compare noisy vs. baseline counts by geography size
 - [ ] **How prevalent is imputation?** Pull ACS allocation rates for a few variables; check whether they correlate with high-MOE geographies (if independent → justifies a multi-component composite score)
@@ -158,6 +158,7 @@ Each analysis answers a specific question — keep notebooks organized by questi
 - Preferred dashboard technology, or is that our call? (Sponsor doc: use professional judgment, open source encouraged)
 - Which DAS demonstration product vintage is best for the noise analysis?
 - Poverty (B17001) and detailed race×age tables aren't published below tract level (confirmed empirically, 2026-07-09). Is tract acceptable as the floor for poverty/subgroup analysis, or should we swap in a block-group-available alternative (e.g., C17002 income-to-poverty ratio) where BG granularity matters?
+- 131 NJ tracts (6%, in all 21 counties) publish total-population MOEs of ±14–143 people vs. a statewide median of ±546 — near-controlled precision, but with a published MOE rather than the controlled-estimate annotation (found 2026-07-15, EDA 02). What mechanism produces these (sub-county effects of population controls? administrative-records group quarters?), and should a reliability score treat them as their own class?
 
 ## Guardrails / Lessons to Remember
 

@@ -25,10 +25,26 @@ injected *privacy noise* (see DAS).
 **Estimate** — The published number (a count, a median, a rate). It is never exactly
 the truth; the uncertainty measures below describe how far off it might be.
 
+**Derived estimate** — A number we compute from published estimates (e.g., summing
+the six Black 65+ sex×age cells into one 65+ count) rather than one the Bureau
+publishes directly. A derived estimate needs its own uncertainty measure, combined
+from the components' MOEs (see *MOE aggregation*), and is always labeled as our
+computation. First used in `notebooks/02-cv-by-variable-type.ipynb`.
+
 **MOE (Margin of Error)** — The "±" published alongside every ACS estimate, at 90%
 confidence. "Median income $67,000 ± $3,000" means: if the survey were run many
 times, about 90% of intervals built this way would contain the true value.
 *Source: ACS "Accuracy of the Data" documentation.*
+
+**MOE aggregation (root-sum-of-squares, RSS)** — The Census-documented way to give
+a *derived estimate* an MOE: square each component's MOE, sum, take the square
+root (`MOE_agg = sqrt(Σ MOE_i²)`). One refinement matters when components are
+zero: include only the **largest** zero-cell MOE, once — zero-estimate MOEs are
+near-identical placeholders, and root-sum-squaring several of them overstates the
+combined uncertainty. The formula assumes independent components, which tends to
+overstate MOEs for cells from the same table. *Source: "Understanding and Using
+American Community Survey Data: What All Data Users Need to Know," Ch. 8.*
+Implemented in `analysis/acs.py::aggregate_moe`.
 
 **SE (Standard Error)** — The typical size of the random wobble in an estimate.
 For ACS estimates: `SE = MOE / 1.645`, because 1.645 is the multiplier for 90%
