@@ -27,6 +27,34 @@ entries pending the mentor shortlist confirmation.)
   near-controlled population MOEs (mentor question); 2 block groups have income
   estimates but no MOE for unknown reasons.
 
+### ACS allocation (imputation) tables — sub-entry (added 2026-07-17, EDA 05)
+
+- **What:** The ACS's own measure of imputation: for each subject, how many
+  values were **allocated** (statistically filled in) rather than reported.
+  Tables used: `B98031`/`B98032` (overall person / housing-unit allocation
+  rate, published as a percent), `B99011`/`B99012`/`B99021` (sex/age/race:
+  Total / Allocated / Not allocated), `B99192` (household income:
+  percent-of-income-allocated bins; any-income-imputed rate =
+  `1 − _002/_001`), `B99172` (poverty status for **families** — universe
+  does NOT match person-level B17001; used only as a labeled proxy).
+- **Uncertainty shipped:** **none — allocation tables publish no MOE
+  variables at all (E-only).** An allocation rate is a covariate describing
+  data completeness, not a CV-bearing estimate. Requesting a `_M` column
+  errors the whole API query — the pull script downloads estimates only.
+- **Geographies:** item tables (B99xxx) fully populated at county, tract,
+  AND block group (deeper than B17001/B01001B, which stop at tract).
+  **Landmine: B98031/B98032 are county-only** — the API returns tract/BG
+  rows but every value is null. (Probe lesson: a query returning rows does
+  not mean it returns values.)
+- **Access:** [`ingestion/pull_acs_alloc_nj.py`](../ingestion/pull_acs_alloc_nj.py)
+  → `data/raw/acs5_2024_nj_alloc_{county,tract,block_group}.parquet`
+  (gitignored, regenerable). Cell labels verified live at run time.
+- **Key EDA 05 facts:** ~39% of households at the median NJ tract had some
+  income imputed vs. <1% for age/race and ~0.05% for sex; allocation rates
+  are independent of CVs once geography size is controlled (all controlled
+  Spearman ρ in [−0.00, +0.19]) — the empirical justification for a
+  multi-component composite score.
+
 ## Cartographic boundary files (vintage 2024)
 
 - **What:** Generalized TIGER/Line-derived boundaries for mapping.

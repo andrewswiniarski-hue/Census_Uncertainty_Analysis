@@ -77,7 +77,14 @@ by statistical fixes (weighting, imputation) that add their own uncertainty.
 **Imputation / allocation** — Filling in a missing answer with a statistically
 plausible value. The **item allocation rate** is the share of a variable's
 published values that were filled in rather than reported — a rough proxy for how
-much of that variable is "real" data.
+much of that variable is "real" data. The ACS publishes these in dedicated
+allocation tables (`B98031`/`B98032` overall rates, county-level only;
+`B99011`/`B99012`/`B99021` sex/age/race; `B99192` household income; `B99172`
+family poverty) which ship **no margins of error** — an allocation rate
+describes data completeness, a dimension the MOE cannot see. EDA 05 measured
+prevalence (income ~39% of households at the median NJ tract; sex ~0.05%) and
+showed allocation rates are statistically independent of CVs once geography
+size is controlled — the empirical basis for a multi-component composite score.
 
 **Disclosure avoidance / DAS** — Methods that prevent identifying individual people
 from published tables. The 2020 **Disclosure Avoidance System (DAS)** deliberately
