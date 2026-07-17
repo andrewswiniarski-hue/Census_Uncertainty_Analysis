@@ -67,10 +67,51 @@ entries pending the mentor shortlist confirmation.)
   (gitignored, regenerable).
   Source directory:
   `www2.census.gov/programs-surveys/decennial/2020/program-management/data-product-planning/2010-demonstration-data-products/02-Demographic_and_Housing_Characteristics/2022-08-25_Summary_File/`
-- **Baseline for comparison:** published 2010 Census SF1/DHC tables (via API,
-  scriptable) — the demo minus published difference *is* the privacy noise.
+- **Baseline for comparison:** published 2010 Census SF1 tables via
+  [`ingestion/pull_sf1_2010_nj.py`](../ingestion/pull_sf1_2010_nj.py) (entry
+  below) — the demo minus published difference *is* the privacy noise (plus
+  residual swapping in the baseline; see that entry).
+- **Parsing:** [`analysis/dhc.py`](../analysis/dhc.py) reads the geo header and
+  table segments straight from the zip (never extracted) and proves the parse
+  at runtime: state-invariant check (demo NJ total must equal 8,791,894
+  exactly), P1 vs. geo-header POP100 on every record, and P12B internal
+  additivity on all 219,847 records. Used by
+  [`notebooks/04-privacy-noise-das-demo.ipynb`](../notebooks/04-privacy-noise-das-demo.ipynb).
 - **Landmines:** demonstration data are for evaluation only, **never for actual
   analysis of 2010 populations**; noise levels reflect the 2022-08-25 settings,
   not necessarily the final 2020 production settings (close, but confirm with
-  mentors); the Bureau's own index pages for this directory time out
-  (Cloudflare 524) — deep-link directly to files, as the pull script does.
+  mentors); the numeric privacy-loss-budget allocations live in a **separate
+  allocations file we have not downloaded** (extend the pull script if it
+  becomes score-relevant); noise scale is **level-dependent, not just
+  size-dependent** — NJ block groups carry ~9× the absolute total-population
+  noise of tracts (EDA 04 finding, mentor question logged); the Bureau's own
+  index pages for this directory time out (Cloudflare 524) — deep-link
+  directly to files, as the pull script does.
+
+## 2010 Census Summary File 1 (SF1) — published baseline for privacy-noise work
+
+- **What:** The actually-published 2010 Decennial counts — a full count of every
+  resident (no sampling). Used in this project **only** as the baseline the
+  demonstration data is differenced against (EDA #4); the same twelve P12B
+  sex×age cells as the ACS pull give the Black 65+ subgroup parallel.
+- **Geographies used:** NJ state (1) / county (21) / tract (2,010) / block
+  group (6,320) / block (169,588) — 2010 geography vintage, which matches the
+  demonstration file 1:1 but must **never be row-joined to 2024 ACS
+  geographies** (tract/BG boundaries changed).
+- **Uncertainty shipped:** none — no MOEs (full count, no sampling error). Its
+  uncertainty is *coverage error* plus the 2010-era disclosure avoidance:
+  **record swapping is baked into the published values**, which is exactly why
+  demo − published = DAS noise + residual swapping, never pure DAS noise.
+- **Update cadence:** none — 2010 is final.
+- **Access:** Census API dataset `dec/sf1`, vintage 2010, via censusdis —
+  [`ingestion/pull_sf1_2010_nj.py`](../ingestion/pull_sf1_2010_nj.py) (block
+  and block-group queries run county-by-county; the API wants a containing
+  county for small-area requests). Raw parquet in `data/raw/sf1_2010_nj_*.parquet`
+  (gitignored, regenerable). All 10 sanity checks pass, including full-count
+  additivity: every level sums to exactly 8,791,894.
+- **Landmines:** per the raw-stays-raw convention the parquets keep the API's
+  string values — coerce numerics in the analysis layer (notebook 04's
+  `load_sf1` does); variable codes use the `P001001`/`P012B020` convention
+  (verified live against the API, 2026-07-16 — note `PCT012B020` also exists
+  and is a *different* table); 30% of NJ blocks have zero published population,
+  so relative-error metrics must exclude/report them separately.

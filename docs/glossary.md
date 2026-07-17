@@ -131,3 +131,54 @@ extremes: ACS median household income above $250,000 is published as `250,001`,
 meaning "somewhere above $250k." A form of deliberate censoring — uncertainty
 that isn't sampling noise. First seen in our NJ tract pull (several tracts at
 exactly 250,001).
+
+**Demonstration data** — Files the Bureau produces by running the 2020 DAS over
+the *confidential* 2010 Census data, so the public can evaluate privacy noise by
+comparing them against what was actually published in 2010. They exist **only**
+for that evaluation — demonstration counts must never be analyzed as real 2010
+populations. First used in `notebooks/04-privacy-noise-das-demo.ipynb`.
+
+**Swapping** — The pre-2020 disclosure-avoidance method: exchanging the records
+of similar households between nearby geographies so no table cell can be traced
+to a real household. The published 2010 SF1 was protected this way — which is
+why our noise measurement (demonstration − published) is DAS noise **plus
+residual swapping effects**, never pure DAS noise. *Source: 2022-08-25
+demonstration-data Technical Document ("the comparison is imperfect…").*
+
+**TopDown Algorithm (TDA)** — How the 2020 DAS injects privacy noise: it starts
+from the national total and allocates noisy counts *down* the geography
+hierarchy (nation → state → county → tract → … → block), forcing every level to
+stay consistent with the level above. Two consequences we observed directly
+(EDA 04): errors at any level sum to exactly zero across the state, and how much
+noise a level gets depends on where the privacy-loss budget is spent — not just
+on unit size (see the block-group anomaly, EDA 04 findings).
+
+**Invariant** — A count the DAS publishes exactly as enumerated, with no noise:
+state total population, block-level housing-unit counts, and block-level
+occupied group-quarters counts. Everything else gets noise — including statewide
+totals of characteristic tables (the NJ Black 65+ total is off by +16 in the
+demonstration data). Invariants double as parser checks: our demo NJ total had
+to equal 8,791,894 exactly, and did. *Source: 2022-08-25 Technical Document.*
+
+**Privacy-loss budget (PLB, ε)** — Differential privacy's global "spend" that
+trades privacy for accuracy (see *Differential privacy*), which the DAS then
+**allocates** across geography levels and tables. More budget at a level/table →
+less noise there. The allocation is why the same variable carries different
+noise at different levels (EDA 04's block-group anomaly). The numeric
+allocations for the 2022-08-25 release live in a separate allocations file we
+have not pulled (noted in the data dictionary).
+
+**Relative RMSE (binned)** — Our methodology (documented in EDA 04) for putting
+mean-zero privacy noise on the same scale as a CV: bin geographies by published
+size, then compute `RMSE(demo − published) / mean(published)` per bin. RMSE is
+the empirical standard deviation of the noise, so this is the direct analog of
+`CV = SE/estimate` — the two noise mechanisms can be compared on one axis. A
+per-unit log-log fit would have to drop the many exactly-zero errors, biasing
+the slope; binned RMSE keeps them.
+
+**Ghost / vanished places** — A categorical artifact of mean-zero noise on tiny
+counts: a *ghost* is a geography published as zero that the noisy file shows as
+populated; a *vanished* place is the reverse. EDA 04 found 807 ghost blocks
+(4,695 phantom residents) and 427 vanished blocks (1,154 real residents erased)
+in NJ. For block-level uses this flips places between "inhabited" and "empty" —
+it is not adequately described as ±noise, so we report it as its own class.

@@ -1,6 +1,6 @@
 # HANDOFF.md — Session Handoff Notes
 
-**Written:** 2026-07-09 at project setup; **last updated 2026-07-15**, at the close of the first EDA session.
+**Written:** 2026-07-09 at project setup; **last updated 2026-07-16**, after EDA 04 (privacy noise).
 **For:** the next Claude session (or teammate) picking this work up cold.
 
 ---
@@ -14,11 +14,11 @@
 
 ## Where the project stands (2026-07-15)
 
-- **The Phase 1 setup runbook (NEXT_ACTIONS.md, Steps 1–6) is complete.** Repo live, environment working, three scripted data pulls committed: ACS estimates+MOEs, matching boundaries, and the DAS demonstration file.
-- **First-pass EDA (README Step 5 core) is done and committed:** three notebooks, four mentor-ready charts. Step 5's "done when" is satisfied; EDA #4 (privacy noise) and #5 (allocation rates) remain open — #4 is now unblocked.
-- **The project is ACTIVE** — the lead gave the EDA go-ahead on 2026-07-15 (the pause noted in the original handoff is over).
-- **First mentor biweekly: July 22, 2026.** Bring a one-slide status; chart candidates are ready (see below).
-- Remote: <https://github.com/andrewswiniarski-hue/Census_Uncertainty_Analysis> (branch `main`). Everything is committed and pushed as of 2026-07-15; only `docs/team-recap-2026-07-12.pptx` is untracked, pending the lead's call on committing binaries.
+- **The Phase 1 setup runbook (NEXT_ACTIONS.md, Steps 1–6) is complete.** Repo live, environment working, four scripted data pulls: ACS estimates+MOEs, matching boundaries, the DAS demonstration file, and the published 2010 SF1 baseline.
+- **EDA 01–04 are done:** four notebooks, seven mentor-ready charts. **EDA 04 (privacy noise) completed 2026-07-16** — headline: the two dominant noise mechanisms follow measurably different laws (privacy ≈ −1 slope vs. sampling −½), plus a genuine surprise (the block-group anomaly, see landmines). Only EDA #5 (allocation rates) remains from the Step 5 list.
+- **EDA 04 work reviewed by the lead and committed 2026-07-16** (new: `ingestion/pull_sf1_2010_nj.py`, `analysis/dhc.py`, `notebooks/04-privacy-noise-das-demo.ipynb`, plus README/glossary/data-dictionary/WORKLOG/HANDOFF updates).
+- **First mentor biweekly: July 22, 2026.** Bring a one-slide status; chart candidates are ready (see below) — EDA 04's flagship chart is the strongest new candidate.
+- Remote: <https://github.com/andrewswiniarski-hue/Census_Uncertainty_Analysis> (branch `main`). Everything through 2026-07-15 is pushed; `docs/team-recap-2026-07-12.pptx` remains untracked, pending the lead's call on committing binaries.
 - **Teammates are contributing via the GitHub web UI** — fetch before you push. Katie Christiansen added a national-level ACS + boundaries pull ([`ingestion/pull_acs_us.py`](ingestion/pull_acs_us.py), state/county only) and [`ingestion/Explore.py`](ingestion/Explore.py) on 2026-07-14; see her WORKLOG entry.
 
 ## What exists
@@ -27,16 +27,19 @@
 - [`ingestion/pull_acs_nj.py`](ingestion/pull_acs_nj.py) — ACS 5-year vintage 2024, NJ, county/tract/block group, estimates + MOEs, sanity-checked.
 - [`ingestion/pull_nj_geometry.py`](ingestion/pull_nj_geometry.py) — vintage-matched boundaries (GeoParquet), 1:1 join verified.
 - [`ingestion/pull_das_demo_nj.py`](ingestion/pull_das_demo_nj.py) — 2010 Demonstration Data Product–DHC (2022-08-25 release), NJ summary file + parsing docs; no API key needed.
+- [`ingestion/pull_sf1_2010_nj.py`](ingestion/pull_sf1_2010_nj.py) — published 2010 SF1 baseline (P1 + twelve P12B Black 65+ cells) at state/county/tract/BG/block; block queries per-county; 10 sanity checks incl. full-count additivity.
 - [`analysis/acs.py`](analysis/acs.py) — shared formulas with citations: CV, top-code flag, aggregate estimate/MOE (handbook zero-cell rule).
+- [`analysis/dhc.py`](analysis/dhc.py) — DHC demonstration-file parser: reads geo header + segments straight from the zip (never extracts), LOGRECNO join, quality panel that proves the parse (state invariant, P1↔POP100, P12B additivity). Run standalone: `python -m analysis.dhc`.
 - Notebooks (each runs clean top-to-bottom; committed with outputs):
-  [`01-cv-by-geography-size`](notebooks/01-cv-by-geography-size.ipynb) · [`02-cv-by-variable-type`](notebooks/02-cv-by-variable-type.ipynb) · [`03-cv-choropleth-nj-tracts`](notebooks/03-cv-choropleth-nj-tracts.ipynb)
+  [`01-cv-by-geography-size`](notebooks/01-cv-by-geography-size.ipynb) · [`02-cv-by-variable-type`](notebooks/02-cv-by-variable-type.ipynb) · [`03-cv-choropleth-nj-tracts`](notebooks/03-cv-choropleth-nj-tracts.ipynb) · [`04-privacy-noise-das-demo`](notebooks/04-privacy-noise-das-demo.ipynb)
 - [`docs/glossary.md`](docs/glossary.md) (22 terms) · [`docs/data-dictionary.md`](docs/data-dictionary.md) (ACS, boundaries, DAS demo) · `requirements.txt` (**still not version-pinned** — see TODO).
 
 **Local only (gitignored, regenerable by the scripts/notebooks above):**
 - `data/raw/acs5_2024_nj_{county,tract,block_group}.parquet` — 21 / 2,181 / 6,599 rows
 - `data/raw/geo_2024_nj_{county,tract,block_group}.parquet` + verification map
 - `data/raw/das_demo/` — `nj2010.dhc.zip` (250 MB; 44 table segments + geo header, 2.0 GB uncompressed) + README, technical document, geoheader layout, table matrix
-- `data/processed/eda01…eda03 PNG charts` — the four mentor-slide candidates
+- `data/raw/sf1_2010_nj_{state,county,tract,block_group,block}.parquet` — 1 / 21 / 2,010 / 6,320 / 169,588 rows (published 2010 baseline)
+- `data/processed/eda01…eda04 PNG charts` — seven mentor-slide candidates (flagship: `eda04_noise_rmse_by_size.png`)
 - `.env` with a working `CENSUS_API_KEY`; `.venv` — Python 3.12.10 (pandas 2.3.3, geopandas 1.0.1, censusdis 1.4.2, pyarrow 18.1.0, matplotlib 3.11.0)
 
 ## Decisions already made (by the project lead — don't relitigate)
@@ -50,6 +53,7 @@
 7. **Derived-estimate MOEs: root-sum-of-squares with the handbook zero-cell rule as default** (only the largest zero-cell MOE enters, once) — ACS handbook Ch. 8; plain RSS kept available for sensitivity.
 8. **Reliability thresholds CV 0.12 / 0.30 / 0.40 (ESRI, NCHS) are cited descriptively only.** Our own tiers are a weeks-4–6 decision with mentors.
 9. **DAS demonstration vintage, provisional: 2022-08-25 tabulated DHC release** (2023-04-03 suite is 15 GB national microdata only; 2022-03-16 has a technical-issues alert). Mentor confirmation pending.
+10. **EDA 04 scope and metric (approved 2026-07-16):** variables = total population + Black 65+ (parallels EDA 02); geography = down to block; headline metric = **binned relative RMSE** (quarter-decade log bins, ≥30 units/bin, RMSE(demo−published)/mean(published) — the CV analog for mean-zero noise), with the per-unit scatter as supporting view only. Zero-baseline units are their own reported class (extends decision #5 to a second mechanism).
 
 ## Data landmines the next session must know
 
@@ -60,15 +64,19 @@
 - **6 invalid geometries at tract and block group** — fine for plotting; `make_valid` before any area/overlay math.
 - **The Census demonstration-products archive times out on directory listings (Cloudflare 524)** — deep-link to files directly, as `pull_das_demo_nj.py` does.
 - **Demonstration data is for evaluating privacy noise only** — never analyze it as real 2010 populations.
+- **The block-group anomaly (EDA 04, unexplained — don't guess):** absolute privacy noise is level-dependent, not size-dependent. NJ block groups carry ~9× tract-level total-population noise (RMSE 23.2 vs. 2.5); for the P12B subgroup table, *county* is the noisiest level (34.6). Mentor question logged; spine/off-spine allocation is our labeled hypothesis only.
+- **Ghost/vanished blocks exist in the demo data** (807 gain phantom people, 427 lose everyone) — treat zero/near-zero baselines as their own class in any noise metric.
+- **2010 SF1 API variable naming:** it's `P001001`/`P012B020` (not `P0010001`), and `PCT012B020` is a *different* table that also resolves — verify labels at runtime, as the pull script does.
+- **SF1 parquets store API strings** (raw-stays-raw convention) — coerce numerics in the analysis layer before math.
+- **2010 vs. 2024 geography vintages must never be row-joined** — EDA 04 vs. EDA 01–03 comparisons are of mechanisms/slopes only.
 
 ## Next work, in priority order
 
-1. **EDA #4 — privacy noise (now unblocked):** parse `nj2010.dhc.zip` (geo header + a few person segments) against published 2010 SF1 counts via the API; noise = demo − published, by geography size. Hypothesis to test: privacy noise has ~constant absolute scale, so relative error should fall with slope **−1** on the EDA 02 log-log chart (vs. −½ for sampling) — if confirmed, that's a flagship report chart. Label as hypothesis until tested.
-2. **EDA #5 — allocation rates:** small new API pull; test whether allocation rates correlate with high-CV geographies (independence ⇒ empirical justification for a multi-component composite score).
-3. **July 22 biweekly prep:** one slide — status, chart candidates (EDA 01 boxplot + EDA 03 map pair; EDA 02 mechanism scatter as methods backup), and the mentor questions in the README (product shortlist, DAS vintage confirmation, 131-tract mystery, poverty/BG floor).
-4. `docs/uncertainty-sources.md` (README Step 2 writeup).
-5. Pin package versions to a lockfile (reproducibility deliverable).
-6. Complete `docs/data-dictionary.md` (DHC, Demographic Profile, PPMF entries) once mentors confirm the product shortlist.
+1. **July 22 biweekly prep:** one slide — status, chart candidates (EDA 04 flagship `eda04_noise_rmse_by_size.png` + EDA 01 boxplot + EDA 03 map pair), and the mentor questions in the README (product shortlist, DAS vintage confirmation, 131-tract mystery, poverty/BG floor, **block-group anomaly**, **ε-vs-empirical for the score**).
+2. **EDA #5 — allocation rates:** small new API pull; test whether allocation rates correlate with high-CV geographies (independence ⇒ empirical justification for a multi-component composite score). Completes the README Step 5 list.
+3. `docs/uncertainty-sources.md` (README Step 2 writeup) — EDA 01–04 now provide the empirical content for all the major sources except imputation.
+4. Pin package versions to a lockfile (reproducibility deliverable).
+5. Complete `docs/data-dictionary.md` (DHC, Demographic Profile, PPMF entries) once mentors confirm the product shortlist.
 
 ## Environment gotchas
 
