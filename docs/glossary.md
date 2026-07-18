@@ -85,6 +85,26 @@ describes data completeness, a dimension the MOE cannot see. EDA 05 measured
 prevalence (income ~39% of households at the median NJ tract; sex ~0.05%) and
 showed allocation rates are statistically independent of CVs once geography
 size is controlled — the empirical basis for a multi-component composite score.
+Reusable rate formulas live in [`analysis/alloc.py`](../analysis/alloc.py).
+
+**Composite reliability matrix (ACS prototype)** — An exploratory two-axis view
+that keeps **sampling CV** and **item allocation rate** visible as separate
+coordinates instead of immediately collapsing them into one number. EDA 06's
+headline case is median household income at NJ tracts. Provisional flags:
+CV ≤ 0.30 (ACS quality-standard convention) and allocation above the sample
+75th percentile (exploratory NJ flag, not an official Census cutoff). Helpers
+live in [`analysis/composite.py`](../analysis/composite.py).
+
+**Reliability blind spot** — Tracts (or other geographies) where sampling CV
+looks acceptable but the matching allocation rate is high. In EDA 06's income
+headline, about **23%** of classified NJ tracts sat in the low-CV / high-
+allocation quadrant — CV alone would miss their imputation burden.
+
+**Percentile-risk score (sensitivity)** — Within-variable empirical percentile
+ranks of CV and allocation (higher = riskier), combined either as an
+**equal-weight mean** or a **worst-component maximum**. Used in EDA 06 only to
+measure how much top-risk membership changes under different combination rules;
+not a finalized dashboard score.
 
 **Disclosure avoidance / DAS** — Methods that prevent identifying individual people
 from published tables. The 2020 **Disclosure Avoidance System (DAS)** deliberately
