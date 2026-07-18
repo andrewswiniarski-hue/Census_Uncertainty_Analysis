@@ -1,6 +1,6 @@
 # HANDOFF.md — Session Handoff Notes
 
-**Written:** 2026-07-09 at project setup; **last updated 2026-07-17**, after EDA 05 (allocation rates) — Phase 1 Step 5 complete.
+**Written:** 2026-07-09 at project setup; **last updated 2026-07-18** — Phase 1 complete: EDA 01–05 done, findings report written, July 22 biweekly deck built.
 **For:** the next Claude session (or teammate) picking this work up cold.
 
 ---
@@ -17,8 +17,10 @@
 - **The Phase 1 setup runbook (NEXT_ACTIONS.md, Steps 1–6) is complete.** Repo live, environment working, five scripted data pulls: ACS estimates+MOEs, matching boundaries, the DAS demonstration file, the published 2010 SF1 baseline, and the ACS allocation tables.
 - **README Step 5 is COMPLETE (2026-07-17): EDA 01–05 done** — five notebooks, eight mentor-ready charts, all three uncertainty mechanisms measured empirically: sampling (EDA 01–03), privacy noise (EDA 04: ≈ −1 slope vs. sampling's −½; block-group anomaly), imputation (EDA 05: income imputed for ~39% of households at the median tract; **allocation rates independent of CVs once size is controlled → multi-component composite score empirically justified**).
 - **EDA 05 work reviewed by the lead and committed 2026-07-17** (new: `ingestion/pull_acs_alloc_nj.py`, `notebooks/05-allocation-rates-vs-cv.ipynb`, plus README/glossary/data-dictionary/WORKLOG/HANDOFF updates). EDA 04 was committed and pushed 2026-07-16 (`ac4921a`).
-- **First mentor biweekly: July 22, 2026.** Bring a one-slide status; chart candidates ready (see below) — EDA 04's flagship chart is the centerpiece, EDA 05's independence panel the strongest backup.
-- Remote: <https://github.com/andrewswiniarski-hue/Census_Uncertainty_Analysis> (branch `main`). Everything through EDA 04 (`ac4921a`, 2026-07-16) is pushed; `docs/team-recap-2026-07-12.pptx` remains untracked, pending the lead's call on committing binaries.
+- **Both communication deliverables are built and committed:** `docs/phase1-findings-report.md` (the complete Phase 1 analysis in plain language — the briefing document for team and Bureau readers, kept current as later findings land) and `docs/biweekly-2026-07-22.pptx` (9-slide mentor deck with speaker notes, matched to the team-recap design system).
+- **First mentor biweekly: July 22, 2026.** The deck is ready to present — status slide with the EDA 04 flagship chart, three priority questions, five chart backups.
+- **Binaries decision resolved (lead call, 2026-07-18):** presentation/report files in `/docs` are committed. `docs/team-recap-2026-07-12.pptx` is still untracked from before the decision — fold it into a future commit if wanted.
+- Remote: <https://github.com/andrewswiniarski-hue/Census_Uncertainty_Analysis> (branch `main`). Everything through EDA 05 (`ffb57c9`, 2026-07-17) is pushed; the report/deck commit is local until the next push.
 - **Teammates are contributing via the GitHub web UI** — fetch before you push. Katie Christiansen added a national-level ACS + boundaries pull ([`ingestion/pull_acs_us.py`](ingestion/pull_acs_us.py), state/county only) and [`ingestion/Explore.py`](ingestion/Explore.py) on 2026-07-14; see her WORKLOG entry.
 
 ## What exists
@@ -77,10 +79,11 @@
 
 ## Next work, in priority order
 
-1. **July 22 biweekly prep:** one slide — status ("Phase 1 Step 5 complete — all three uncertainty mechanisms measured"), chart candidates (EDA 04 flagship `eda04_noise_rmse_by_size.png` centerpiece + EDA 01 boxplot + EDA 03 map pair; EDA 05 independence panel as backup), and the mentor questions in the README (product shortlist, DAS vintage confirmation, 131-tract mystery, poverty/BG floor, **block-group anomaly**, **ε-vs-empirical for the score**, **weak income-allocation association**).
-2. `docs/uncertainty-sources.md` (README Step 2 writeup) — EDA 01–05 now provide the empirical content for every major source.
-3. Pin package versions to a lockfile (reproducibility deliverable).
-4. Complete `docs/data-dictionary.md` (DHC, Demographic Profile, PPMF entries) once mentors confirm the product shortlist.
+1. **Present the July 22 biweekly** (deck ready: `docs/biweekly-2026-07-22.pptx`; speaker notes on every slide; the README "Open Questions for Mentors" list is the canonical question set). Afterward: log mentor answers as decisions in this file and the README.
+2. **Composite-score phase** (post-biweekly, once product shortlist + score-input questions are answered) — component list with empirical justification is in `docs/phase1-findings-report.md` §6.
+3. `docs/uncertainty-sources.md` (README Step 2 writeup) — EDA 01–05 provide the empirical content for every major source; much of the prose can adapt from the findings report.
+4. Pin package versions to a lockfile (reproducibility deliverable).
+5. Complete `docs/data-dictionary.md` (DHC, Demographic Profile, PPMF entries) once mentors confirm the product shortlist.
 
 ## Environment gotchas
 
