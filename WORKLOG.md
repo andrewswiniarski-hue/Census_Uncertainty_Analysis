@@ -88,6 +88,12 @@ Ground rules:
 - **Findings / decisions:** National analysis is limited to state and county levels for now because nationwide tract and block-group geometry is substantially larger and slower to manage. Estimates include 90% margin-of-error columns.
 - **Files:** ingestion/pull_acs_us.py; Explore.py; outputs `data/raw/acs5_2024_us_*.parquet`, `data/raw/geo_2024_us_*.parquet`, `data/raw/verification_map_us_counties.png`, and `data/raw/us_county_median_household_income.png` (local only, regenerable). I uploaded these files manually for now.
 
+### 2026-07-13 — Justus Long — Granular error drivers notebook (exploratory worktree)
+- **Area:** analysis / notebooks / docs
+- **What was done:** In an isolated worktree, added a reusable RSS MOE-combination helper with unittest coverage, updated a tract choropleth notebook to use the Census Bureau ACS 0.30 quality benchmark, and added Notebook 4 to test whether population size explains pooled CV patterns and whether aggregating six Black 65+ tract cells improves reliability. Work lives under `analysis/JL_Analysis/` pending team review.
+- **Findings / decisions:** Notebook 4's pooled log-log fit produced slope **0.041** with R-squared **0.002**, so population size alone does **not** explain the pooled geography pattern; variable type and table availability are also shaping the result. RSS aggregation improved the tract-level Black 65+ measure but did not make it uniformly reliable: pooled individual cells had median CV **0.886**, while the RSS-combined tract total had median CV **0.714**; **1.3%** of individual-cell CVs were at or below the Census ACS 0.30 benchmark versus **12.2%** of RSS-combined tract totals. Canonical Phase 1 EDA now lives in `/notebooks/` (Andrew, Jul 15–17); this work informed early RSS/threshold thinking before that sync.
+- **Files:** analysis/JL_Analysis/helpers.py, analysis/JL_Analysis/test_helpers.py, analysis/JL_Analysis/build_notebooks.py, analysis/JL_Analysis/03-tract-cv-choropleth.ipynb, analysis/JL_Analysis/04-granular-error-drivers.ipynb, WORKLOG.md
+
 ### 2026-07-12 — Andrew Swiniarski — Team sync recap deck; work log started
 - **Area:** project management / docs
 - **What was done:** Built the recap deck for the July 12 team sync ([docs/team-recap-2026-07-12.pptx](docs/team-recap-2026-07-12.pptx)) covering setup status, the NJ pilot dataset, the headline finding (uncertainty explodes at small geographies), documented data landmines, and the 10-minute teammate onboarding path. Created this work log; teammates begin working in the repo from this point.
