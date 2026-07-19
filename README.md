@@ -148,6 +148,7 @@ Each analysis answers a specific question — keep notebooks organized by questi
 ### Bridge toward composite score (post Step 5)
 
 - [x] **ACS composite prototype (matrix first):** [`notebooks/06-composite-reliability-prototype.ipynb`](notebooks/06-composite-reliability-prototype.ipynb) — income CV × income allocation at NJ tracts; matched-size validation; equal-weight vs worst-component sensitivity; poverty / Black 65+ labeled robustness only *(done 2026-07-18 — helpers in `analysis/alloc.py` + `analysis/composite.py`)*
+- [x] **Stronger CV driver model:** [`notebooks/07-cv-driver-model.ipynb`](notebooks/07-cv-driver-model.ipynb) — nested OLS separating place population from estimate size; matched estimate-size panel; composite V2 `cv_residual_high` seed *(done 2026-07-19 — `analysis/cv_model.py`)*
 
 ### Step 6: Prep for first biweekly
 
@@ -171,6 +172,7 @@ Each analysis answers a specific question — keep notebooks organized by questi
 - **Composite tier philosophy** (EDA 06 prototype): keep a visible two-axis matrix (CV × allocation) as the user-facing view, or collapse to a single weighted score for the dashboard? Equal-weight vs worst-component only agreed on ~85% of top-risk-quartile membership.
 - Should empirical DHC privacy RMSE stay a **separate product score** (our current boundary), rather than being mixed into ACS tract rows?
 - Are labeled proxy/diagnostic pairings acceptable for poverty (family allocation) and Black 65+ (age/race allocation) in the concept pitch, with income remaining the exact headline case?
+- **Residual sampling flags** (EDA 07): for count estimates, flag CVs worse than predicted from estimate size. Prefer these alongside raw CV tiers on the dashboard, or raw CV only — especially since income medians are poorly predicted by household count (R² ≈ 0.01)?
 
 ## Guardrails / Lessons to Remember
 

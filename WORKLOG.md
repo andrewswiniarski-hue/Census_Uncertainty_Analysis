@@ -29,6 +29,12 @@ Ground rules:
 
 ## Log
 
+### 2026-07-19 — Justus Long — EDA 07: stronger CV driver model + composite V2 residual flag
+- **Area:** analysis / notebooks / docs
+- **What was done:** Implemented the JL Final Takeaway multivariate model. New [`analysis/cv_model.py`](analysis/cv_model.py) builds a long CV frame separating place population from estimate size (income uses household universe `B99192_001E`, never dollars), fits nested numpy OLS models, and supports residual flags. [`notebooks/07-cv-driver-model.ipynb`](notebooks/07-cv-driver-model.ipynb) runs the nested models, a matched estimate-size panel (population / poverty / Black 65+), and wires `attach_cv_residual_flag` into the EDA 06 income matrix path. Charts: `eda07_nested_r2_and_residuals.png`, `eda07_cumulative_r2.png`, `eda07_matched_estimate_size.png`.
+- **Findings / decisions:** (1) Place-pop-only R² ≈ **0.005** (JL failure reproduced). (2) Estimate-size alone R² ≈ **0.666**; full model ≈ **0.706**; interaction ≈ **0.726** (n = 24,947). (3) Matched mid-size bins: Black 65+ median CV still higher than population (~0.28 vs ~0.17). (4) Income residual model R² ≈ **0.01** — HH size does not explain income CV; residual flags are kept as a composite V2 seed but are more meaningful for count variables. Decision: keep matrix headline; do not lock weights; no DHC privacy join.
+- **Files:** analysis/cv_model.py, analysis/test_cv_model.py, analysis/composite.py (`attach_cv_residual_flag`), notebooks/07-cv-driver-model.ipynb, docs/glossary.md, docs/phase1-findings-report.md, docs/uncertainty-sources.md, README.md, WORKLOG.md; charts in `data/processed/eda07_*.png` (local-only, regenerable)
+
 ### 2026-07-18 — Justus Long — EDA 06: composite reliability prototype (ACS CV × allocation matrix)
 - **Area:** analysis / notebooks / docs
 - **What was done:** Bridged Phase 1 EDA into a transparent ACS composite prototype. Graduated EDA 05 rate formulas into [`analysis/alloc.py`](analysis/alloc.py); added [`analysis/composite.py`](analysis/composite.py) for quadrant classification plus equal-weight / worst-component sensitivity helpers (with unit tests). Built and executed [`notebooks/06-composite-reliability-prototype.ipynb`](notebooks/06-composite-reliability-prototype.ipynb) at NJ tract level with income as the exact headline pairing, matched-size validation, and labeled poverty / Black 65+ robustness cases. Charts: `eda06_income_reliability_matrix.png`, `eda06_income_quadrant_map.png`, `eda06_matched_size_validation.png`.

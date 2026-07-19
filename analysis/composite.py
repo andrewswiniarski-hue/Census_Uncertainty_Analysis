@@ -34,6 +34,11 @@ from typing import Literal
 import numpy as np
 import pandas as pd
 
+from analysis.cv_model import (
+    RESIDUAL_PERCENTILE_DEFAULT,
+    flag_high_cv_residual,
+)
+
 CV_THRESHOLD_DEFAULT = 0.30
 ALLOC_PERCENTILE_DEFAULT = 0.75
 
@@ -176,3 +181,32 @@ def build_reliability_frame(
         "alloc_percentile": float(alloc_percentile),
     }
     return out, thresholds
+
+
+def attach_cv_residual_flag(
+    df: pd.DataFrame,
+    *,
+    cv_col: str,
+    estimate_size_col: str,
+    residual_percentile: float = RESIDUAL_PERCENTILE_DEFAULT,
+    flag_col: str = "cv_residual_high",
+) -> tuple[pd.DataFrame, dict[str, float]]:
+    """Attach a sampling-axis residual flag (composite V2 tooltip seed).
+
+    Fits log(CV) ~ log(estimate_size) and flags rows whose residual is at/above
+    the sample percentile — i.e. CV worse than expected given size. Does not
+    change quadrant labels or allocation logic.
+    """
+    if cv_col not in df.columns:
+        raise KeyError(f"cv_col {cv_col!r} not in dataframe")
+    if estimate_size_col not in df.columns:
+        raise KeyError(f"estimate_size_col {estimate_size_col!r} not in dataframe")
+
+    out = df.copy()
+    flag, meta = flag_high_cv_residual(
+        out[cv_col],
+        out[estimate_size_col],
+        residual_percentile=residual_percentile,
+    )
+    out[flag_col] = flag
+    return out, meta

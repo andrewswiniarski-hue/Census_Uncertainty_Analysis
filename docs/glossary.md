@@ -106,6 +106,21 @@ ranks of CV and allocation (higher = riskier), combined either as an
 measure how much top-risk membership changes under different combination rules;
 not a finalized dashboard score.
 
+**Place population vs estimate size** — Two different “size” ideas in ACS
+reliability work. *Place population* is how many people live in the geography
+(`B01003_001`). *Estimate size* is how large the published estimate is (a count),
+or — for median household income — the **household universe** behind the median,
+not the dollar value. EDA 07 showed pooled `log(CV) ~ log(place population)`
+fails (R² ≈ 0.005) while `log(CV) ~ log(estimate size)` explains most pooled
+variation (R² ≈ 0.67) once variable types are included in one frame. Helpers in
+[`analysis/cv_model.py`](../analysis/cv_model.py).
+
+**Residual CV risk (`cv_residual_high`)** — Flag for rows whose CV is worse than
+predicted from estimate size (`log(CV) ~ log(estimate_size)` residual at/above
+a sample percentile). Composite V2 tooltip seed on the sampling axis; works best
+for count estimates. For income medians the size model is weak (R² ≈ 0.01), so
+the flag mostly tracks raw high CV.
+
 **Disclosure avoidance / DAS** — Methods that prevent identifying individual people
 from published tables. The 2020 **Disclosure Avoidance System (DAS)** deliberately
 adds calibrated random noise ("privacy noise") to Decennial counts using the

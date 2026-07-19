@@ -154,16 +154,21 @@ And one sentence for the Bureau audience, which I'd stand behind in any room:
 - **Dashboard:** grow the EDA 03 map prototype into the linked-map deliverable a county planner can act on.
 - **Report:** this document's findings become the report's empirical backbone; the methodology write-up (`docs/uncertainty-sources.md`) is the next writing task.
 
+### Phase 2 bridge already started (EDA 06–07)
+
+- **EDA 06** built the ACS two-axis prototype (income CV × income allocation) and quantified the ~23% low-CV / high-allocation blind spot.
+- **EDA 07** answered the JL Final Takeaway: in a pooled NJ frame, place population alone fails (R² ≈ 0.005), while estimate size drives most of the pooled R² (≈ 0.67 alone; ≈ 0.71–0.73 with level, variable group, and interactions). A matched estimate-size panel still finds Black 65+ noisier than population at similar counts. Composite V2 adds an optional `cv_residual_high` sampling flag — informative for counts; weak for income medians (income size-model R² ≈ 0.01).
+
 ---
 
 ## Appendix: where everything lives
 
 | Item | Location |
 |---|---|
-| Analyses (run top-to-bottom, checks included) | `notebooks/01…05-*.ipynb` |
-| Shared formulas, with citations | `analysis/acs.py`, `analysis/dhc.py` |
+| Analyses (run top-to-bottom, checks included) | `notebooks/01…07-*.ipynb` |
+| Shared formulas, with citations | `analysis/acs.py`, `analysis/alloc.py`, `analysis/composite.py`, `analysis/cv_model.py`, `analysis/dhc.py` |
 | Data pull scripts (rerunnable by anyone) | `ingestion/pull_*.py` |
-| All eight charts | `data/processed/eda0*.png` |
+| Charts | `data/processed/eda0*.png` |
 | Term definitions | `docs/glossary.md` |
 | Dataset catalog + landmines | `docs/data-dictionary.md` |
 | Running log of who did what and what was found | `WORKLOG.md` |

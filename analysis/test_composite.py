@@ -10,6 +10,7 @@ import pandas as pd
 from analysis.composite import (
     CV_THRESHOLD_DEFAULT,
     allocation_flag_threshold,
+    attach_cv_residual_flag,
     build_reliability_frame,
     classify_quadrant,
     equal_weight_score,
@@ -105,6 +106,22 @@ class BuildReliabilityFrameTest(unittest.TestCase):
         self.assertEqual(int(counts.sum()), 4)
         # Input not mutated.
         self.assertNotIn("quadrant", df.columns)
+
+
+class ResidualFlagAttachTest(unittest.TestCase):
+    def test_attach_cv_residual_flag_adds_column(self) -> None:
+        est = pd.Series([100.0 * (1.3**i) for i in range(15)])
+        cv = 0.4 / np.sqrt(est)
+        cv = cv.copy()
+        cv.iloc[-1] = float(cv.iloc[-1] * 6)
+        df = pd.DataFrame({"cv": cv, "hh": est})
+        out, meta = attach_cv_residual_flag(
+            df, cv_col="cv", estimate_size_col="hh"
+        )
+        self.assertIn("cv_residual_high", out.columns)
+        self.assertTrue(bool(out["cv_residual_high"].iloc[-1]))
+        self.assertNotIn("cv_residual_high", df.columns)
+        self.assertIn("r_squared", meta)
 
 
 if __name__ == "__main__":
