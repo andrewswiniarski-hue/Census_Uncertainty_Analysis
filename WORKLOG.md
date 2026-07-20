@@ -29,6 +29,12 @@ Ground rules:
 
 ## Log
 
+### 2026-07-20 — Andrew Swiniarski — Housekeeping: progress docs synced for Justus's EDA 06–07
+- **Area:** project management / docs
+- **What was done:** Pulled Justus's Phase 2 bridge work into local (fast-forward, no conflicts) and reviewed both notebooks end-to-end against EDA 01–05. Updated the progress docs to account for it: HANDOFF (state, provisional decision #12 for the composite prototype's working boundaries, new landmine, reordered next-work), README (adopted the "Bridge toward composite score" checklist section and four new mentor questions **verbatim from `JL_Work_Tree`**, so the pending branch merge lands those hunks without conflict), and CLAUDE.md (new "Working With Teammates" section — fetch-first, WORKLOG as sync point, branch-merge etiquette, reproducibility contract on `main`).
+- **Findings / decisions:** EDA 06/07 confirm and extend Phase 1 with independent methods: the 22.8% low-CV/high-allocation blind spot quantifies EDA 05's independence result; EDA 07's R² decomposition (estimate size ≈ 0.67 of pooled CV variance, place population ≈ 0.005) re-derives EDA 02's mechanism. **Repo-state flag: notebooks 06/07 on `main` import `analysis/alloc.py`/`composite.py`/`cv_model.py`, which exist only on `origin/JL_Work_Tree`** — they cannot run from `main` until that branch merges; merge + local re-execution + unit tests queued as next-work #1. No changes were made to Justus's work itself.
+- **Files:** HANDOFF.md, README.md, CLAUDE.md, WORKLOG.md
+
 ### 2026-07-19 — Justus Long — EDA 07: stronger CV driver model + composite V2 residual flag
 - **Area:** analysis / notebooks / docs
 - **What was done:** Implemented the JL Final Takeaway multivariate model. New [`analysis/cv_model.py`](analysis/cv_model.py) builds a long CV frame separating place population from estimate size (income uses household universe `B99192_001E`, never dollars), fits nested numpy OLS models, and supports residual flags. [`notebooks/07-cv-driver-model.ipynb`](notebooks/07-cv-driver-model.ipynb) runs the nested models, a matched estimate-size panel (population / poverty / Black 65+), and wires `attach_cv_residual_flag` into the EDA 06 income matrix path. Charts: `eda07_nested_r2_and_residuals.png`, `eda07_cumulative_r2.png`, `eda07_matched_estimate_size.png`.

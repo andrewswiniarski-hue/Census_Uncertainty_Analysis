@@ -38,6 +38,16 @@ The project lead is an MSBA student — smart, learning, and busy. Every explana
 - **Keep the team work log current:** `WORKLOG.md` at the repo root is the team's shared record of who did what, when, and what was found. Every finished piece of work (script, analysis, notebook, document) gets an entry — contributor, date, plain-English summary, findings, files — using the template at the top of that file, newest entry first, committed alongside the work itself. Surprising results and data quirks belong in the entry's findings line, not just in chat.
 - **Keep the findings report current:** `docs/phase1-findings-report.md` is the plain-language record of what the analysis has shown — the document the lead uses to brief the team and the Census mentors. When a phase lands major findings, update it (or add its successor for later phases). Every number in it must trace to an assert-guarded notebook. Presentation and report deliverables in `/docs` (including `.pptx`) are committed to the repo (lead decision, 2026-07-18); decks follow the team design system established in `docs/team-recap-2026-07-12.pptx` (navy `1E2761` / ice `CADCFC` / coral `E8604C`, Calibri Light headlines).
 
+## Working With Teammates
+
+The repo is shared: Katie Christiansen and Justus Long contribute alongside the lead, via the GitHub web UI and feature branches (see `Git_Instruct.md`).
+
+- **Fetch `origin` at the start of every session and before any push** — check for new commits *and* new branches. Partial uploads happen (web-UI commits can land a notebook without its modules); never assume `main` is self-contained.
+- **WORKLOG.md is the team sync point.** Read entries newer than the last session before assuming project state, and account for teammate findings in HANDOFF/README rather than duplicating or contradicting them.
+- **Never modify a teammate's in-flight branch.** Merging a teammate's branch into `main` is a lead-coordinated decision — surface it, don't just do it. When a pending merge is known, prefer doc edits that will merge cleanly (adopt the branch's hunks verbatim where they're right).
+- **Guard the reproducibility contract on `main`.** If work on `main` references files that exist only on a branch — notebooks that can't run top-to-bottom — flag it to the lead immediately; that's a break in a graded deliverable, not a nitpick.
+- **Teammate results get the same scrutiny as ours, respectfully.** Before citing their numbers in reports or decks, re-execute their notebooks locally; log surprises in WORKLOG like any other finding.
+
 ## Project Judgment
 
 - **Timebox the statistical rabbit hole.** The uncertainty decomposition can go infinitely deep. When a thread stops serving the deliverables, say so and recommend moving on.

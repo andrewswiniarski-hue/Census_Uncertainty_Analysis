@@ -145,6 +145,11 @@ Each analysis answers a specific question — keep notebooks organized by questi
 - [x] **How prevalent is imputation?** Pull ACS allocation rates for a few variables; check whether they correlate with high-MOE geographies (if independent → justifies a multi-component composite score) *(done 2026-07-17 — `notebooks/05-allocation-rates-vs-cv.ipynb`; prevalence is variable-driven — ~39% of households at the median tract had income imputed vs. <1% for age/race — and allocation rates are INDEPENDENT of CVs once geography size is controlled (all controlled Spearman ρ in [−0.00, +0.19]) → multi-component composite score empirically justified)*
 - [x] **Done when:** notebooks are committed with markdown commentary, and we have 2–3 charts worth showing mentors *(satisfied 2026-07-15 — notebooks 01–03 committed, four mentor-ready charts in `data/processed/`; EDA 04 added three more 2026-07-16; **Step 5 complete 2026-07-17 with EDA 05** — eight charts total)*
 
+### Bridge toward composite score (post Step 5)
+
+- [x] **ACS composite prototype (matrix first):** [`notebooks/06-composite-reliability-prototype.ipynb`](notebooks/06-composite-reliability-prototype.ipynb) — income CV × income allocation at NJ tracts; matched-size validation; equal-weight vs worst-component sensitivity; poverty / Black 65+ labeled robustness only *(done 2026-07-18 — helpers in `analysis/alloc.py` + `analysis/composite.py`)*
+- [x] **Stronger CV driver model:** [`notebooks/07-cv-driver-model.ipynb`](notebooks/07-cv-driver-model.ipynb) — nested OLS separating place population from estimate size; matched estimate-size panel; composite V2 `cv_residual_high` seed *(done 2026-07-19 — `analysis/cv_model.py`)*
+
 ### Step 6: Prep for first biweekly
 
 - [ ] One-slide status: what worked, what's blocked, what we need
@@ -164,6 +169,10 @@ Each analysis answers a specific question — keep notebooks organized by questi
 - **Privacy noise is level-dependent, not just size-dependent** (found 2026-07-16, EDA 04): in the 2022-08-25 DHC demonstration data, NJ *block groups* carry ~9× the absolute total-population noise of tracts (RMSE 23.2 vs. 2.5 people; a same-size block group is ~12× noisier), and for the P12B subgroup table the *county* level is noisiest in absolute terms (RMSE 34.6 vs. 7.1 at tract). Our working hypothesis is privacy-budget allocation along the geographic spine (with tabulation block groups assembled off-spine from noisy blocks) — is that reading correct, and should we expect the same pattern in production 2020 DHC?
 - The numeric privacy-loss-budget allocations for the 2022-08-25 demonstration release live in a separate allocations file we haven't pulled. For the composite score, should we use the published ε allocations, or is empirically measured noise (EDA 04's per-level RMSE) the better input?
 - Income allocation shows a weak positive association with income CV even after controlling for geography size (Spearman ρ ≈ +0.19 across NJ tracts; every other allocation–CV pairing is ≈ 0; found 2026-07-17, EDA 05). Is there a known mechanism (e.g., populations that resist income questions also being harder to sample precisely), or is this small enough to ignore in the composite score?
+- **Composite tier philosophy** (EDA 06 prototype): keep a visible two-axis matrix (CV × allocation) as the user-facing view, or collapse to a single weighted score for the dashboard? Equal-weight vs worst-component only agreed on ~85% of top-risk-quartile membership.
+- Should empirical DHC privacy RMSE stay a **separate product score** (our current boundary), rather than being mixed into ACS tract rows?
+- Are labeled proxy/diagnostic pairings acceptable for poverty (family allocation) and Black 65+ (age/race allocation) in the concept pitch, with income remaining the exact headline case?
+- **Residual sampling flags** (EDA 07): for count estimates, flag CVs worse than predicted from estimate size. Prefer these alongside raw CV tiers on the dashboard, or raw CV only — especially since income medians are poorly predicted by household count (R² ≈ 0.01)?
 
 ## Guardrails / Lessons to Remember
 
