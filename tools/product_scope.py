@@ -822,6 +822,197 @@ def _http_get_json(url, timeout=SAMPLE_HTTP_TIMEOUT, retry=True):
         import time as _t; _t.sleep(0.75)
     raise last_exc if last_exc else RuntimeError("unreachable")
 
+SPARK_BARS       = "▁▂▃▄▅▆▇█"
+EDA_MISSING_PCT  = 30.0       # per-column threshold flagged in the report
+EDA_TOPK         = 5          # top-K values shown for categorical/string columns
+EDA_MIN_CARD_TOP = 6          # ...only when the column has >= this many distinct values
+EDA_SPARK_BINS   = 15
+EDA_SPARK_COLS   = 3          # max numeric columns that get a sparkline
+# Column NAMES that look like Census geography identifiers. Match is case-
+# insensitive and substring-friendly (checked against col name lower-cased).
+GEO_NAME_HINTS = [
+    "state", "county", "tract", "block group", "block_group", "blockgroup",
+    "place", "cbsa", "csa", "zcta", "puma", "ucgid", "geo_id", "geoid",
+]
+# Census null/annotation sentinels. Treat these as MISSING when computing
+# per-column stats. See ACS annotation codes (public data dictionary).
+CENSUS_NULLS = {"", "-", "*", "**", "***", "N", "null", "NULL",
+                "-666666666", "-999999999"}
+
+def _to_numeric(series):
+    """Coerce a series to numeric where possible; NaN elsewhere. Used to
+    decide 'this is really a numeric column' after Census sends everything
+    over the wire as string."""
+    try:
+        import pandas as pd
+    except ImportError:
+        return None
+    return pd.to_numeric(series, errors="coerce")
+
+def _is_numeric_col(series):
+    """A column counts as numeric if >=80% of its non-null values parse as
+    numbers. The threshold keeps NAME columns from being called numeric just
+    because a few rows happen to be all digits."""
+    try:
+        import pandas as pd
+    except ImportError:
+        return False
+    non_null = series[~series.isin(CENSUS_NULLS)].dropna()
+    if len(non_null) == 0: return False
+    coerced = pd.to_numeric(non_null, errors="coerce")
+    return coerced.notna().mean() >= 0.80
+
+def _sparkline(values, bins=EDA_SPARK_BINS):
+    """Unicode block-histogram of a numeric-like sequence, e.g. '▁▂▄▆█▇▄▂▁▁'.
+    Returns '' when there aren't enough values or the range is degenerate.
+    No numpy dependency - this is a hand-rolled histogram to keep the tool
+    stdlib + pandas only."""
+    vals = []
+    for v in values:
+        try:
+            fv = float(v)
+        except (TypeError, ValueError):
+            continue
+        if fv != fv:  # NaN
+            continue
+        vals.append(fv)
+    if len(vals) < 2:
+        return ""
+    lo, hi = min(vals), max(vals)
+    if lo == hi:
+        # constant series: fill with the middle bar so the reader sees "flat".
+        return SPARK_BARS[len(SPARK_BARS) // 2] * bins
+    counts = [0] * bins
+    step = (hi - lo) / bins
+    for v in vals:
+        i = int((v - lo) / step)
+        if i >= bins: i = bins - 1
+        counts[i] += 1
+    m = max(counts)
+    return "".join(SPARK_BARS[min(len(SPARK_BARS) - 1,
+                                   int(c / m * (len(SPARK_BARS) - 1)))]
+                   for c in counts)
+
+def _detect_geo_cols(df, probe):
+    """Return the DataFrame column names that look like Census geo identifiers.
+    Two signals: (a) exact match against the probe's known geography level names,
+    (b) name hints like 'state', 'county', 'geo_id'. Returns the union."""
+    cols = list(df.columns)
+    found = set()
+    if probe and probe.get("ok"):
+        for level in probe.get("levels", []):
+            for c in cols:
+                if c.lower() == level.lower(): found.add(c)
+    for c in cols:
+        cl = c.lower()
+        for hint in GEO_NAME_HINTS:
+            if hint in cl:
+                found.add(c); break
+    # Return in original column order so the report reads naturally.
+    return [c for c in cols if c in found]
+
+def _rank_numeric_for_spark(df, numeric_cols):
+    """Rank numeric columns for sparkline inclusion. Priority:
+    (1) columns whose name suggests an estimate ('estimate', ends in E and long
+    Census-style like B01003_001E), (2) by descending variance (more shape to
+    show), (3) alphabetical for ties. Returns the top EDA_SPARK_COLS names."""
+    try:
+        import pandas as pd
+    except ImportError:
+        return []
+    scored = []
+    for c in numeric_cols:
+        name_l = c.lower()
+        looks_estimate = ("estimate" in name_l or
+                          (c.endswith("E") and "_" in c and c[0].isalpha()))
+        num = _to_numeric(df[c])
+        try:
+            var = float(num.var()) if num is not None else 0.0
+            if var != var: var = 0.0   # NaN -> 0
+        except Exception:
+            var = 0.0
+        scored.append((not looks_estimate, -var, c))  # False sorts before True
+    scored.sort()
+    return [c for _, _, c in scored[:EDA_SPARK_COLS]]
+
+def compute_eda(df, probe):
+    """Canonical EDA on one sample. Returns a JSON-serialisable dict:
+
+      { "shape": [rows, cols],
+        "columns": {name: {"dtype": str, "missing_pct": float,
+                           "numeric": {"min","max","mean","median"} | None,
+                           "top_values": [[val, count, pct]] | None,
+                           "cardinality": int,
+                           "flag_missing_over_30": bool} },
+        "geography": {geo_col: {"distinct_populated": int}},
+        "sparklines": {col: "▁▂▃…"} }
+
+    No auto-editorialisation: computes what the data looks like and returns
+    it. Thresholds (>30% missing) are flagged in the output as booleans so
+    the renderer can style them; nothing is called 'bad' or 'good' here.
+    """
+    try:
+        import pandas as pd
+    except ImportError:
+        return {"error": "pandas not installed"}
+    if df is None or df.empty:
+        return {"shape": [0, 0], "columns": {}, "geography": {}, "sparklines": {}}
+    rows, cols = df.shape
+    out = {"shape": [int(rows), int(cols)], "columns": {}, "geography": {},
+           "sparklines": {}}
+    numeric_names = []
+    for c in df.columns:
+        s = df[c]
+        # Treat Census annotation sentinels as missing for stats only.
+        s_null_flag = s.isna() | s.astype(str).isin(CENSUS_NULLS)
+        miss_pct = round(float(s_null_flag.mean()) * 100.0, 1)
+        non_null = s[~s_null_flag]
+        card = int(non_null.nunique(dropna=True))
+        entry = {
+            "dtype":               str(s.dtype),
+            "missing_pct":         miss_pct,
+            "cardinality":         card,
+            "numeric":             None,
+            "top_values":          None,
+            "flag_missing_over_30": miss_pct > EDA_MISSING_PCT,
+        }
+        if _is_numeric_col(s):
+            numeric_names.append(c)
+            num = _to_numeric(non_null)
+            if num is not None and len(num.dropna()) > 0:
+                nn = num.dropna()
+                entry["numeric"] = {
+                    "min":    float(nn.min()),
+                    "max":    float(nn.max()),
+                    "mean":   float(nn.mean()),
+                    "median": float(nn.median()),
+                }
+                # Refine dtype to something more useful than "object".
+                entry["dtype"] = "float" if nn.dtype.kind == "f" else "int"
+        else:
+            if card >= EDA_MIN_CARD_TOP:
+                counts = non_null.astype(str).value_counts().head(EDA_TOPK)
+                total = int(non_null.shape[0]) or 1
+                entry["top_values"] = [[str(k), int(v),
+                                        round(v * 100.0 / total, 1)]
+                                       for k, v in counts.items()]
+        out["columns"][c] = entry
+
+    # Geography breakdown: distinct populated values per detected geo column.
+    for gc in _detect_geo_cols(df, probe):
+        s = df[gc]
+        s_null_flag = s.isna() | s.astype(str).isin(CENSUS_NULLS)
+        out["geography"][gc] = {"distinct_populated":
+                                int(s[~s_null_flag].nunique(dropna=True))}
+
+    # Sparklines on the top-priority numeric columns only. Keep the payload
+    # slim - one sparkline is ~15 chars, three is enough to communicate shape.
+    for c in _rank_numeric_for_spark(df, numeric_names):
+        num = _to_numeric(df[c]).dropna()
+        if len(num) >= 2:
+            out["sparklines"][c] = _sparkline(num.tolist())
+    return out
+
 def fetch_sample(fam, probe, size, api_key):
     """Fetch a small data slice for one product. Returns (df, source_url, err).
 
@@ -906,10 +1097,18 @@ def sample_products(repo, fams, review, probes, only_product, size, refresh):
             print(f"  [sample] {path}: FAILED - {err}")
             summary["failed"].append({"path": path, "reason": err, "url": url})
         else:
+            eda = compute_eda(df, probe)
+            over30 = sum(1 for c in eda.get("columns", {}).values()
+                         if c.get("flag_missing_over_30"))
+            n_geo = len(eda.get("geography", {}))
+            n_spark = len(eda.get("sparklines", {}))
             print(f"  [sample] {path}: {len(df)} rows x {len(df.columns)} cols "
                   f"from {url}")
+            print(f"           EDA: {over30} col(s) >{EDA_MISSING_PCT:g}% missing, "
+                  f"{n_geo} geo col(s), {n_spark} sparkline(s)")
             summary["sampled"].append({"path": path, "url": url,
-                                        "rows": len(df), "cols": len(df.columns)})
+                                        "rows": len(df), "cols": len(df.columns),
+                                        "eda": eda})
         # Be network-polite between requests.
         if i < len(targets) - 1:
             import time as _t; _t.sleep(SAMPLE_INTER_REQUEST_MS / 1000.0)
