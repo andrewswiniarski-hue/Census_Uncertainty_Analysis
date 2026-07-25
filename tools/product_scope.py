@@ -719,6 +719,34 @@ footer{padding:22px 44px;color:var(--muted);font-size:11.5px;}
 .copy-cmd.light{background:#F6F7FA;border-color:var(--line);color:var(--ink);}
 .copy-cmd.light button{background:var(--line);color:var(--navy);}
 .copy-cmd.light button.done{background:#1F7A3A;color:#fff;}
+/* Faceted browsing sidebar (only on the Products tabs). */
+.products-shell{display:flex;gap:22px;align-items:flex-start;}
+.products-main{flex:1;min-width:0;}
+.facets{width:218px;flex:0 0 218px;position:sticky;top:8px;max-height:calc(100vh - 20px);
+     overflow-y:auto;padding-right:4px;font-size:12px;}
+.facets-head{display:flex;align-items:baseline;justify-content:space-between;margin:0 0 8px;}
+.facets-head h3{font-family:Georgia,serif;color:var(--navy);font-size:14.5px;margin:0;}
+.facet-clear{font-size:11px;color:#B8532F;font-weight:600;text-decoration:none;}
+.facet-clear:hover{text-decoration:underline;}
+.facet{border-top:1px solid var(--ice);padding:8px 0 6px;}
+.facet h4{font-size:10px;letter-spacing:.11em;text-transform:uppercase;color:var(--muted);
+     font-weight:800;margin:0 0 4px;}
+.facet ul{list-style:none;padding:0;margin:0;}
+.facet li{padding:0;}
+.facet label{display:flex;align-items:center;gap:5px;padding:2px 4px;border-radius:4px;cursor:pointer;
+     font-size:11.5px;color:var(--ink);}
+.facet label:hover{background:var(--ice);}
+.facet input[type=checkbox]{margin:0;transform:scale(0.9);cursor:pointer;}
+.facet .lbl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.facet .cnt{font-size:10.5px;color:var(--muted);font-variant-numeric:tabular-nums;
+     background:var(--ice);border-radius:8px;padding:0 6px;line-height:15px;min-width:22px;text-align:center;}
+.facet li.on label{background:var(--ice);font-weight:600;color:var(--navy);}
+.facet li.empty{opacity:.4;}
+.facet li.empty label{cursor:default;}
+.facet .fhint{font-size:10.5px;color:var(--muted);font-style:italic;padding:2px 4px 0;}
+.facet .fhint code{font-family:ui-monospace,Consolas,monospace;font-size:10.5px;
+     background:var(--ice);color:var(--navy);padding:0 4px;border-radius:3px;font-style:normal;}
+@media(max-width:900px){.products-shell{flex-direction:column;} .facets{position:static;width:100%;flex:none;}}
 </style></head><body>
 <header>
   <div class="kicker">PRODUCT SCOPE &bull; GENERATED __DATE__ &bull; __CATNOTE__</div>
@@ -823,10 +851,89 @@ document.getElementById('qcl').addEventListener('click', function(){
   document.querySelectorAll('.qbox input').forEach(function(c){ c.checked = false; });
   qsync();
 });
+/* --- Faceted browsing (Products tabs) ---
+   Filters combine as AND across facets, OR within a facet (multi-select). Facet
+   counts recompute against the intersection of the OTHER active facets, so the
+   sidebar always shows "how many products would you have if you clicked this
+   next". Falls back to the text filter above; both stack. */
+function _prodPasses(p, filters, textQuery){
+  if (textQuery && (p.dataset.s || '').indexOf(textQuery) === -1) return false;
+  for (var f in filters){
+    var set = filters[f];
+    if (!set.size) continue;
+    if (!set.has(p.dataset[f] || '')) return false;
+  }
+  return true;
+}
+function _applyFacets(panel){
+  var filters = {};
+  panel.querySelectorAll('.facet').forEach(function(fc){
+    filters[fc.dataset.f] = new Set();
+  });
+  panel.querySelectorAll('.facet input:checked').forEach(function(cb){
+    filters[cb.dataset.f].add(cb.value);
+  });
+  var textInput = panel.querySelector('.filter input');
+  var q = textInput ? textInput.value.toLowerCase().trim() : '';
+  var shown = 0;
+  var prods = panel.querySelectorAll('.prod');
+  prods.forEach(function(p){
+    var ok = _prodPasses(p, filters, q);
+    p.style.display = ok ? '' : 'none';
+    if (ok) shown++;
+  });
+  panel.querySelectorAll('.facet').forEach(function(fc){
+    var f = fc.dataset.f;
+    fc.querySelectorAll('li').forEach(function(li){
+      var v = li.dataset.v;
+      var n = 0;
+      prods.forEach(function(p){
+        var passes = true;
+        for (var ff in filters){
+          if (ff === f) continue;
+          var set = filters[ff];
+          if (set.size && !set.has(p.dataset[ff] || '')) { passes = false; break; }
+        }
+        if (passes && q && (p.dataset.s || '').indexOf(q) === -1) passes = false;
+        if (passes && (p.dataset[f] || '') === v) n++;
+      });
+      li.querySelector('.cnt').textContent = n;
+      var checked = li.querySelector('input:checked');
+      li.classList.toggle('on', !!checked);
+      li.classList.toggle('empty', n === 0 && !checked);
+    });
+  });
+  var anyActive = Object.keys(filters).some(function(k){ return filters[k].size > 0; });
+  var clear = panel.querySelector('.facet-clear');
+  if (clear) clear.style.display = anyActive ? '' : 'none';
+  panel.querySelectorAll('.psec').forEach(function(ps){
+    var any = Array.prototype.some.call(ps.querySelectorAll('.prod'), function(p){ return p.style.display !== 'none'; });
+    ps.style.display = any ? '' : 'none';
+  });
+  panel.querySelectorAll('.gsec').forEach(function(g){
+    var any = Array.prototype.some.call(g.querySelectorAll('.prod'), function(p){ return p.style.display !== 'none'; });
+    g.style.display = any ? '' : 'none';
+  });
+  var nh = panel.querySelector('.nohit'); if (nh) nh.style.display = shown ? 'none' : 'block';
+  var c = panel.querySelector('.fcnt');   if (c) c.textContent = shown + ' shown';
+}
+document.querySelectorAll('.facet input').forEach(function(cb){
+  cb.addEventListener('change', function(){ _applyFacets(cb.closest('.panel')); });
+});
+document.querySelectorAll('.facet-clear').forEach(function(a){
+  a.addEventListener('click', function(e){
+    e.preventDefault();
+    var panel = a.closest('.panel');
+    panel.querySelectorAll('.facet input:checked').forEach(function(cb){ cb.checked = false; });
+    _applyFacets(panel);
+  });
+});
 document.querySelectorAll('.filter input').forEach(function(inp){
   inp.addEventListener('input', function(){
     var q = inp.value.toLowerCase().trim();
     var panel = inp.closest('.panel'), shown = 0;
+    /* If any facet checkboxes are active, defer to the facet applier so text+facets combine. */
+    if (panel.querySelector('.facet input:checked')) { _applyFacets(panel); return; }
     panel.querySelectorAll('.prod').forEach(function(p){
       var hit = !q || p.dataset.s.indexOf(q) !== -1;
       p.style.display = hit ? '' : 'none';
@@ -860,7 +967,57 @@ def _vint(f):
     if len(v) > 1: return f"{v[0]}–{v[-1]}"
     return str(v[0]) if v else EMDASH
 
-def product_row(f, review, work, probes):
+def product_facet_values(f, review, work, probes, top_families):
+    """Facet metadata for one product family - emitted as data-* on the .prod card
+    and consumed by the sidebar JS to filter and recount without a page reload.
+
+    Kept small on purpose: adding a facet here + a facet block in build_kind_panel
+    is all it takes to make a new filter live in the UI.
+    """
+    r = review.get(f["path"], {})
+    st = r.get("stage", "cataloged")
+    w = work.get(f["product"], {}) if f["product"] else {}
+    ws = w.get("status", 0)
+    family = f.get("group") or ""
+    fbucket = family if family in top_families else "Other"
+    role = (r.get("composite_role") or "").strip()  # populated by feature #7; empty today
+    return {
+        "stage":     st,
+        "family":    family,
+        "fbucket":   fbucket,
+        "agency":    "U.S. Census Bureau",   # only agency in the current catalog
+        "evidence":  "yes" if ws > 0 else "no",
+        "probe":     "yes" if probes.get(f["path"], {}).get("ok") else "no",
+        "validated": "yes" if ws >= 4 else "no",
+        "role":      role or "(unset)",
+    }
+
+FACET_DEFS = [
+    ("stage",     "Status",              None),   # None -> use display order from below
+    ("fbucket",   "Family",              "count"), # sort by count desc
+    ("agency",    "Agency",              "count"),
+    ("evidence",  "Has repo evidence",   None),
+    ("probe",     "Has API probe",       None),
+    ("validated", "Notebook validated",  None),
+    ("role",      "Composite role",      "count"),
+]
+FACET_ORDER = {
+    "stage":     ["focus", "candidate", "reviewed", "cataloged", "set-aside"],
+    "evidence":  ["yes", "no"],
+    "probe":     ["yes", "no"],
+    "validated": ["yes", "no"],
+}
+FACET_VALUE_LABELS = {
+    "stage": STAGE_LABELS,
+    "evidence":  {"yes": "yes", "no": "no"},
+    "probe":     {"yes": "yes", "no": "no"},
+    "validated": {"yes": "yes", "no": "no"},
+}
+
+def product_row(f, review, work, probes, ctx=None):
+    ctx = ctx or {}
+    top_families = ctx.get("top_families", set())
+    facets = product_facet_values(f, review, work, probes, top_families)
     r = review.get(f["path"], {})
     st = r.get("stage", "cataloged")
     w = work.get(f["product"], {}) if f["product"] else {}
@@ -950,11 +1107,67 @@ def product_row(f, review, work, probes):
 
     search = (f["path"] + " " + f["title"] + " " + f["group"] + " " + f["subject"]).lower()
     folded = "" if st == "focus" else " folded"
-    return (f'<div class="prod{folded}" data-s="{_esc(search)}"><div class="pnode">{node}</div>'
+    facet_attrs = " ".join(f'data-{k}="{_esc(v)}"' for k, v in facets.items())
+    return (f'<div class="prod{folded}" data-s="{_esc(search)}" data-path="{_esc(f["path"])}" '
+            f'{facet_attrs}><div class="pnode">{node}</div>'
             f'<div class="branches">{"".join(branches)}</div></div>')
+
+def build_facet_sidebar(prods, review, work, probes, top_families):
+    """Left-column facet blocks for the Products tabs.
+
+    For each facet we render every value present in this tab's product set, with
+    its (current, unfiltered) count. When the user clicks a value the JS filters
+    the cards AND rewrites every other facet's counts to reflect the intersection.
+    """
+    # Collect all facet values across the tab's products.
+    rows = [product_facet_values(f, review, work, probes, top_families) for f in prods]
+    blocks = []
+    for key, label, sortmode in FACET_DEFS:
+        vals = {}
+        for r in rows:
+            v = r.get(key, "")
+            vals[v] = vals.get(v, 0) + 1
+        if not vals: continue
+        if key in FACET_ORDER:
+            ordered = [v for v in FACET_ORDER[key] if v in vals]
+            # any extras (defensive - a new stage etc.) sort at the end alphabetically
+            ordered += sorted(v for v in vals if v not in FACET_ORDER[key])
+        elif sortmode == "count":
+            # keep "Other" last regardless of its count so the long-tail bucket is visually last
+            ordered = sorted(vals, key=lambda v: (v == "Other", -vals[v], v))
+        else:
+            ordered = sorted(vals)
+        items = []
+        for v in ordered:
+            n = vals[v]
+            lbl = FACET_VALUE_LABELS.get(key, {}).get(v, v)
+            items.append(
+                f'<li data-v="{_esc(v)}"><label>'
+                f'<input type="checkbox" data-f="{_esc(key)}" value="{_esc(v)}"> '
+                f'<span class="lbl">{_esc(lbl)}</span>'
+                f'<span class="cnt">{n}</span></label></li>')
+        note = ""
+        if key == "role" and set(vals.keys()) == {"(unset)"}:
+            # Feature #7 not yet applied (nothing declared); leave a plain hint,
+            # no static tutorial - just a nudge that this facet becomes live once
+            # someone edits composite_role in product_review.json.
+            note = '<div class="fhint">Set <code>composite_role</code> on a product to populate this facet.</div>'
+        blocks.append(
+            f'<div class="facet" data-f="{_esc(key)}">'
+            f'<h4>{_esc(label)}</h4>'
+            f'<ul>{"".join(items)}</ul>{note}</div>')
+    return ('<aside class="facets"><div class="facets-head">'
+            '<h3>Filter</h3><a class="facet-clear" href="#" style="display:none">Clear filters</a>'
+            '</div>' + "".join(blocks) + '</aside>')
 
 def build_kind_panel(kind, fams, review, work, probes):
     prods = [f for f in fams.values() if f["kind"] == kind]
+    # Compute per-panel "top families" bucket for the Family facet.
+    fam_counts = {}
+    for f in prods: fam_counts[f["group"]] = fam_counts.get(f["group"], 0) + 1
+    top_families = set(sorted(fam_counts, key=lambda g: -fam_counts[g])[:12])
+    ctx = {"top_families": top_families}
+
     groups = {}
     for f in prods: groups.setdefault(f["group"], []).append(f)
     secs = []
@@ -964,7 +1177,7 @@ def build_kind_panel(kind, fams, review, work, probes):
         inner = []
         for sname in sorted(subs, key=lambda x: SUBJECT_ORDER.index(x) if x in SUBJECT_ORDER else 99):
             items = sorted(subs[sname], key=lambda x: x["path"])
-            rows = "".join(product_row(f, review, work, probes) for f in items)
+            rows = "".join(product_row(f, review, work, probes, ctx) for f in items)
             if len(subs) == 1:
                 inner.append(rows)          # single subject: skip a level that adds nothing
             else:
@@ -975,10 +1188,13 @@ def build_kind_panel(kind, fams, review, work, probes):
                 (f' across {len(subs)} subjects' if len(subs) > 1 else ""))
         secs.append(f'<div class="gsec gfold"><div class="ghead">{_esc(g)} '
                     f'<em>{tail}</em></div>{"".join(inner)}</div>')
-    return ('<div class="blurb">' + KIND_BLURB.get(kind, "") + '</div>'
+    sidebar = build_facet_sidebar(prods, review, work, probes, top_families)
+    body = ('<div class="blurb">' + KIND_BLURB.get(kind, "") + '</div>'
             f'<div class="filter"><input type="text" placeholder="Filter {len(prods)} products '
             f'by path, title, subject or program..."><span class="fcnt">{len(prods)} shown</span></div>'
             '<div class="nohit">Nothing matches that filter.</div>' + "".join(secs))
+    return ('<div class="products-shell">' + sidebar
+            + f'<div class="products-main">{body}</div></div>')
 
 def build_home(fams, review, work, counts, worklog, notebooks, probes):
     h = []
