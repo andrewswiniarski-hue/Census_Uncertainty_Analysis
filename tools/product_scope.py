@@ -751,6 +751,13 @@ table.rep td{border-bottom:1px solid var(--ice);padding:7px 9px;vertical-align:t
 .receipts{font-size:10px;color:var(--muted);font-family:ui-monospace,Consolas,monospace;line-height:1.5;margin-top:5px;}
 .receipt-link{color:#3A4890;text-decoration:none;border-bottom:1px dotted #8FA8D8;}
 .receipt-link:hover{color:var(--navy);border-bottom-style:solid;}
+/* Contextual affordances: state-driven copyable commands / JSON nudges. */
+.aff-row{padding:6px 8px;border-radius:5px;margin:4px 0;font-size:11.5px;line-height:1.4;
+     display:flex;flex-wrap:wrap;align-items:center;gap:8px;}
+.aff-row.aff-info{background:#F1F5FF;border-left:3px solid #8FA8D8;}
+.aff-row.aff-amber{background:#FBF0D6;border-left:3px solid #C9A227;color:#6E4E11;}
+.aff-row.aff-nudge{background:#F6F7FA;border-left:3px solid var(--line);color:var(--muted);}
+.aff-text{flex:1;min-width:200px;}
 .meta{font-size:11px;color:var(--muted);margin-top:3px;}
 .tk{border-left:3px solid var(--line);padding:4px 8px;margin:5px 0;}
 .tk.odd{border-left-color:var(--gold);}
@@ -1083,10 +1090,86 @@ FACET_VALUE_LABELS = {
     "validated": {"yes": "yes", "no": "no"},
 }
 
+SNAPSHOT_FILE = ".product_scope_last_run.json"
+
+def load_snapshot(repo: Path):
+    """Read the previous run's snapshot if it exists (written by feature #5).
+
+    Returned shape:
+      {"head_sha": "...", "generated_at": "ISO", "products": {path: {...}}}
+    None on first-ever run or when the file is missing/corrupt.
+    """
+    p = repo / SNAPSHOT_FILE
+    if not p.exists(): return None
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+# --- Contextual affordances ---------------------------------------------------
+# The design principle is behavior over description: every UI element either
+# shows state or offers an action. These helpers turn per-product state into
+# copyable commands and JSON snippets - never paragraphs of tutorial text.
+
+def _affordances(f, r, ws, has_probe, git, snapshot):
+    """Return a list of {"tone", "text", "cmd"} banners for one product card.
+
+    Rules (documented in the redesign spec):
+      1. No repo evidence           -> probe command
+      2. Candidate without a probe  -> amber probe command
+      3. FOCUS + snapshot's captured SHA != current HEAD -> regen command
+      4. Still cataloged            -> nudge to edit product_review.json
+    """
+    path = f["path"]
+    stage = r.get("stage", "cataloged")
+    out = []
+    probe_cmd = f'python tools/product_scope.py --repo . --probe {path}'
+    regen_cmd = 'python tools/product_scope.py --repo .'
+    if ws == 0:
+        out.append({"tone": "info",
+                    "text": "No repo evidence yet - ask the API what this product publishes:",
+                    "cmd":  probe_cmd})
+    if stage == "candidate" and not has_probe:
+        out.append({"tone": "amber",
+                    "text": "Candidate without a probe. Probe first, then document what it publishes:",
+                    "cmd":  probe_cmd})
+    if stage == "focus" and snapshot:
+        snap_head = (snapshot.get("head_sha") or "")
+        cur_head  = (git.get("head_sha") or "") if git else ""
+        prods = snapshot.get("products", {}) or {}
+        prev = prods.get(path, {}) if isinstance(prods, dict) else {}
+        prev_sha = prev.get("head_sha") or snap_head
+        if prev_sha and cur_head and prev_sha != cur_head:
+            out.append({"tone": "amber",
+                        "text": f"Evidence for this FOCUS product was captured at {prev_sha[:7]}; "
+                                f"HEAD is now {cur_head[:7]}. Regenerate to refresh:",
+                        "cmd":  regen_cmd})
+    if stage == "cataloged":
+        # Not a warning - just a nudge with the exact JSON key to open.
+        out.append({"tone": "nudge",
+                    "text": f'Still cataloged. Set a Status by editing product_review.json at key "{path}".',
+                    "cmd":  None})
+    return out
+
+def _affordance_html(banners):
+    """Render a list of affordance banners into the card's Actions bcard."""
+    if not banners: return ""
+    rows = []
+    for b in banners:
+        cmd = b.get("cmd")
+        line = f'<div class="aff-text">{_esc(b["text"])}</div>'
+        if cmd:
+            line += (f'<span class="copy-cmd light"><code>{_esc(cmd)}</code>'
+                     f'<button data-copy="{_esc(cmd)}">Copy</button></span>')
+        rows.append(f'<div class="aff-row aff-{_esc(b["tone"])}">{line}</div>')
+    return ('<div class="branch"><div class="bcard"><div class="blabel">Suggested next step</div>'
+            + "".join(rows) + '</div></div>')
+
 def product_row(f, review, work, probes, ctx=None):
     ctx = ctx or {}
     top_families = ctx.get("top_families", set())
     git = ctx.get("git") or {}
+    snapshot = ctx.get("snapshot")
     facets = product_facet_values(f, review, work, probes, top_families)
     r = review.get(f["path"], {})
     st = r.get("stage", "cataloged")
@@ -1110,6 +1193,12 @@ def product_row(f, review, work, probes, ctx=None):
             f'<div class="mini">{mini}</div></div>')
 
     branches = []
+    # Contextual affordances first: state-driven copyable commands that fill
+    # what would otherwise be a blank section. Rules in _affordances().
+    has_probe = bool(probes.get(f["path"], {}).get("ok"))
+    banners = _affordances(f, r, ws, has_probe, git, snapshot)
+    aff = _affordance_html(banners)
+    if aff: branches.append(aff)
     unc = r.get("uncertainty_metrics", "")
     unc_html = (f'<div class="unc">{_esc(unc)}</div>' if unc else
                 '<div class="unc todo">Not yet documented. Documenting what this product publishes IS '
@@ -1239,13 +1328,13 @@ def build_facet_sidebar(prods, review, work, probes, top_families):
             '<h3>Filter</h3><a class="facet-clear" href="#" style="display:none">Clear filters</a>'
             '</div>' + "".join(blocks) + '</aside>')
 
-def build_kind_panel(kind, fams, review, work, probes, git=None):
+def build_kind_panel(kind, fams, review, work, probes, git=None, snapshot=None):
     prods = [f for f in fams.values() if f["kind"] == kind]
     # Compute per-panel "top families" bucket for the Family facet.
     fam_counts = {}
     for f in prods: fam_counts[f["group"]] = fam_counts.get(f["group"], 0) + 1
     top_families = set(sorted(fam_counts, key=lambda g: -fam_counts[g])[:12])
-    ctx = {"top_families": top_families, "git": git or {}}
+    ctx = {"top_families": top_families, "git": git or {}, "snapshot": snapshot}
 
     groups = {}
     for f in prods: groups.setdefault(f["group"], []).append(f)
@@ -1458,7 +1547,7 @@ def export_xlsx(rows, out_path):
     wb.save(out_path)
 
 
-def render(fams, review, work, worklog, notebooks, probes, repo_name, catnote, out_path, git):
+def render(fams, review, work, worklog, notebooks, probes, repo_name, catnote, out_path, git, snapshot=None):
     counts = {s: 0 for s in STAGES}
     for path in fams:
         counts[review.get(path, {}).get("stage", "cataloged")] += 1
@@ -1471,7 +1560,7 @@ def render(fams, review, work, worklog, notebooks, probes, repo_name, catnote, o
         n = sum(1 for f in fams.values() if f["kind"] == k)
         tabs.append(f'<button class="tab" data-k="k{i}">{_esc(k)}<span class="n">{n}</span></button>')
         panels.append(f'<div class="panel" id="panel-k{i}">'
-                      + build_kind_panel(k, fams, review, work, probes, git) + '</div>')
+                      + build_kind_panel(k, fams, review, work, probes, git, snapshot) + '</div>')
 
     gen_iso = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     head_short = (git.get("head_sha") or "")[:7] or "no-git"
@@ -1570,7 +1659,8 @@ def main():
     if git.get("head_sha"):
         print(f"  git: HEAD {git['head_sha'][:7]} on '{git.get('branch') or 'detached'}'"
               + (f" | github: {git['github_slug']}" if git.get("github_slug") else ""))
-    counts = render(fams, review, work, worklog, notebooks, probes, repo.name, catnote, out, git)
+    snapshot = load_snapshot(repo)   # written by feature #5; None until then
+    counts = render(fams, review, work, worklog, notebooks, probes, repo.name, catnote, out, git, snapshot)
     print("  funnel: " + " -> ".join(f"{STAGE_LABELS[s]} {counts.get(s, 0)}" for s in STAGES))
     print(f"Report written to {out}")
 
