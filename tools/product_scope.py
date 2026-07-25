@@ -1310,7 +1310,17 @@ def sample_products(repo, fams, review, probes, only_product, size, refresh, git
     review file. Skips fresh cache entries (age < SAMPLE_FRESH_DAYS days) unless
     refresh is True; skips non-API products with a clear message. Persists
     successful samples to scope_data_cache.json. Returns a summary dict with
-    counts and per-product results for the caller to display."""
+    counts and per-product results for the caller to display.
+
+    Phase 4 #3 note - on-demand vs. bulk semantics DIFFER by design:
+      * --sample --product X (single-product mode)   -> hits the API immediately.
+        The freshness short-circuit below only applies when we're batch-iterating
+        candidates without --refresh. Requesting one product by ID is a
+        deliberate reviewer action, and re-fetching is what the reviewer asked
+        for; the tool should not silently skip it based on a 7-day cache.
+      * --warm-cache (Phase 4 #2, separate entry point) DOES honor freshness on
+        every product because it's an unattended bulk pass over the whole catalog.
+    """
     env = load_env(repo)
     api_key = env.get("CENSUS_API_KEY", "")
     cache = load_data_cache(repo)
@@ -1345,8 +1355,14 @@ def sample_products(repo, fams, review, probes, only_product, size, refresh, git
             continue
         # Fresh-cache short-circuit: skip HTTP entirely when a recent entry
         # exists and the user didn't force --refresh.
+        #
+        # Phase 4 #3: only applies in BATCH mode (only_product is None). Single
+        # --sample --product X always hits the API - the reviewer explicitly
+        # asked for that product, and silently returning a stale-ish cache
+        # instead is surprising. --warm-cache (Phase 4 #2) does honor freshness
+        # because it's an unattended bulk pass over the whole catalog.
         cached = cache.get(path)
-        if not refresh and is_sample_fresh(cached):
+        if only_product is None and not refresh and is_sample_fresh(cached):
             print(f"  [sample] {path}: fresh cache from "
                   f"{cached.get('sampled_at','?')} - skipping (use --refresh "
                   f"to force)")
