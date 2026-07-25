@@ -2246,6 +2246,30 @@ document.querySelectorAll('.filter input').forEach(function(inp){
     var c = panel.querySelector('.fcnt');   if (c) c.textContent = shown + ' shown';
   });
 });
+/* --- Quick Look drill-down persistence (Phase 4b #4) ---
+   Each <details data-product-id="..."> in Quick Look remembers whether the
+   reader had it open via localStorage, keyed by product id. The <details>
+   element works with JS off; this is a pure enhancement layer.
+   Errors (in-private mode, quota exceeded, disabled storage) silently no-op
+   so a hostile storage environment still leaves the toggle functional. */
+(function(){
+  var LS_PREFIX = 'product_scope:card_expanded:';
+  function _lsGet(k){ try { return localStorage.getItem(k); } catch(_){ return null; } }
+  function _lsSet(k, v){ try { localStorage.setItem(k, v); } catch(_){} }
+  // Restore per-card state at page load.
+  document.querySelectorAll('details[data-product-id]').forEach(function(el){
+    var key = LS_PREFIX + el.dataset.productId;
+    if (_lsGet(key) === 'true') el.open = true;
+  });
+  // Persist on every toggle. Capture-phase listener because the 'toggle'
+  // event does not bubble - has to be caught at the document level.
+  document.addEventListener('toggle', function(e){
+    var el = e.target;
+    if (el && el.tagName === 'DETAILS' && el.dataset && el.dataset.productId){
+      _lsSet(LS_PREFIX + el.dataset.productId, el.open ? 'true' : 'false');
+    }
+  }, true);
+})();
 </script>
 <footer>product_scope.py &bull; re-run before each biweekly &bull; --online refreshes the catalog &bull;
 tabs come from the catalog's own dataset flags; subjects are matched from product titles (SUBJECTS in this file, editable) &bull; stages and uncertainty notes are written only
