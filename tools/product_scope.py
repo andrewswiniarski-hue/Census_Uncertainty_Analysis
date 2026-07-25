@@ -3634,6 +3634,25 @@ document.querySelectorAll('.filter input').forEach(function(inp){
       .replace(/"/g, '&quot;');
   }
 
+  /* Phase 5 #6 - Quick Look TL;DR "N more →" button opens the sibling
+     <details> so the reader can jump into the full insights feed. Delegated
+     listener so newly-inserted rows (from an insight POST) also work. */
+  document.addEventListener('click', function(e){
+    var btn = e.target.closest && e.target.closest('.ql-ins-more');
+    if (!btn) return;
+    e.preventDefault();
+    var qlCard = btn.closest('.bcard');   // the Quick Look bcard
+    var details = qlCard ? qlCard.querySelector('details[data-product-id]') : null;
+    if (details){
+      details.open = true;
+      /* Scroll the drill-down into view; leave a bit of headroom. */
+      var body = details.querySelector('.ql-details-body');
+      if (body && body.scrollIntoView){
+        body.scrollIntoView({behavior: 'smooth', block: 'start'});
+      }
+    }
+  });
+
   /* Boot on DOM ready. Probe /healthz, then wire either the read-only banner
      or the edit handlers, per outcome. */
   function _boot(){
@@ -4606,11 +4625,11 @@ def _ql_empty_state_html(f, tier, non_api):
             '</div>')
     return ""
 
-def _ql_details_html(f, probe_entry, cache_entry, tier, non_api):
+def _ql_details_html(f, probe_entry, cache_entry, tier, non_api, insights=None):
     """Assemble the expanded (behind-the-toggle) content for one card. Order
     of blocks matches the TL;DR tier order so the reader can follow the
     thread: Tier 0 context, Tier 1 probe detail, Tier 2 full EDA tables,
-    empty-state affordance last."""
+    Phase 5 #6 full insights feed, empty-state affordance last."""
     parts = []
     cat = _ql_catalog_detail_html(f, non_api)
     if cat:
@@ -4625,10 +4644,62 @@ def _ql_details_html(f, probe_entry, cache_entry, tier, non_api):
                      '<div class="ql-d-cap">Sample &amp; EDA</div>'
                      + _eda_header_html(cache_entry)
                      + _eda_body_html(cache_entry) + '</div>')
+    # Phase 5 #6 - full insights feed in the drill-down, always rendered so
+    # the drill-down is a superset of the TL;DR (spec: "full chronological
+    # feed of all insights"). No insights -> a small empty state.
+    parts.append(_ql_insights_drill_html(insights or [], f["path"]))
     empty = _ql_empty_state_html(f, tier, non_api)
     if empty:
         parts.append('<div class="ql-d-block ql-d-empty-wrap">' + empty + '</div>')
     return "".join(parts)
+
+# ---- Phase 5 #6: insights render in Quick Look TL;DR + drill-down -----------
+# TL;DR carries the last 2 insights as compact one-liners so a reader scanning
+# the page sees the freshest signal without expanding anything. When the feed
+# has >2 entries, an `<N more →` button opens the More Details drill-down
+# (delegates to the existing <details> element on the same card). The full
+# feed lives on the standalone Insights branch below the card, but a
+# duplicate copy also appears in the drill-down so the reader gets everything
+# in one expansion.
+
+def _ql_insights_tldr_html(insights):
+    """Compact top-2 insights list rendered inside the Quick Look TL;DR block.
+    Returns "" when the entry has no insights.
+
+    Sort order: newest first (same as the drill-down feed) so the reader's
+    first glance is always the freshest signal."""
+    if not insights: return ""
+    ordered = sorted(insights, key=lambda i: i.get("when") or "", reverse=True)
+    rows = [_insight_row_html(i, kind="tldr") for i in ordered[:2]]
+    more_link = ""
+    if len(ordered) > 2:
+        # data-open-details=1 hooks the small JS shim to programmatically open
+        # the sibling <details> when clicked. Native button so keyboard nav
+        # picks it up.
+        more_link = (f'<button type="button" class="ql-ins-more" '
+                     f'data-open-details="1">'
+                     f'{len(ordered) - 2} more insight'
+                     + ('s' if len(ordered) - 2 != 1 else '')
+                     + ' &rarr;</button>')
+    return ('<ul class="ql-insights">' + "".join(rows) + '</ul>'
+            + (f'<div style="margin:2px 0 0">{more_link}</div>' if more_link else ""))
+
+def _ql_insights_drill_html(insights, product_id):
+    """Full chronological feed of insights for the drill-down. Above the
+    feed sits an 'Add insight' toggle + form that mirrors the standalone
+    Insights branch below the card. Rendered inside the tier-flavoured
+    ql-d-block wrapper so it fits the drill-down visual language."""
+    if not insights:
+        insights_html = ('<div class="ins-empty">No insights yet.</div>')
+    else:
+        ordered = sorted(insights, key=lambda i: i.get("when") or "", reverse=True)
+        insights_html = ('<ul class="scope-insights-feed" style="max-height:none">'
+                         + "".join(_insight_row_html(i, kind="drill") for i in ordered)
+                         + '</ul>')
+    return ('<div class="ql-d-block ql-d-t2" style="background:#FAFAFC;'
+            'border-color:#EDEEF3">'
+            '<div class="ql-d-cap">Insights feed</div>'
+            + insights_html + '</div>')
 
 # ============================================================================
 # PHASE 5 #4 - INLINE EDIT UI (per-card controls + insight feed)
@@ -4836,26 +4907,28 @@ def render_insight_feed(f, r):
             '<span class="scope-err"></span>'
             '</div></form></div></div></div>')
 
-def render_quick_look(f, probe_entry, cache_entry, warm_summary=None):
+def render_quick_look(f, probe_entry, cache_entry, warm_summary=None, insights=None):
     """One card's Quick Look branch. Always shows a compact 2-3 line TL;DR:
 
       * Line 1 (always): tier chip + Tier-0 catalog facts.
       * Line 2 (if probed): condensed probe metadata.
       * Line 3 (if sampled): sample shape + missingness + headline numeric.
+      * Line 4 (Phase 5 #6, if any insights): compact top-2 feed with a
+        `<N more →` button that programmatically opens the drill-down when
+        the reader wants the full thread.
 
     Below the TL;DR sits a native <details>/<summary> toggle. Collapsed by
     default so the reader can scan a page of cards without cognitive load;
     expanding it drills into the full catalog description, probe detail
     (allocation-group names, replicate groups, all declared geography
     levels), the sample shape header + full EDA tables (columns, numerics,
-    top categoricals, geography breakdown, sparklines), and - when
-    unavailable - copyable --probe/--sample commands. The toggle shape is
-    intentionally identical regardless of tier so the reader learns "drill
-    is always here" (Phase 4b #6).
+    top categoricals, geography breakdown, sparklines), the FULL insights
+    feed (Phase 5 #6), and - when unavailable - copyable --probe/--sample
+    commands. The toggle shape is intentionally identical regardless of tier
+    so the reader learns "drill is always here" (Phase 4b #6).
 
-    warm_summary: optional dict from .warm_cache_last_run.json (or None). Only
-                  consulted to detect the 'non_api' tag persisted by --warm-cache
-                  so Quick Look's Tier 0 empty state shows the right message.
+    warm_summary: optional dict from .warm_cache_last_run.json (or None).
+    insights:     list of insight dicts (from review[path]["insights"]).
     """
     tier, chip_label, chip_class = _quick_look_tier(f, probe_entry, cache_entry)
     non_api = not f.get("variables_url")
@@ -4895,11 +4968,19 @@ def render_quick_look(f, probe_entry, cache_entry, warm_summary=None):
         parts.append('<div class="ql-nonapi">Not sample-able via API '
                      '(bulk-download product - e.g. TIGER shapefiles, DAS demo).</div>')
 
+    # Phase 5 #6 - top-2 insights as a compact sub-line at the bottom of the
+    # TL;DR pack. The 'N more' button opens the drill-down.
+    insights = list(insights or [])
+    tldr_ins = _ql_insights_tldr_html(insights)
+    if tldr_ins:
+        parts.append(tldr_ins)
+
     # More-details toggle. Native <details>/<summary> - works without JS.
     # A tier-flavoured wrapper class shades the expanded background so the
     # visual link to the TL;DR line's stripe is preserved on drill-in.
     tier_slug = {0: "ql-d-tier0", 1: "ql-d-tier1", 2: "ql-d-tier2"}[tier]
-    details_body = _ql_details_html(f, probe_entry, cache_entry, tier, non_api)
+    details_body = _ql_details_html(f, probe_entry, cache_entry, tier, non_api,
+                                     insights=insights)
     parts.append(
         f'<details class="ql-details {tier_slug}" data-product-id="{_esc(f["path"])}">'
         f'<summary class="ql-summary" title="Toggle drill-down (press E when focused)">'
@@ -4954,7 +5035,8 @@ def product_row(f, review, work, probes, ctx=None):
     _data_cache = ctx.get("data_cache") or {}
     _warm_summary = ctx.get("warm_summary")
     branches.append(render_quick_look(f, probes.get(f["path"]),
-                                       _data_cache.get(f["path"]), _warm_summary))
+                                       _data_cache.get(f["path"]), _warm_summary,
+                                       insights=r.get("insights") or []))
 
     # Contextual affordances: state-driven copyable commands that fill
     # what would otherwise be a blank section. Rules in _affordances().
