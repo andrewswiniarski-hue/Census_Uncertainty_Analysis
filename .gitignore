@@ -41,3 +41,7 @@ scope_data_cache.json
 # Phase 3 EDA diff - written by --sample --refresh, consumed by the next
 # regen so the diff banner can flag data drift alongside repo drift.
 .scope_last_eda_diff.json
+# Phase 4 warm-cache batch summary - counts + path lists from the last
+# --warm-cache run. Consumed by the cache-coverage header and Quick Look's
+# 'non_api' detection so both survive a session restart.
+.warm_cache_last_run.json

@@ -657,11 +657,51 @@ def build_product_status(evidence):
 ALLOC_GROUP = re.compile(r"^B9[89]\d{3}")
 REPL_GROUP  = re.compile(r"^B\d{5}_VAR|^VAR_", re.I)
 
+# ---- Rate limiter hook (Phase 4 #2) -----------------------------------------
+# The warm-cache batch runs many outbound calls in parallel and needs to stay
+# under ~10 req/s globally, plus honor Retry-After on any 429/5xx. Rather than
+# thread a limiter arg through every function, warm_cache() installs a shared
+# _RateLimiter into this module-level slot and _api_get / _http_get_json call
+# it via the small helpers below. Outside a warm-cache run the slot stays None
+# and the helpers no-op, so single-shot --probe / --sample paths are unchanged.
+_WARM_LIMITER = None
+
+def _parse_retry_after(v):
+    """Retry-After can be seconds ('30') or an HTTP-date. We only honor the
+    integer-seconds form here; unparseable values fall back to 5s."""
+    if not v: return 0.0
+    try:
+        return float(str(v).strip())
+    except (TypeError, ValueError):
+        return 5.0
+
+def _rl_before_call():
+    """Called before each outbound API call. No-op unless a warm limiter is
+    installed. Blocks until the shared token budget allows the call."""
+    if _WARM_LIMITER is not None:
+        _WARM_LIMITER.acquire()
+
+def _rl_on_retry_after(ex):
+    """If the HTTPError carries a Retry-After header and a warm limiter is
+    installed, bump the limiter so every worker respects the server's hint."""
+    if _WARM_LIMITER is None: return
+    try:
+        ra = ex.headers.get("Retry-After") if getattr(ex, "headers", None) else None
+    except Exception:
+        ra = None
+    if not ra: return
+    _WARM_LIMITER.bump(_parse_retry_after(ra))
+
 def _api_get(url, timeout=60):
     if url.startswith("http://"):
         url = "https://" + url[len("http://"):]
-    with urllib.request.urlopen(url, timeout=timeout) as r:
-        return json.load(r)
+    _rl_before_call()
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as r:
+            return json.load(r)
+    except urllib.error.HTTPError as ex:
+        _rl_on_retry_after(ex)
+        raise
 
 def summarise_variables(payload):
     v = payload.get("variables", payload)
@@ -970,9 +1010,16 @@ def _pick_sample_geography(fam, probe):
 def _http_get_json(url, timeout=SAMPLE_HTTP_TIMEOUT, retry=True):
     """GET + JSON decode with one retry on transient errors (HTTPError >=500,
     URLError, timeout). Returns parsed JSON, or raises the last exception.
-    Requests are silent on stdout - callers own the log line."""
+    Requests are silent on stdout - callers own the log line.
+
+    Phase 4 #2: when a warm-cache limiter is installed (_WARM_LIMITER), each
+    attempt calls _rl_before_call() first so parallel workers stay under the
+    shared cap, and HTTPError with a Retry-After header bumps the limiter so
+    every worker respects the server's hint. 429 (rate-limited) is retried
+    once even in the 4xx range - the one case where 4xx retry is correct."""
     last_exc = None
     for attempt in (1, 2 if retry else 1):
+        _rl_before_call()
         try:
             if url.startswith("http://"):
                 url = "https://" + url[len("http://"):]
@@ -981,7 +1028,12 @@ def _http_get_json(url, timeout=SAMPLE_HTTP_TIMEOUT, retry=True):
                 return json.load(r)
         except urllib.error.HTTPError as ex:
             last_exc = ex
-            if ex.code and ex.code < 500: raise   # 4xx: don't retry
+            _rl_on_retry_after(ex)
+            # Rate-limited: retry once even in the 4xx range.
+            if ex.code == 429 and attempt == 1 and retry:
+                import time as _t; _t.sleep(1.0)
+                continue
+            if ex.code and ex.code < 500: raise   # other 4xx: don't retry
             if attempt == 2: raise
         except (urllib.error.URLError, TimeoutError, OSError) as ex:
             last_exc = ex
@@ -1363,6 +1415,286 @@ def sample_products(repo, fams, review, probes, only_product, size, refresh, git
             try: diff_path.unlink()
             except OSError: pass
     return summary
+
+# ============================================================================
+# WARM CACHE (Phase 4 #2)
+# ============================================================================
+# Batch mode that iterates every product in the catalog and, for each one,
+# runs a probe (populates product_probes.json) then a sample (populates
+# scope_data_cache.json). Runs in a thread pool with a rate-limited HTTP path
+# and incremental cache persistence so a mid-run crash keeps completed work.
+#
+# Skip rules:
+#   - Non-API products (no variables_url)          -> skipped, tag 'non_api'
+#   - sample_config == 'skip' in product_review    -> skipped_config
+#   - Both probe AND sample fresh (< 7 days each)  -> skipped_fresh
+#   - --refresh overrides freshness                -> always run
+#   - sample_config == 'always'                    -> ignores freshness
+#
+# See --sample --product X for the on-demand single-product path (Phase 3);
+# it bypasses freshness by design (Phase 4 #3 documents the difference).
+
+WARM_DEFAULT_WORKERS  = 6
+WARM_RATE_LIMIT_QPS   = 10.0
+WARM_RUN_FILE         = ".warm_cache_last_run.json"
+WARM_PROBE_FRESH_DAYS = 7
+
+class _RateLimiter:
+    """Thread-safe sliding-window rate limiter used by warm_cache to keep the
+    combined outbound rate under `cap` requests per second across all workers.
+
+    Two levers:
+      * acquire()       - blocks until a token is available (call before a request)
+      * bump(seconds)   - defers all subsequent acquires by `seconds`
+                          (used to honor Retry-After hints from the server)
+
+    Sliding window over the last second: no over-firing at window boundaries.
+    Stdlib only; no aiohttp, no tqdm.
+    """
+    def __init__(self, cap):
+        import threading, collections
+        self._cap = float(cap)
+        self._lock = threading.Lock()
+        self._times = collections.deque()
+        self._until = 0.0
+
+    def acquire(self):
+        import time as _t
+        # Loop so a Retry-After bump landing while we sleep still applies.
+        while True:
+            with self._lock:
+                now = _t.monotonic()
+                if now < self._until:
+                    sleep_for = self._until - now
+                else:
+                    # Drop timestamps older than 1s from the window.
+                    while self._times and self._times[0] < now - 1.0:
+                        self._times.popleft()
+                    if len(self._times) < self._cap:
+                        self._times.append(now)
+                        return
+                    sleep_for = 1.0 - (now - self._times[0])
+                    if sleep_for < 0: sleep_for = 0
+            _t.sleep(max(sleep_for, 0.001))
+
+    def bump(self, seconds):
+        import time as _t
+        with self._lock:
+            self._until = max(self._until, _t.monotonic() + max(0.0, float(seconds)))
+
+
+def _warm_probe_one(repo, path, fam, today, probes_lock, probes_ref):
+    """Probe one product; persist to product_probes.json under probes_lock so
+    a crash mid-run keeps every completed probe. Returns the probe dict."""
+    r = probe_one(path, fam, today)
+    with probes_lock:
+        probes_ref[path] = r
+        (repo / "product_probes.json").write_text(
+            json.dumps(dict(sorted(probes_ref.items())), indent=2), encoding="utf-8")
+    return r
+
+def _warm_sample_one(repo, path, fam, probe, size, api_key,
+                      cache_lock, cache_ref, head_sha):
+    """Sample one product; persist to scope_data_cache.json under cache_lock.
+    Returns (rows, cols, url, err) - err is "" on success."""
+    df, url, err = fetch_sample(fam, probe, size, api_key)
+    if err:
+        return 0, 0, url, err
+    eda = compute_eda(df, probe)
+    entry = {
+        "sampled_at":    datetime.datetime.now(datetime.timezone.utc)
+                             .strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "sample_size":   size,
+        "shape":         eda.get("shape", [len(df), len(df.columns)]),
+        "columns":       eda.get("columns", {}),
+        "geography":     eda.get("geography", {}),
+        "sparklines":    eda.get("sparklines", {}),
+        "source_url":    url,
+        "sha_at_sample": head_sha,
+    }
+    with cache_lock:
+        cache_ref[path] = entry
+        save_data_cache(repo, cache_ref)
+    return len(df), len(df.columns), url, ""
+
+
+def _decide_warm(path, fams, review, probes_dict, cache_dict, refresh):
+    """One product's skip/run decision for warm_cache. Returns one of:
+       'non_api' | 'config_skip' | 'fresh' | 'run'
+    Encapsulated so unit tests can drive the decision matrix directly."""
+    fam = fams.get(path, {})
+    if not fam.get("variables_url"):
+        return "non_api"
+    cfg = sample_config_of(review.get(path, {}))
+    if cfg == "skip":
+        return "config_skip"
+    if refresh or cfg == "always":
+        return "run"
+    # Both probe AND sample cache must be fresh to skip.
+    pr = probes_dict.get(path, {}) or {}
+    probe_fresh = False
+    if pr.get("ok") and pr.get("probed"):
+        try:
+            d = datetime.date.fromisoformat(pr["probed"])
+            probe_fresh = (datetime.date.today() - d).days < WARM_PROBE_FRESH_DAYS
+        except Exception:
+            probe_fresh = False
+    sample_fresh = is_sample_fresh(cache_dict.get(path))
+    return "fresh" if (probe_fresh and sample_fresh) else "run"
+
+
+def warm_cache(repo, fams, review, probes, size, refresh, concurrency, git=None):
+    """Iterate every product in the catalog and, for each one, run a probe then
+    a sample (skipping per _decide_warm). Rate-limited to WARM_RATE_LIMIT_QPS
+    across all workers; each successful probe/sample writes its cache file
+    immediately so a mid-run crash cannot lose completed work.
+
+    Uses ThreadPoolExecutor with `concurrency` workers (default 6). When
+    concurrency<=1, runs sequentially with no thread pool - cleaner for
+    debugging or when a network is flaky.
+
+    Persists a summary of counts + path lists to .warm_cache_last_run.json
+    (gitignored) so the diff banner and cache-coverage header can display the
+    last run's outcome without recomputing it."""
+    import concurrent.futures, threading, time as _t
+    global _WARM_LIMITER
+    env = load_env(repo)
+    api_key = env.get("CENSUS_API_KEY", "")
+    head_sha = (git or {}).get("head_sha", "")
+
+    # Load current caches once; workers share the dicts under locks.
+    cache_dict  = load_data_cache(repo)
+    probes_dict = dict(probes) if probes else {}
+    cache_lock  = threading.Lock()
+    probes_lock = threading.Lock()
+
+    limiter = _RateLimiter(WARM_RATE_LIMIT_QPS)
+    _WARM_LIMITER = limiter    # installed for the duration of this run
+
+    today = datetime.date.today().isoformat()
+    ordered_paths = sorted(fams)
+    total = len(ordered_paths)
+    print(f"[warm-cache] {total} product(s); workers={concurrency}; "
+          f"rate cap={int(WARM_RATE_LIMIT_QPS)} req/s; "
+          f"api_key={'yes' if api_key else 'no (public limits)'}; "
+          f"refresh={'yes' if refresh else 'no'}")
+
+    counters = {"warmed": [], "skipped_fresh": [], "skipped_non_api": [],
+                "skipped_config": [], "failed": []}
+    counters_lock = threading.Lock()
+    progress_lock = threading.Lock()
+    progress = {"i": 0}
+
+    def _work(path):
+        t0 = _t.perf_counter()
+        fam = fams[path]
+        with progress_lock:
+            progress["i"] += 1
+            i = progress["i"]
+        try:
+            decision = _decide_warm(path, fams, review, probes_dict,
+                                     cache_dict, refresh)
+        except Exception as ex:
+            with counters_lock:
+                counters["failed"].append({"path": path, "reason": f"decide: {ex}"})
+            print(f"[{i}/{total}] {path} - internal error: {ex}")
+            return
+        if decision == "non_api":
+            with counters_lock:
+                counters["skipped_non_api"].append(path)
+            print(f"[{i}/{total}] {path} - skipped (non-api)")
+            return
+        if decision == "config_skip":
+            with counters_lock:
+                counters["skipped_config"].append(path)
+            print(f"[{i}/{total}] {path} - skipped (sample_config: skip)")
+            return
+        if decision == "fresh":
+            with counters_lock:
+                counters["skipped_fresh"].append(path)
+            print(f"[{i}/{total}] {path} - skipped (fresh)")
+            return
+
+        # Probe: only re-run if not already fresh + ok (small courtesy to
+        # the API; the skip check above already required BOTH to be fresh).
+        pr = probes_dict.get(path, {}) or {}
+        probe_msg = "cached"
+        need_probe = refresh or not pr.get("ok")
+        if need_probe:
+            try:
+                pr = _warm_probe_one(repo, path, fam, today, probes_lock, probes_dict)
+            except Exception as ex:
+                pr = {"ok": False, "error": f"{type(ex).__name__}: {ex}"}
+            probe_msg = "ok" if pr.get("ok") else "fail"
+
+        # Sample runs whether probe succeeded or failed - probe failure just
+        # means we lack the queryable_without_parent hint, and _pick_sample_geography
+        # falls back to 'state:*' in that case.
+        try:
+            rows, cols, url, err = _warm_sample_one(
+                repo, path, fam, pr, size, api_key, cache_lock, cache_dict, head_sha)
+        except Exception as ex:
+            err = f"{type(ex).__name__}: {ex}"; url = ""; rows = cols = 0
+        elapsed = _t.perf_counter() - t0
+        if err:
+            with counters_lock:
+                counters["failed"].append({"path": path, "reason": err, "url": url})
+            print(f"[{i}/{total}] {path} - probe {probe_msg}, sample FAIL: {err} ({elapsed:.1f}s)")
+        else:
+            with counters_lock:
+                counters["warmed"].append(path)
+            print(f"[{i}/{total}] {path} - probe {probe_msg}, sample ok ({elapsed:.1f}s)")
+
+    try:
+        if concurrency <= 1:
+            for path in ordered_paths:
+                _work(path)
+        else:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=concurrency) as ex:
+                # list() drains the iterator so exceptions surface after all
+                # workers finish. Individual _work handles its own exceptions.
+                list(ex.map(_work, ordered_paths))
+    finally:
+        _WARM_LIMITER = None    # always uninstall so single-shot paths recover
+
+    summary = {
+        "finished_at":   datetime.datetime.now(datetime.timezone.utc)
+                             .strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "head_sha":      head_sha,
+        "concurrency":   concurrency,
+        "sample_size":   size,
+        "refresh":       bool(refresh),
+        "total":         total,
+        "warmed":        counters["warmed"],
+        "skipped_fresh": counters["skipped_fresh"],
+        "skipped_non_api": counters["skipped_non_api"],
+        "skipped_config": counters["skipped_config"],
+        "failed":        counters["failed"],
+    }
+    print(f"[warm-cache] done: warmed={len(counters['warmed'])}, "
+          f"skipped_fresh={len(counters['skipped_fresh'])}, "
+          f"skipped_non_api={len(counters['skipped_non_api'])}, "
+          f"skipped_config={len(counters['skipped_config'])}, "
+          f"failed={len(counters['failed'])}")
+    if counters["failed"]:
+        print("[warm-cache] failure details:")
+        for fr in counters["failed"][:20]:
+            print(f"    - {fr['path']}: {fr.get('reason','unknown')}")
+        if len(counters["failed"]) > 20:
+            print(f"    ({len(counters['failed'])-20} more; see {WARM_RUN_FILE})")
+
+    (repo / WARM_RUN_FILE).write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    return summary
+
+def load_warm_summary(repo: Path):
+    """Read .warm_cache_last_run.json (Phase 4 #2). Returns None when the file
+    doesn't exist (no warm run has happened yet). Never raises."""
+    p = repo / WARM_RUN_FILE
+    if not p.exists(): return None
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        return None
 
 # ============================================================================
 # REPORT
@@ -3192,6 +3524,16 @@ def main():
     ap.add_argument("--product", metavar="ID", default=None,
                     help="target product for --sample (single-product mode). "
                          "Ignored otherwise.")
+    # ---- Phase 4: warm-cache batch (see WARM CACHE section) ----------------
+    ap.add_argument("--warm-cache", action="store_true",
+                    help="iterate every product in the catalog and probe + sample "
+                         "each one (skipping non-API, fresh cache, and sample_config "
+                         "'skip'). Rate-limited across a thread pool; incremental "
+                         "cache persistence. Use --refresh to override freshness and "
+                         "--concurrency N to change the worker count (default 6).")
+    ap.add_argument("--concurrency", type=int, default=WARM_DEFAULT_WORKERS, metavar="N",
+                    help=f"worker count for --warm-cache (default {WARM_DEFAULT_WORKERS}). "
+                         "Set to 1 for a sequential run (easier to debug).")
     args = ap.parse_args()
     repo = Path(args.repo).resolve()
     if not (repo / "ingestion").exists():
@@ -3258,6 +3600,13 @@ def main():
     if args.sample:
         sample_products(repo, fams, review, probes, args.product,
                         args.sample_size, args.refresh, git)
+    # Phase 4 #2: --warm-cache runs before HTML render too; it repopulates both
+    # product_probes.json and scope_data_cache.json, then the render below
+    # picks up the fresh state (probes reload, data_cache reload just below).
+    if args.warm_cache:
+        warm_cache(repo, fams, review, probes, args.sample_size, args.refresh,
+                   max(1, int(args.concurrency)), git)
+        probes = load_probes(repo)   # reload after warm-cache touched it
 
     if args.export:
         # Export mode skips HTML generation entirely - the export IS the deliverable.
