@@ -1953,6 +1953,48 @@ footer{padding:22px 44px;color:var(--muted);font-size:11.5px;}
      font-weight:700;margin-right:2px;}
 .ql-sep{color:#B8BFCE;margin:0 2px;}
 .ql-nonapi{font-size:11px;color:#8a4d1c;font-style:italic;margin:4px 0;}
+/* More-details toggle (Phase 4b #3). Native <details>/<summary>: works with
+   JS off; the localStorage persistence in the inline script layers on top.
+   Chevron rotates purely in CSS on open. Expanded background is tinted with
+   the tier's own color family at very low opacity so the visual link to the
+   TL;DR line's stripe is preserved on drill-in. */
+.ql-details{margin-top:7px;border:1px solid var(--line);border-radius:6px;
+     background:#fff;transition:background-color .18s ease-in;}
+.ql-details[open]{background:#FBFCFE;}
+.ql-details.ql-d-tier0[open]{background:#F9FAFC;}
+.ql-details.ql-d-tier1[open]{background:#F5F9FF;}
+.ql-details.ql-d-tier2[open]{background:#F3FAF4;}
+.ql-summary{list-style:none;padding:5px 10px;cursor:pointer;user-select:none;
+     display:flex;align-items:center;gap:6px;font-size:11px;color:var(--navy);
+     font-weight:600;letter-spacing:.02em;border-radius:6px;}
+.ql-summary::-webkit-details-marker{display:none;}     /* Safari */
+.ql-summary::marker{content:"";}                       /* Firefox/Chrome */
+.ql-summary:hover{background:var(--ice);}
+.ql-summary:focus-visible{outline:2px solid #8FA8D8;outline-offset:1px;}
+.ql-chevron{display:inline-block;font-size:11px;line-height:1;color:var(--muted);
+     transition:transform .16s ease-in-out;transform-origin:50% 50%;}
+.ql-details[open] .ql-chevron{transform:rotate(90deg);color:var(--navy);}
+.ql-summary-label{flex:1;}
+.ql-details-body{padding:7px 12px 10px;border-top:1px solid var(--ice);
+     animation:ql-fade-in .18s ease-out;}
+@keyframes ql-fade-in{from{opacity:0;transform:translateY(-2px);}
+                      to{opacity:1;transform:translateY(0);}}
+.ql-d-block{margin:6px 0;padding:6px 8px;border-radius:5px;background:#FDFDFE;
+     border:1px solid #F0F2F7;}
+.ql-d-block.ql-d-t0{background:#F8F9FC;}
+.ql-d-block.ql-d-t1{background:#F1F5FF;border-color:#E1E8F6;}
+.ql-d-block.ql-d-t2{background:#EEF7EF;border-color:#DAEBDE;}
+.ql-d-block.ql-d-empty-wrap{background:#FBFAF6;border-color:#EEE6D3;}
+.ql-d-cap{font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;
+     color:var(--muted);font-weight:700;margin-bottom:4px;}
+.ql-d-row{font-size:11px;color:var(--ink);line-height:1.55;margin:2px 0;
+     overflow-wrap:anywhere;}
+.ql-d-desc{font-size:11px;color:var(--ink);line-height:1.5;margin:2px 0 6px;}
+.ql-d-link{color:#3A4890;text-decoration:none;border-bottom:1px dotted #8FA8D8;
+     font-family:ui-monospace,Consolas,monospace;font-size:10.5px;}
+.ql-d-empty{font-size:11px;color:var(--muted);line-height:1.5;margin:2px 0;}
+.ql-d-cmd{margin-top:4px;}
+.ql-muted{color:var(--muted);font-size:10px;}
 /* Faceted browsing sidebar (only on the Products tabs). */
 .products-shell{display:flex;gap:22px;align-items:flex-start;}
 .products-main{flex:1;min-width:0;}
@@ -3057,6 +3099,127 @@ def _ql_tier2_line(cache_entry):
                     f'{_fmt_num(top_num.get("max"))}')
     return ' <span class="ql-sep">&middot;</span> '.join(bits)
 
+def _ql_probe_detail_html(probe_entry):
+    """Drill-down for the Tier-1 (probed) portion of a card. Shows the full
+    catalog description, the variables.json endpoint, and probe-level lists
+    that were hidden from the TL;DR (allocation-group names + queryable-
+    without-parent geographies). Returns "" when there's nothing to show."""
+    if not (probe_entry and probe_entry.get("ok")):
+        return ""
+    parts = []
+    v = probe_entry.get("variables")
+    if v is not None:
+        parts.append(f'<div class="ql-d-row"><span class="ql-k">Variables</span> '
+                     f'{int(v):,}</div>')
+    est = probe_entry.get("estimates")
+    if est is not None:
+        parts.append(f'<div class="ql-d-row"><span class="ql-k">Estimate variables</span> '
+                     f'{int(est):,}</div>')
+    ann = probe_entry.get("annotation_variables")
+    if ann is not None:
+        parts.append(f'<div class="ql-d-row"><span class="ql-k">Annotation variables</span> '
+                     f'{int(ann):,}</div>')
+    ag = probe_entry.get("allocation_groups") or []
+    if ag:
+        preview = ", ".join(_esc(x) for x in ag[:20])
+        if len(ag) > 20:
+            preview += f' <span class="ql-muted">(+{len(ag) - 20} more)</span>'
+        parts.append('<div class="ql-d-row"><span class="ql-k">Allocation groups</span> '
+                     + preview + '</div>')
+    rg = probe_entry.get("replicate_groups") or []
+    if rg:
+        preview = ", ".join(_esc(x) for x in rg[:12])
+        if len(rg) > 12:
+            preview += f' <span class="ql-muted">(+{len(rg) - 12} more)</span>'
+        parts.append('<div class="ql-d-row"><span class="ql-k">Replicate groups</span> '
+                     + preview + '</div>')
+    qwp = probe_entry.get("queryable_without_parent") or []
+    if qwp:
+        parts.append('<div class="ql-d-row"><span class="ql-k">Queryable without parent</span> '
+                     + ", ".join(_esc(x) for x in qwp) + '</div>')
+    levels = probe_entry.get("levels") or []
+    if levels:
+        parts.append('<div class="ql-d-row"><span class="ql-k">All declared levels</span> '
+                     + ", ".join(_esc(x) for x in levels) + '</div>')
+    return "".join(parts)
+
+def _ql_catalog_detail_html(f, non_api):
+    """Drill-down for the Tier-0 portion: full catalog description + endpoint
+    URL (or the 'non-API' explanatory note). Sits above the probe/sample
+    detail blocks so the reader gets context before numbers."""
+    parts = []
+    desc = f.get("desc") or ""
+    if desc:
+        parts.append(f'<div class="ql-d-desc">{_esc(desc)}</div>')
+    endpoint = f.get("variables_url") or ""
+    if endpoint:
+        base = endpoint.replace("/variables.json", "")
+        parts.append(f'<div class="ql-d-row"><span class="ql-k">Endpoint</span> '
+                     f'<a class="ql-d-link" href="{_esc(endpoint)}" target="_blank" '
+                     f'rel="noopener">{_esc(base)}</a></div>')
+    elif non_api:
+        parts.append('<div class="ql-d-row"><span class="ql-k">Endpoint</span> '
+                     '<span class="ql-muted">not sample-able via API (bulk-download product)'
+                     '</span></div>')
+    return "".join(parts)
+
+def _ql_empty_state_html(f, tier, non_api):
+    """Drill-down affordance shown when the visible data ends before we've
+    exhausted the pipeline (Tier 0 catalog only, or Tier 1 probed but not
+    sampled). Same shape both times so the reader learns the pattern:
+    a copyable command spelling out the next --probe or --sample invocation.
+
+    Non-API products get the same wording as the TL;DR - repeating it inside
+    the drill-down keeps the toggle shape identical to sample-able products,
+    which teaches the reader that the toggle is always there for consistency."""
+    if non_api:
+        return ('<div class="ql-d-empty">Not sample-able via API - this is a '
+                'bulk-download product (e.g. TIGER shapefiles, DAS demo).</div>')
+    parts = []
+    if tier == 0:
+        cmd_probe = f'python tools/product_scope.py --repo . --probe {f["path"]}'
+        parts.append(
+            '<div class="ql-d-empty">Not yet probed - run this to populate '
+            'structural data:'
+            f'<div class="ql-d-cmd"><span class="copy-cmd light">'
+            f'<code>{_esc(cmd_probe)}</code>'
+            f'<button data-copy="{_esc(cmd_probe)}">Copy</button></span></div>'
+            '</div>')
+    if tier <= 1:
+        cmd_sample = f'python tools/product_scope.py --repo . --sample --product {f["path"]}'
+        parts.append(
+            '<div class="ql-d-empty">Not yet sampled - run this to fetch a data '
+            'slice and cache canonical EDA:'
+            f'<div class="ql-d-cmd"><span class="copy-cmd light">'
+            f'<code>{_esc(cmd_sample)}</code>'
+            f'<button data-copy="{_esc(cmd_sample)}">Copy</button></span></div>'
+            '</div>')
+    return "".join(parts)
+
+def _ql_details_html(f, probe_entry, cache_entry, tier, non_api):
+    """Assemble the expanded (behind-the-toggle) content for one card. Order
+    of blocks matches the TL;DR tier order so the reader can follow the
+    thread: Tier 0 context, Tier 1 probe detail, Tier 2 full EDA tables,
+    empty-state affordance last."""
+    parts = []
+    cat = _ql_catalog_detail_html(f, non_api)
+    if cat:
+        parts.append('<div class="ql-d-block ql-d-t0">' + cat + '</div>')
+    probe_html = _ql_probe_detail_html(probe_entry)
+    if probe_html:
+        parts.append('<div class="ql-d-block ql-d-t1">'
+                     '<div class="ql-d-cap">Probe detail</div>'
+                     + probe_html + '</div>')
+    if cache_entry:
+        parts.append('<div class="ql-d-block ql-d-t2">'
+                     '<div class="ql-d-cap">Sample &amp; EDA</div>'
+                     + _eda_header_html(cache_entry)
+                     + _eda_body_html(cache_entry) + '</div>')
+    empty = _ql_empty_state_html(f, tier, non_api)
+    if empty:
+        parts.append('<div class="ql-d-block ql-d-empty-wrap">' + empty + '</div>')
+    return "".join(parts)
+
 def render_quick_look(f, probe_entry, cache_entry, warm_summary=None):
     """One card's Quick Look branch. Always shows a compact 2-3 line TL;DR:
 
@@ -3064,11 +3227,15 @@ def render_quick_look(f, probe_entry, cache_entry, warm_summary=None):
       * Line 2 (if probed): condensed probe metadata.
       * Line 3 (if sampled): sample shape + missingness + headline numeric.
 
-    Full drill-down (dtype table, missingness list, numeric summaries,
-    categoricals, sparklines, full geography breakdown, probe variable list)
-    lives in the More-details toggle rendered by product_row() from this
-    same helper's output. Kept slim here on purpose (Phase 4b): the TL;DR is
-    what a scanning reader sees on the first pass.
+    Below the TL;DR sits a native <details>/<summary> toggle. Collapsed by
+    default so the reader can scan a page of cards without cognitive load;
+    expanding it drills into the full catalog description, probe detail
+    (allocation-group names, replicate groups, all declared geography
+    levels), the sample shape header + full EDA tables (columns, numerics,
+    top categoricals, geography breakdown, sparklines), and - when
+    unavailable - copyable --probe/--sample commands. The toggle shape is
+    intentionally identical regardless of tier so the reader learns "drill
+    is always here" (Phase 4b #6).
 
     warm_summary: optional dict from .warm_cache_last_run.json (or None). Only
                   consulted to detect the 'non_api' tag persisted by --warm-cache
@@ -3111,6 +3278,21 @@ def render_quick_look(f, probe_entry, cache_entry, warm_summary=None):
     if tier == 0 and non_api:
         parts.append('<div class="ql-nonapi">Not sample-able via API '
                      '(bulk-download product - e.g. TIGER shapefiles, DAS demo).</div>')
+
+    # More-details toggle. Native <details>/<summary> - works without JS.
+    # A tier-flavoured wrapper class shades the expanded background so the
+    # visual link to the TL;DR line's stripe is preserved on drill-in.
+    tier_slug = {0: "ql-d-tier0", 1: "ql-d-tier1", 2: "ql-d-tier2"}[tier]
+    details_body = _ql_details_html(f, probe_entry, cache_entry, tier, non_api)
+    parts.append(
+        f'<details class="ql-details {tier_slug}" data-product-id="{_esc(f["path"])}">'
+        f'<summary class="ql-summary" title="Toggle drill-down (press E when focused)">'
+        f'<span class="ql-chevron">&#x25B8;</span>'  # right-pointing triangle
+        f'<span class="ql-summary-label">More details</span>'
+        f'</summary>'
+        f'<div class="ql-details-body">{details_body}</div>'
+        f'</details>'
+    )
 
     return ('<div class="branch"><div class="bcard"><div class="blabel">Quick Look</div>'
             + "".join(parts) + '</div></div>')
