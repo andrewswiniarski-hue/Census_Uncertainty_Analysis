@@ -45,3 +45,7 @@ scope_data_cache.json
 # --warm-cache run. Consumed by the cache-coverage header and Quick Look's
 # 'non_api' detection so both survive a session restart.
 .warm_cache_last_run.json
+# Phase 5 last-regen timestamp - read by the auto:repo insight collector to
+# scope `git log --since=<T>` to the window since the previous run. Written
+# at end of every regen. Local-only; not shareable state.
+.product_scope_last_regen.json

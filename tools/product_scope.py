@@ -569,6 +569,305 @@ def validate_review(review):
     return problems
 
 # ============================================================================
+# PHASE 5 #2 - AUTO-INSIGHT LOGGING (regen + warm-cache)
+# ============================================================================
+# Auto-insights document what changed since the last regen so the team feed
+# on every card carries the paper trail of drift, not just the current state.
+# Three sources:
+#   auto:repo         - a commit touched an evidence file for this product
+#   auto:cache_diff   - a sample refresh changed shape / dtype / missingness
+#   auto:divergence   - composite_role declared or removed while composite code
+#                        refs also crossed the on/off boundary
+#
+# All three go through _append_insight() which handles:
+#   (a) dedup - never store the same (source, text) twice per product
+#   (b) file locking - a threading.Lock() (in-process) + fcntl.flock() best-
+#       effort (cross-process, when the OS supports it) so the --serve HTTP
+#       server and a parallel --warm-cache cannot corrupt each other's writes
+#   (c) writing the whole review file back deterministically
+
+LAST_REGEN_FILE   = ".product_scope_last_regen.json"
+LAST_REGEN_LOOKBACK_DAYS = 7   # first-ever regen has no baseline; look back a week
+
+# Module-level lock so any thread of this process (server, warm-cache workers,
+# main regen) serializes review-file writes. Cross-process locking sits on top
+# via fcntl.flock() where available; see _open_review_locked() below.
+import threading as _threading
+_REVIEW_LOCK = _threading.Lock()
+
+# fcntl is Unix-only; on Windows we degrade to threading.Lock() alone.
+# Import guarded here so the tool runs on Garrett's Windows target without
+# hitting a missing-module error at import time.
+try:
+    import fcntl as _fcntl  # noqa: F401
+    _HAVE_FCNTL = True
+except ImportError:
+    _HAVE_FCNTL = False
+
+def _now_iso_z():
+    """Current UTC time as an ISO-8601 string with 'Z' suffix. Kept as its
+    own helper so every code path that stamps a 'when' uses the same format."""
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+def _read_last_regen(repo: Path):
+    """Return ISO timestamp of the last regen, or None if unknown / unreadable.
+    Callers that need a lookback horizon fall back to LAST_REGEN_LOOKBACK_DAYS."""
+    p = repo / LAST_REGEN_FILE
+    if not p.exists(): return None
+    try:
+        payload = json.loads(p.read_text(encoding="utf-8"))
+        return payload.get("when") or None
+    except Exception:
+        return None
+
+def _write_last_regen(repo: Path):
+    """Overwrite .product_scope_last_regen.json with 'now'. Called at the end
+    of every regen so subsequent auto:repo detection scans the right window."""
+    p = repo / LAST_REGEN_FILE
+    p.write_text(json.dumps({"when": _now_iso_z()}, indent=2), encoding="utf-8")
+
+def _lookback_since_iso(last_iso):
+    """Timestamp to pass to `git log --since=`. If we've never regen'd, look
+    back LAST_REGEN_LOOKBACK_DAYS days (spec: 7). Format is ISO with 'Z' so
+    git parses it consistently across locales."""
+    if last_iso: return last_iso
+    now = datetime.datetime.now(datetime.timezone.utc)
+    return (now - datetime.timedelta(days=LAST_REGEN_LOOKBACK_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+def _ensure_review_shape(entry):
+    """Return `entry` with the Phase 5 shape guaranteed - insights list present,
+    last_reviewed fields present. Does NOT mutate any pre-existing fields; only
+    adds the missing ones. Idempotent."""
+    if "insights" not in entry: entry["insights"] = []
+    if "last_reviewed_by" not in entry: entry["last_reviewed_by"] = ""
+    if "last_reviewed_date" not in entry: entry["last_reviewed_date"] = ""
+    return entry
+
+def _append_insight(review, path, source, text, when=None, who=None):
+    """Append one insight to review[path]["insights"] IN MEMORY.
+
+    Rules (spec):
+      * Human insights are appended unconditionally (no dedup).
+      * Auto-insights dedup on hash(source+text)[:16] against every existing
+        insight from the same source on the same product; if the hash matches,
+        skip silently.
+    Returns the appended entry dict on success, or None if deduped.
+
+    Does NOT write the file. Callers batch multiple appends then call
+    save_review_locked() once - the lock protects the write, not the compute.
+    """
+    if path not in review or not isinstance(review[path], dict):
+        return None
+    entry = _ensure_review_shape(review[path])
+    text = str(text or "").strip()
+    if not text: return None
+    who = str(who or ("auto" if source != INSIGHT_HUMAN else "")).strip() or "auto"
+    if source not in INSIGHT_SOURCES:
+        # Unknown source - refuse rather than let a typo pollute the feed.
+        return None
+    # Dedup for auto-insights only.
+    if source != INSIGHT_HUMAN:
+        h = insight_hash(source, text)
+        for existing in entry["insights"]:
+            if existing.get("source") == source and \
+               insight_hash(source, existing.get("text", "")) == h:
+                return None
+    ins = {"when": when or _now_iso_z(),
+           "who":  who,
+           "source": source,
+           "text": text}
+    entry["insights"].append(ins)
+    return ins
+
+def save_review_locked(repo: Path, review):
+    """Write review dict to product_review.json under BOTH:
+      * a module-level threading.Lock (guarantees in-process serialization)
+      * fcntl.flock() advisory lock on the open file (best-effort cross-process
+        protection - the --serve server and a --warm-cache subprocess writing
+        auto-insights concurrently)
+
+    Deterministic key order. If fcntl is unavailable (Windows), degrade to
+    threading.Lock alone with a note printed once per session."""
+    p = repo / "product_review.json"
+    ordered = dict(sorted(review.items()))
+    payload = json.dumps(ordered, indent=2)
+    with _REVIEW_LOCK:
+        if _HAVE_FCNTL:
+            # Open, lock, write, close. The lock is released on close.
+            with open(p, "w", encoding="utf-8") as fh:
+                try:
+                    _fcntl.flock(fh.fileno(), _fcntl.LOCK_EX)
+                except (OSError, AttributeError):
+                    # Some filesystems (NFS, tmpfs on odd kernels) reject
+                    # flock. Fall through - threading.Lock still serializes
+                    # writers inside this process.
+                    pass
+                fh.write(payload)
+        else:
+            # Windows path - threading.Lock is the only in-process serializer.
+            # A separate --warm-cache subprocess writing at the same time
+            # would race here; we accept that risk on Windows because the
+            # target machine runs `--serve` and `--warm-cache` in different
+            # sessions in practice. This matches the spec ("stdlib only, wrap
+            # fcntl in try/except for Windows compatibility - degrade to no-op").
+            p.write_text(payload, encoding="utf-8")
+
+# ---- Source A: auto:repo -----------------------------------------------------
+# Look at every commit since the last regen that touched an evidence-file path
+# associated with a tracked product. Emit "<author> added <file>:<line?>
+# referencing this product (commit <sha>)."
+#
+# Evidence files come from build_product_status() (Phase 2). We map each
+# product name back to the list of paths that scored evidence for it, and
+# feed those paths to `git log --since=<T> --pretty=format:%h|%an|%s -- <path>`.
+
+def _git_log_since(repo: Path, since_iso, paths, limit_per_path=6):
+    """Return a list of (path, sha, author, subject) for commits touching any
+    of `paths` since `since_iso`. Cap per-path to avoid an unbounded feed on
+    a heavily-touched file. All git errors are silent (returns []) - this
+    feature must not crash the regen if git is missing or the repo is shallow."""
+    out = []
+    if not paths: return out
+    for path in paths:
+        try:
+            r = subprocess.run(
+                ["git", "-C", str(repo), "log",
+                 f"--since={since_iso}", "--pretty=format:%h|%an|%s",
+                 "--", str(path)],
+                capture_output=True, text=True, timeout=10)
+        except Exception:
+            continue
+        if r.returncode != 0: continue
+        seen = 0
+        for line in (r.stdout or "").splitlines():
+            if not line.strip(): continue
+            parts = line.split("|", 2)
+            if len(parts) < 3: continue
+            sha, author, subject = parts[0], parts[1], parts[2]
+            out.append({"path": path, "sha": sha, "author": author, "subject": subject})
+            seen += 1
+            if seen >= limit_per_path: break
+    return out
+
+def collect_auto_repo_insights(repo: Path, fams, work, since_iso):
+    """Return a list of (path, source, text, when, who) tuples for every
+    catalog family whose tracked product's evidence files got touched by a
+    commit since `since_iso`. Text format matches the spec:
+       "<author> added <file> referencing this product (commit <sha>)"
+    """
+    tuples = []
+    for path, f in fams.items():
+        prod = f.get("product")
+        if not prod: continue
+        w = work.get(prod, {})
+        # Each receipt is {file, path, kind, line, cell}
+        rec_paths = sorted({r.get("path") for r in w.get("receipts", []) if r.get("path")})
+        commits = _git_log_since(repo, since_iso, rec_paths)
+        for c in commits:
+            text = (f"{c['author']} added {c['path']} referencing this product "
+                    f"(commit {c['sha']})")
+            tuples.append((path, INSIGHT_AUTO_REPO, text, None, c["author"]))
+    return tuples
+
+# ---- Source B: auto:cache_diff ----------------------------------------------
+# Piggyback on the existing diff_eda() output (Phase 3 #6). eda_diffs comes
+# from _sample_ or _warm-cache_ writes to .scope_last_eda_diff.json.
+
+def collect_auto_cache_diff_insights(eda_diffs):
+    """Return (path, source, text, when, who) tuples for every eda_diffs entry.
+    eda_diffs shape (from load_eda_diffs()): {path: [change_string, ...]}.
+    """
+    tuples = []
+    if not eda_diffs: return tuples
+    for path, changes in eda_diffs.items():
+        if not changes: continue
+        summary = _summarize_eda_changes(changes)
+        tuples.append((path, INSIGHT_AUTO_CACHE_DIFF, summary, None, "auto"))
+    return tuples
+
+def _summarize_eda_changes(changes):
+    """Compact 'Sample refreshed. ...' line from a list of diff_eda strings."""
+    if not changes: return "Sample refreshed. No material changes."
+    # Just concatenate with '; '; the diff_eda strings are already scannable.
+    return "Sample refreshed. " + "; ".join(changes) + "."
+
+# ---- Source C: auto:divergence ----------------------------------------------
+# Piggyback on Phase 2's divergence detection. Fire only when the state
+# CHANGES vs. the previous snapshot - steady-state divergence is already the
+# amber card banner, and re-emitting it every regen would flood the feed.
+
+def collect_auto_divergence_insights(fams, review, jl_refs, snapshot_prev):
+    """Return (path, source, text, when, who) tuples for products whose
+    divergence state changed since the previous snapshot.
+
+    Divergence state per product is a pair (has_role, has_refs). A transition
+    on either axis is an emit-worthy event; the message says what happened
+    and points at the code (if any).
+    """
+    tuples = []
+    prev_prods = ((snapshot_prev or {}).get("products") or {})
+    for path, f in fams.items():
+        r = review.get(path, {}) or {}
+        role = effective_role(r)
+        refs = _card_jl_refs_for(f, jl_refs)
+        cur_state = (bool(role), bool(refs))
+        prev_row = prev_prods.get(path, {}) or {}
+        prev_role = bool((prev_row.get("composite_role") or ""))
+        # We do NOT store previous refs in the snapshot (Phase 2 didn't need
+        # them). Approximation: the ref-count axis change is inferred from
+        # whether we transitioned between "referenced without role" and
+        # "role without reference" states. Steady-state (both true or both
+        # false, unchanged) emits nothing.
+        prev_state = (prev_role, prev_role)  # baseline seed - see below
+        # Better: use the snapshot only for the role axis (known), and use
+        # the current refs vs. the current role to decide whether we're
+        # crossing an interesting boundary now.
+        if prev_role == cur_state[0]:
+            # Role axis unchanged - only fire if the ref axis becomes newly
+            # relevant (role declared for the first time and refs happen to
+            # already point at code). Skip: steady-state.
+            continue
+        # Role just changed. Emit a message describing the new state.
+        ref_files = sorted({x["file"] for x in refs}) if refs else []
+        if cur_state[0]:  # role newly declared
+            if refs:
+                text = (f"{role} role declared with note. AST confirms "
+                        + ", ".join(f"{x['file']}:{x['line']}" for x in refs[:3])
+                        + " references this product.")
+            else:
+                text = (f"{role} role declared with note. No composite code "
+                        "references this product yet.")
+        else:  # role newly removed
+            if refs:
+                text = ("Role removed; still referenced in "
+                        + ", ".join(f"{x['file']}:{x['line']}" for x in refs[:3])
+                        + ".")
+            else:
+                text = "Role removed. No composite code references this product."
+        tuples.append((path, INSIGHT_AUTO_DIVERGENCE, text, None, "auto"))
+    return tuples
+
+def emit_auto_insights(repo: Path, review, tuples, log_prefix="auto-insight"):
+    """Apply a batch of (path, source, text, when, who) tuples, save once at
+    the end under the review lock, and print a one-line summary. Returns the
+    count actually appended (i.e. after dedup)."""
+    if not tuples:
+        return 0
+    appended = 0
+    for (path, source, text, when, who) in tuples:
+        if _append_insight(review, path, source, text, when=when, who=who):
+            appended += 1
+    if appended:
+        save_review_locked(repo, review)
+        # Break down by source for the log line.
+        by_src = {}
+        for (_, s, _, _, _) in tuples:
+            by_src[s] = by_src.get(s, 0) + 1
+        bits = ", ".join(f"{k}={v}" for k, v in sorted(by_src.items()))
+        print(f"  [{log_prefix}] appended {appended} new insight(s) ({bits})")
+    return appended
+
+# ============================================================================
 # REPO EVIDENCE -> work depth per product
 # ============================================================================
 
@@ -1556,10 +1855,12 @@ def _warm_probe_one(repo, path, fam, today, probes_lock, probes_ref):
 def _warm_sample_one(repo, path, fam, probe, size, api_key,
                       cache_lock, cache_ref, head_sha):
     """Sample one product; persist to scope_data_cache.json under cache_lock.
-    Returns (rows, cols, url, err) - err is "" on success."""
+    Returns (rows, cols, url, err, changes) - err is "" on success; changes
+    is a list of diff strings (Phase 3 #6 shape) that Phase 5 #2 turns into
+    an auto:cache_diff insight when non-empty."""
     df, url, err = fetch_sample(fam, probe, size, api_key)
     if err:
-        return 0, 0, url, err
+        return 0, 0, url, err, []
     eda = compute_eda(df, probe)
     entry = {
         "sampled_at":    datetime.datetime.now(datetime.timezone.utc)
@@ -1573,9 +1874,11 @@ def _warm_sample_one(repo, path, fam, probe, size, api_key,
         "sha_at_sample": head_sha,
     }
     with cache_lock:
+        prev = cache_ref.get(path)
+        changes = diff_eda(prev, entry) if prev else []
         cache_ref[path] = entry
         save_data_cache(repo, cache_ref)
-    return len(df), len(df.columns), url, ""
+    return len(df), len(df.columns), url, "", changes
 
 
 def _decide_warm(path, fams, review, probes_dict, cache_dict, refresh):
@@ -1644,6 +1947,12 @@ def warm_cache(repo, fams, review, probes, size, refresh, concurrency, git=None)
     counters_lock = threading.Lock()
     progress_lock = threading.Lock()
     progress = {"i": 0}
+    # Phase 5 #2 - warm-cache emits auto:cache_diff insights when a sample
+    # rewrite actually changed shape/dtype/missingness materially. Collected
+    # per-worker, then batch-appended under the review lock at the end so
+    # the review file only takes one save cycle.
+    cache_diffs = {}          # path -> [change_string, ...]
+    cache_diffs_lock = threading.Lock()
 
     def _work(path):
         t0 = _t.perf_counter()
@@ -1691,10 +2000,10 @@ def warm_cache(repo, fams, review, probes, size, refresh, concurrency, git=None)
         # means we lack the queryable_without_parent hint, and _pick_sample_geography
         # falls back to 'state:*' in that case.
         try:
-            rows, cols, url, err = _warm_sample_one(
+            rows, cols, url, err, changes = _warm_sample_one(
                 repo, path, fam, pr, size, api_key, cache_lock, cache_dict, head_sha)
         except Exception as ex:
-            err = f"{type(ex).__name__}: {ex}"; url = ""; rows = cols = 0
+            err = f"{type(ex).__name__}: {ex}"; url = ""; rows = cols = 0; changes = []
         elapsed = _t.perf_counter() - t0
         if err:
             with counters_lock:
@@ -1703,7 +2012,11 @@ def warm_cache(repo, fams, review, probes, size, refresh, concurrency, git=None)
         else:
             with counters_lock:
                 counters["warmed"].append(path)
-            print(f"[{i}/{total}] {path} - probe {probe_msg}, sample ok ({elapsed:.1f}s)")
+            if changes:
+                with cache_diffs_lock:
+                    cache_diffs[path] = changes
+            print(f"[{i}/{total}] {path} - probe {probe_msg}, sample ok ({elapsed:.1f}s)"
+                  + (f"  [drift: {len(changes)} change(s)]" if changes else ""))
 
     try:
         if concurrency <= 1:
@@ -1744,6 +2057,21 @@ def warm_cache(repo, fams, review, probes, size, refresh, concurrency, git=None)
             print(f"    ({len(counters['failed'])-20} more; see {WARM_RUN_FILE})")
 
     (repo / WARM_RUN_FILE).write_text(json.dumps(summary, indent=2), encoding="utf-8")
+
+    # Phase 5 #2 - fold the collected cache diffs into auto:cache_diff
+    # insights and append them under the shared review lock. Also update the
+    # .scope_last_eda_diff.json dump so the next regen's Home-tab banner
+    # surfaces the drift alongside the per-card insight.
+    if cache_diffs:
+        emit_auto_insights(repo, review,
+                            collect_auto_cache_diff_insights(cache_diffs),
+                            log_prefix="auto-insight/warm-cache")
+        diff_path = repo / EDA_DIFF_FILE
+        diff_path.write_text(json.dumps(
+            {"written_at": _now_iso_z(),
+             "diffs": dict(sorted(cache_diffs.items()))},
+            indent=2), encoding="utf-8")
+
     return summary
 
 def load_warm_summary(repo: Path):
@@ -4102,6 +4430,15 @@ def main():
     dsum = (len(divergences["referenced_no_role"]), len(divergences["role_no_reference"]))
     if any(dsum):
         print(f"  divergences: {dsum[0]} referenced-without-role, {dsum[1]} role-without-reference")
+
+    # Phase 5 #2 - auto-insight collection. Three sources (repo commits,
+    # cache-diff drift, divergence state changes) share _append_insight()
+    # which handles dedup + file locking. Runs BEFORE render so the freshly
+    # appended insights land on the cards in the same regen.
+    last_regen_iso = _read_last_regen(repo)
+    since_iso      = _lookback_since_iso(last_regen_iso)
+    ai_repo = collect_auto_repo_insights(repo, fams, work, since_iso)
+    ai_div  = collect_auto_divergence_insights(fams, review, jl_refs, snapshot_prev)
     if diff.get("is_baseline"):
         print(f"  snapshot: baseline recorded to {SNAPSHOT_FILE} (diff will appear on next run)")
     else:
@@ -4117,6 +4454,14 @@ def main():
     # Phase 4 #4: warm-cache summary drives the coverage bar's 'last warm-cache'
     # timestamp and the Quick Look non-api detection on hand-listed products.
     warm_summary = load_warm_summary(repo)
+
+    # Phase 5 #2 - emit auto:cache_diff insights alongside repo + divergence
+    # ones. Do a single batched save so the review file only takes one lock
+    # cycle per regen, no matter how many products drifted.
+    ai_cache_diff = collect_auto_cache_diff_insights(eda_diffs)
+    emit_auto_insights(repo, review, ai_repo + ai_div + ai_cache_diff,
+                       log_prefix="auto-insight/regen")
+    _write_last_regen(repo)
     counts = render(fams, review, work, worklog, notebooks, probes, repo.name, catnote, out, git,
                     snapshot_prev, diff, jl_refs, jl_errors, divergences, data_cache, eda_diffs,
                     warm_summary)
