@@ -834,6 +834,16 @@ table.rep td{border-bottom:1px solid var(--ice);padding:7px 9px;vertical-align:t
 .jl-src{font-family:"Segoe UI",sans-serif;font-weight:400;color:var(--muted);font-size:10.5px;
      text-transform:none;letter-spacing:0;margin-left:6px;}
 .jl-parse-err{font-size:10.5px;color:#8a4d1c;font-style:italic;margin-top:5px;}
+/* Divergences (Home tab) - composite code vs. declared role reconciliation. */
+.div-block{background:#FBF0D6;border-left:4px solid var(--gold);border-radius:6px;
+     padding:10px 15px;margin:8px 0;max-width:1020px;}
+.div-head{font-size:12.5px;font-weight:700;color:#6E4E11;margin-bottom:5px;}
+.div-head code{background:#F1E7C8;color:#6B4E11;padding:0 4px;border-radius:3px;
+     font-family:ui-monospace,Consolas,monospace;font-size:11.5px;}
+.div-list{list-style:none;padding:0;margin:0;font-size:11.5px;line-height:1.55;color:var(--ink);}
+.div-list li{padding:2px 0;}
+.div-list code{background:#fff;padding:1px 5px;border-radius:3px;
+     font-family:ui-monospace,Consolas,monospace;font-size:11px;color:var(--navy);}
 .meta{font-size:11px;color:var(--muted);margin-top:3px;}
 .tk{border-left:3px solid var(--line);padding:4px 8px;margin:5px 0;}
 .tk.odd{border-left-color:var(--gold);}
@@ -1302,6 +1312,53 @@ def _card_jl_refs_for(f, jl_refs):
         out += jl_refs.get(f["product"], [])
     return out
 
+# ============================================================================
+# DIVERGENCE FLAG (feature #8)
+# ============================================================================
+# Cross-references machine-derived composite code refs (#6) against the
+# human-declared composite_role (#7). Two failure modes:
+#   - code references a product but no role is declared for it
+#   - a role is declared but the code doesn't reference the product
+# Both surface on the affected card AND on a Home-tab summary so the team
+# sees the full list in one place.
+
+def compute_divergences(fams, review, jl_refs):
+    """Returns two lists of dicts:
+       referenced_no_role: [{path, ref_count, ref_files}]
+       role_no_reference:  [{path, role, note}]
+    """
+    ref_no_role = []
+    role_no_ref = []
+    for path, f in sorted(fams.items()):
+        r = review.get(path, {}) or {}
+        role = effective_role(r)
+        refs = _card_jl_refs_for(f, jl_refs)
+        if refs and not role:
+            files = sorted({x["file"] for x in refs})
+            ref_no_role.append({"path": path, "ref_count": len(refs), "ref_files": files})
+        elif role and not refs:
+            role_no_ref.append({"path": path, "role": role,
+                                "note": (r.get("composite_role_note") or "").strip()})
+    return {"referenced_no_role": ref_no_role, "role_no_reference": role_no_ref}
+
+def card_divergence_banners(f, r, jl_refs):
+    """Return card-level divergence affordances (same shape as _affordances)."""
+    out = []
+    role = effective_role(r)
+    refs = _card_jl_refs_for(f, jl_refs)
+    if refs and not role:
+        files = sorted({x["file"] for x in refs})
+        out.append({"tone": "amber",
+                    "text": f"Referenced in composite code ({', '.join(files)}) but no "
+                            f"composite_role declared. Set one in product_review.json:",
+                    "cmd":  None})
+    elif role and not refs:
+        out.append({"tone": "amber",
+                    "text": f"Declared as {role!r} but not referenced in any composite module. "
+                            "Either the role is stale or the composite hasn't wired this product yet.",
+                    "cmd":  None})
+    return out
+
 def load_snapshot(repo: Path):
     """Read the previous run's snapshot if it exists (written by feature #5).
 
@@ -1569,6 +1626,7 @@ def product_row(f, review, work, probes, ctx=None):
     # what would otherwise be a blank section. Rules in _affordances().
     has_probe = bool(probes.get(f["path"], {}).get("ok"))
     banners = _affordances(f, r, ws, has_probe, git, snapshot)
+    banners += card_divergence_banners(f, r, jl_refs)   # feature #8
     aff = _affordance_html(banners)
     if aff: branches.append(aff)
     unc = r.get("uncertainty_metrics", "")
@@ -1762,7 +1820,39 @@ def build_kind_panel(kind, fams, review, work, probes, git=None, snapshot=None, 
     return ('<div class="products-shell">' + sidebar
             + f'<div class="products-main">{body}</div></div>')
 
-def build_home(fams, review, work, counts, worklog, notebooks, probes, git=None, diff=None, jl_refs=None, jl_errors=None):
+def build_divergence_section(divergences):
+    """Home-tab summary of composite-code vs composite_role mismatches (feature #8)."""
+    a = divergences.get("referenced_no_role", [])
+    b = divergences.get("role_no_reference",  [])
+    if not a and not b:
+        return ('<h2>Divergences <span style="font-size:12px;color:var(--muted);'
+                'font-weight:400">(composite code vs. declared role)</span></h2>'
+                '<div class="sub">Every product referenced by composite code has a declared '
+                '<code>composite_role</code>, and every declared role points at code the '
+                'composite actually touches. Nothing to reconcile.</div>')
+    parts = ['<h2>Divergences <span style="font-size:12px;color:var(--muted);font-weight:400">'
+             '(composite code vs. declared role)</span></h2>'
+             '<div class="sub">Where machine-derived composite references (from JL_Work_Tree) '
+             'and human-declared <code>composite_role</code> disagree. Reconcile in '
+             '<code>product_review.json</code>, then regenerate.</div>']
+    if a:
+        parts.append('<div class="div-block"><div class="div-head">Referenced in composite code '
+                     'but no <code>composite_role</code> declared</div><ul class="div-list">')
+        for d in a:
+            files = ", ".join(d["ref_files"])
+            parts.append(f'<li><code>{_esc(d["path"])}</code> — {d["ref_count"]} hit(s) in {_esc(files)}</li>')
+        parts.append('</ul></div>')
+    if b:
+        parts.append('<div class="div-block"><div class="div-head">Role declared but not '
+                     'referenced in composite code</div><ul class="div-list">')
+        for d in b:
+            note = (" — " + d["note"]) if d["note"] else ""
+            parts.append(f'<li><code>{_esc(d["path"])}</code> — declared as '
+                         f'<b>{_esc(d["role"])}</b>{_esc(note)}</li>')
+        parts.append('</ul></div>')
+    return "".join(parts)
+
+def build_home(fams, review, work, counts, worklog, notebooks, probes, git=None, diff=None, jl_refs=None, jl_errors=None, divergences=None):
     h = []
     if diff is not None:
         h.append(build_diff_banner(diff))
@@ -1834,6 +1924,9 @@ def build_home(fams, review, work, counts, worklog, notebooks, probes, git=None,
                          f'<td>{len(jl_refs[key])}</td>'
                          f'<td class="mono">{" &bull; ".join(links)}</td></tr>')
             h.append("</table>")
+
+    if divergences is not None:
+        h.append(build_divergence_section(divergences))
 
     if notebooks:
         h.append('<h2>Notebook health</h2><div class="sub">Read from the committed notebooks: whether execution '
@@ -1980,7 +2073,7 @@ def export_xlsx(rows, out_path):
 
 
 def render(fams, review, work, worklog, notebooks, probes, repo_name, catnote, out_path, git,
-           snapshot=None, diff=None, jl_refs=None, jl_errors=None):
+           snapshot=None, diff=None, jl_refs=None, jl_errors=None, divergences=None):
     counts = {s: 0 for s in STAGES}
     for path in fams:
         counts[review.get(path, {}).get("stage", "cataloged")] += 1
@@ -1988,7 +2081,7 @@ def render(fams, review, work, worklog, notebooks, probes, repo_name, catnote, o
     kinds_present = [k for k in KINDS if any(f["kind"] == k for f in fams.values())]
     tabs = ['<button class="tab on" data-k="home">Home</button>']
     panels = ['<div class="panel on" id="panel-home">'
-              + build_home(fams, review, work, counts, worklog, notebooks, probes, git, diff, jl_refs, jl_errors) + '</div>']
+              + build_home(fams, review, work, counts, worklog, notebooks, probes, git, diff, jl_refs, jl_errors, divergences) + '</div>']
     for i, k in enumerate(kinds_present):
         n = sum(1 for f in fams.values() if f["kind"] == k)
         tabs.append(f'<button class="tab" data-k="k{i}">{_esc(k)}<span class="n">{n}</span></button>')
@@ -2098,6 +2191,10 @@ def main():
     diff          = compute_diff(snapshot_prev, current_snap)
     save_snapshot(repo, current_snap)
     jl_refs, jl_errors = build_jl_refs(repo, fams)
+    divergences = compute_divergences(fams, review, jl_refs)
+    dsum = (len(divergences["referenced_no_role"]), len(divergences["role_no_reference"]))
+    if any(dsum):
+        print(f"  divergences: {dsum[0]} referenced-without-role, {dsum[1]} role-without-reference")
     if diff.get("is_baseline"):
         print(f"  snapshot: baseline recorded to {SNAPSHOT_FILE} (diff will appear on next run)")
     else:
@@ -2106,7 +2203,7 @@ def main():
         print(f"  snapshot: {newev:+d} evidence hits, {t['status_changes']} status change(s), "
               f"{t['new_probes']} new probe(s)")
     counts = render(fams, review, work, worklog, notebooks, probes, repo.name, catnote, out, git,
-                    snapshot_prev, diff, jl_refs, jl_errors)
+                    snapshot_prev, diff, jl_refs, jl_errors, divergences)
     print("  funnel: " + " -> ".join(f"{STAGE_LABELS[s]} {counts.get(s, 0)}" for s in STAGES))
     print(f"Report written to {out}")
 
