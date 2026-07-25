@@ -731,6 +731,18 @@ SAMPLE_HTTP_TIMEOUT       = 30         # seconds per API call
 SAMPLE_INTER_REQUEST_MS   = 500        # be a polite neighbour to api.census.gov
 SAMPLE_VAR_CAP            = 20         # cap on variable count in one sample request
 DATA_CACHE_FILE           = "scope_data_cache.json"   # gitignored - see .gitignore
+EDA_DIFF_FILE             = ".scope_last_eda_diff.json"  # gitignored via .product_scope pattern
+
+def load_eda_diffs(repo: Path):
+    """Read {path: [change_string, ...]} from the last --sample run. Returns {}
+    when the file is missing (no refresh has happened, or nothing changed)."""
+    p = repo / EDA_DIFF_FILE
+    if not p.exists(): return {}
+    try:
+        payload = json.loads(p.read_text(encoding="utf-8"))
+        return payload.get("diffs", {}) or {}
+    except Exception:
+        return {}
 
 def load_data_cache(repo: Path):
     """Read scope_data_cache.json (Phase 3 sample cache). Returns {} when the
@@ -769,6 +781,61 @@ def is_sample_fresh(entry, now=None):
     now = now or datetime.datetime.now(datetime.timezone.utc)
     age_days = (now - when).total_seconds() / 86400.0
     return age_days < SAMPLE_FRESH_DAYS
+
+EDA_MISS_DELTA_PP  = 10.0     # per-column missingness change flagged as material
+EDA_ROW_DELTA_PCT  = 10.0     # row-count delta flagged as material (percent)
+
+def diff_eda(old_entry, new_entry):
+    """Compare two cache entries for the same product. Returns a list of
+    plain-English change strings (empty when nothing material changed).
+
+    Materiality rules (from spec):
+      - new/removed columns (any)
+      - per-column dtype changed
+      - per-column missingness delta > EDA_MISS_DELTA_PP percentage points
+      - row-count delta > EDA_ROW_DELTA_PCT percent
+    Deltas that fall below the threshold are silent by design - the diff exists
+    to catch material drift, not to catalog every rounding wiggle."""
+    changes = []
+    if not old_entry:
+        return changes    # no baseline means everything is new (not a 'change')
+
+    old_shape = old_entry.get("shape") or [0, 0]
+    new_shape = new_entry.get("shape") or [0, 0]
+    old_rows = int(old_shape[0]) if old_shape else 0
+    new_rows = int(new_shape[0]) if new_shape else 0
+    if old_rows > 0:
+        delta_pct = abs(new_rows - old_rows) * 100.0 / old_rows
+        if delta_pct > EDA_ROW_DELTA_PCT:
+            direction = "gained" if new_rows > old_rows else "lost"
+            changes.append(f"row count {direction} {abs(new_rows - old_rows):,} "
+                           f"({delta_pct:.1f}%): {old_rows:,} -> {new_rows:,}")
+
+    old_cols = old_entry.get("columns", {}) or {}
+    new_cols = new_entry.get("columns", {}) or {}
+    added   = sorted(c for c in new_cols if c not in old_cols)
+    removed = sorted(c for c in old_cols if c not in new_cols)
+    if added:
+        preview = ", ".join(f"`{c}`" for c in added[:4])
+        more = f" (+{len(added)-4} more)" if len(added) > 4 else ""
+        changes.append(f"gained {len(added)} column(s): {preview}{more}")
+    if removed:
+        preview = ", ".join(f"`{c}`" for c in removed[:4])
+        more = f" (+{len(removed)-4} more)" if len(removed) > 4 else ""
+        changes.append(f"lost {len(removed)} column(s): {preview}{more}")
+
+    for col in sorted(set(old_cols) & set(new_cols)):
+        oc, nc = old_cols[col], new_cols[col]
+        if (oc.get("dtype") or "") != (nc.get("dtype") or ""):
+            changes.append(f"dtype changed for `{col}`: "
+                           f"{oc.get('dtype','')} -> {nc.get('dtype','')}")
+        om = float(oc.get("missing_pct") or 0.0)
+        nm = float(nc.get("missing_pct") or 0.0)
+        if abs(nm - om) > EDA_MISS_DELTA_PP:
+            direction = "jumped" if nm > om else "dropped"
+            changes.append(f"missingness in `{col}` {direction} "
+                           f"{abs(nm - om):.0f}pp: {om:.0f}% -> {nm:.0f}%")
+    return changes
 
 def sample_age_pill(entry, now=None):
     """Freshness pill for a sample cache entry - mirrors the top-of-page
@@ -1203,16 +1270,40 @@ def sample_products(repo, fams, review, probes, only_product, size, refresh, git
                 "source_url":    url,
                 "sha_at_sample": head_sha,
             }
+            # #6: diff against the previous cache entry (if any) BEFORE we
+            # overwrite it, so the report can flag what changed on rerun.
+            prev = cache.get(path)
+            changes = diff_eda(prev, new_entry) if prev else []
+            if changes:
+                summary["diffs"][path] = changes
+                for ch in changes:
+                    print(f"           DIFF: {ch}")
             cache[path] = new_entry
             summary["sampled"].append({"path": path, "url": url,
                                         "rows": len(df), "cols": len(df.columns),
-                                        "eda": eda})
+                                        "eda": eda, "diff": changes})
         # Be network-polite between requests.
         if i < len(targets) - 1:
             import time as _t; _t.sleep(SAMPLE_INTER_REQUEST_MS / 1000.0)
 
     # Persist cache once (single write, deterministic key order).
     save_data_cache(repo, cache)
+    # #6: dump per-product diffs to a small file so the next HTML regen can
+    # surface them - overwritten on every --sample run (empty when nothing
+    # changed materially). Kept alongside the diff snapshot for symmetry.
+    diff_path = repo / EDA_DIFF_FILE
+    if summary["diffs"]:
+        diff_path.write_text(json.dumps(
+            {"written_at": datetime.datetime.now(datetime.timezone.utc)
+                              .strftime("%Y-%m-%dT%H:%M:%SZ"),
+             "diffs": dict(sorted(summary["diffs"].items()))},
+            indent=2), encoding="utf-8")
+    else:
+        # Clear any stale diff from a previous refresh so the banner doesn't
+        # keep showing week-old changes.
+        if diff_path.exists():
+            try: diff_path.unlink()
+            except OSError: pass
     return summary
 
 # ============================================================================
@@ -2007,12 +2098,21 @@ def compute_diff(prev, curr):
         "changes": changes,
     }
 
-def build_diff_banner(diff):
-    """Home-tab 'Since last regeneration' banner. Baseline mode on first run."""
+def build_diff_banner(diff, eda_diffs=None):
+    """Home-tab 'Since last regeneration' banner. Baseline mode on first run.
+
+    eda_diffs: {path: [change_string, ...]} from the last --sample --refresh
+    run (Phase 3 #6). Rendered as extra bullets on the same banner so the
+    reader sees data drift alongside repo drift in one place.
+    """
     if diff.get("is_baseline"):
-        return ('<div class="diff-banner baseline">'
+        base = ('<div class="diff-banner baseline">'
                 '<b>Baseline snapshot recorded.</b> Diff will appear on the next regeneration.'
                 '</div>')
+        if not eda_diffs:
+            return base
+        # Even on the baseline run we surface EDA diffs if a --refresh
+        # produced any (they exist independently of the snapshot mechanism).
     t = diff.get("totals", {})
     new_ev = sum(t.get("new_evidence_by_family", {}).values())
     parts = []
@@ -2033,6 +2133,14 @@ def build_diff_banner(diff):
         parts.append(f"<b>+{t['added_products']}</b> newly catalogued")
     if t.get("removed_products"):
         parts.append(f"<b>-{t['removed_products']}</b> removed from catalog")
+    # Phase 3 #6 - fold EDA drift into the same banner headline. Kept short:
+    # per-product change strings appear in the details list below.
+    if eda_diffs:
+        n_prods = len(eda_diffs)
+        n_changes = sum(len(v) for v in eda_diffs.values())
+        parts.append(f"<b>EDA changes on {n_prods} sampled product"
+                     + ("s" if n_prods != 1 else "")
+                     + f"</b> ({n_changes} change" + ("s" if n_changes != 1 else "") + ")")
     if not parts:
         headline = "No changes since the last regeneration."
     else:
@@ -2057,6 +2165,14 @@ def build_diff_banner(diff):
         else:
             lbl = kind
         detail_rows.append(f'<li><code>{_esc(c["path"])}</code> — {_esc(lbl)}</li>')
+    # Fold per-product EDA changes into the same details list so all drift
+    # (repo + data) is in one place.
+    if eda_diffs:
+        for path in sorted(eda_diffs):
+            for ch in eda_diffs[path]:
+                # `ch` already contains backtick-formatted column names from diff_eda;
+                # escape for safety but preserve the text.
+                detail_rows.append(f'<li><code>{_esc(path)}</code> EDA — {_esc(ch)}</li>')
     details = ""
     if detail_rows:
         details = ('<details><summary>Show '
@@ -2187,7 +2303,13 @@ def render_eda_card_section(f, cache_entry, diff_note=None):
 
     parts = [header]
     if diff_note:
-        parts.append(f'<div class="eda-diff">{_esc(diff_note)}</div>')
+        # Accept either a single string or a list of change strings (Phase 3 #6).
+        if isinstance(diff_note, (list, tuple)):
+            txt = "; ".join(str(x) for x in diff_note)
+        else:
+            txt = str(diff_note)
+        parts.append(f'<div class="eda-diff"><b>EDA changed on rerun:</b> '
+                     f'{_esc(txt)}</div>')
 
     # ---- Column-level table (dtype + missingness) ----
     cols_dict = cache_entry.get("columns", {}) or {}
@@ -2544,10 +2666,11 @@ def build_divergence_section(divergences):
         parts.append('</ul></div>')
     return "".join(parts)
 
-def build_home(fams, review, work, counts, worklog, notebooks, probes, git=None, diff=None, jl_refs=None, jl_errors=None, divergences=None):
+def build_home(fams, review, work, counts, worklog, notebooks, probes, git=None,
+               diff=None, jl_refs=None, jl_errors=None, divergences=None, eda_diffs=None):
     h = []
     if diff is not None:
-        h.append(build_diff_banner(diff))
+        h.append(build_diff_banner(diff, eda_diffs))
     h.append('<div class="funnel">'
              f'<div class="fstep"><b>{counts["cataloged"]}</b><span>cataloged<br>(the wide start)</span></div><div class="farrow">&rarr;</div>'
              f'<div class="fstep"><b>{counts["reviewed"]}</b><span>reviewed<br>(uncertainty documented)</span></div><div class="farrow">&rarr;</div>'
@@ -2767,6 +2890,7 @@ def export_xlsx(rows, out_path):
 def render(fams, review, work, worklog, notebooks, probes, repo_name, catnote, out_path, git,
            snapshot=None, diff=None, jl_refs=None, jl_errors=None, divergences=None,
            data_cache=None, eda_diffs=None):
+    eda_diffs = eda_diffs or {}
     counts = {s: 0 for s in STAGES}
     for path in fams:
         counts[review.get(path, {}).get("stage", "cataloged")] += 1
@@ -2774,7 +2898,7 @@ def render(fams, review, work, worklog, notebooks, probes, repo_name, catnote, o
     kinds_present = [k for k in KINDS if any(f["kind"] == k for f in fams.values())]
     tabs = ['<button class="tab on" data-k="home">Home</button>']
     panels = ['<div class="panel on" id="panel-home">'
-              + build_home(fams, review, work, counts, worklog, notebooks, probes, git, diff, jl_refs, jl_errors, divergences) + '</div>']
+              + build_home(fams, review, work, counts, worklog, notebooks, probes, git, diff, jl_refs, jl_errors, divergences, eda_diffs) + '</div>']
     for i, k in enumerate(kinds_present):
         n = sum(1 for f in fams.values() if f["kind"] == k)
         tabs.append(f'<button class="tab" data-k="k{i}">{_esc(k)}<span class="n">{n}</span></button>')
@@ -2922,9 +3046,11 @@ def main():
               f"{t['new_probes']} new probe(s)")
     # Phase 3: load the sample cache after sample_products() has (possibly)
     # updated it, so the HTML render sees the latest EDA slice on every card.
+    # eda_diffs come from the last --sample run's diff dump (Phase 3 #6).
     data_cache = load_data_cache(repo)
+    eda_diffs  = load_eda_diffs(repo)
     counts = render(fams, review, work, worklog, notebooks, probes, repo.name, catnote, out, git,
-                    snapshot_prev, diff, jl_refs, jl_errors, divergences, data_cache)
+                    snapshot_prev, diff, jl_refs, jl_errors, divergences, data_cache, eda_diffs)
     print("  funnel: " + " -> ".join(f"{STAGE_LABELS[s]} {counts.get(s, 0)}" for s in STAGES))
     print(f"Report written to {out}")
 

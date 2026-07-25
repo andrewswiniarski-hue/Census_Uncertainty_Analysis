@@ -38,3 +38,6 @@ product_review.xlsx
 # against a rate-limited endpoint; if two teammates need it, each runs their
 # own `python tools/product_scope.py --repo . --sample`.
 scope_data_cache.json
+# Phase 3 EDA diff - written by --sample --refresh, consumed by the next
+# regen so the diff banner can flag data drift alongside repo drift.
+.scope_last_eda_diff.json
