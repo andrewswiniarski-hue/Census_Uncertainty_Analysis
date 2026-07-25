@@ -523,7 +523,7 @@ def load_review(repo: Path, fams):
 
     Phase 5 #1: newly created entries also get `insights: []` (append-only
     list of {when, who, source, text} dicts) plus `last_reviewed_by` /
-    `last_reviewed_date` (auto-populated by the --serve edit path). Every
+    `last_reviewed_date` (auto-populated by the --review CLI helper). Every
     reader must use `entry.get("insights", [])` etc. so the 573 existing
     entries (which lack these fields) continue to work without a migration.
     """
@@ -541,8 +541,20 @@ def load_review(repo: Path, fams):
         if path not in existing:
             existing[path] = dict(default)
             added += 1
-    if added or first:
-        p.write_text(json.dumps(dict(sorted(existing.items())), indent=2), encoding="utf-8")
+    # Normalize on load: if the file's on-disk key order doesn't match the
+    # canonical sort_keys=True layout, rewrite it once. This means a first
+    # regen after the pivot produces a "one big diff" but every subsequent
+    # --review CLI write shows only the actually-changed lines - critical
+    # for reviewer diff-hygiene.
+    canonical = json.dumps(existing, indent=2, sort_keys=True)
+    needs_normalize = False
+    if not first:
+        try:
+            needs_normalize = (p.read_text(encoding="utf-8") != canonical)
+        except Exception:
+            needs_normalize = True
+    if added or first or needs_normalize:
+        p.write_text(canonical, encoding="utf-8")
     return existing, p, first, added
 
 def validate_review(review):
@@ -582,16 +594,17 @@ def validate_review(review):
 # All three go through _append_insight() which handles:
 #   (a) dedup - never store the same (source, text) twice per product
 #   (b) file locking - a threading.Lock() (in-process) + fcntl.flock() best-
-#       effort (cross-process, when the OS supports it) so the --serve HTTP
-#       server and a parallel --warm-cache cannot corrupt each other's writes
+#       effort (cross-process, when the OS supports it) so the --review CLI
+#       helper and a parallel --warm-cache cannot corrupt each other's writes
 #   (c) writing the whole review file back deterministically
 
 LAST_REGEN_FILE   = ".product_scope_last_regen.json"
 LAST_REGEN_LOOKBACK_DAYS = 7   # first-ever regen has no baseline; look back a week
 
-# Module-level lock so any thread of this process (server, warm-cache workers,
-# main regen) serializes review-file writes. Cross-process locking sits on top
-# via fcntl.flock() where available; see _open_review_locked() below.
+# Module-level lock so any thread of this process (warm-cache workers,
+# main regen, --review helper) serializes review-file writes. Cross-process
+# locking sits on top via fcntl.flock() where available; see with_review_locked()
+# below.
 import threading as _threading
 _REVIEW_LOCK = _threading.Lock()
 
@@ -716,8 +729,10 @@ def with_review_locked(repo: Path, mutate_fn):
             else:
                 review = {}
             result = mutate_fn(review)
-            ordered = dict(sorted(review.items()))
-            payload = json.dumps(ordered, indent=2)
+            # sort_keys=True enforces alphabetical order top-level AND within
+            # each entry so `git diff product_review.json` after a --review
+            # CLI write stays minimal (only the changed lines move).
+            payload = json.dumps(review, indent=2, sort_keys=True)
             with open(tmp_p, "w", encoding="utf-8") as fh:
                 fh.write(payload)
                 fh.flush()
@@ -934,8 +949,8 @@ def emit_auto_insights(repo: Path, review, tuples, log_prefix="auto-insight"):
     the end under the review lock, and print a one-line summary. Returns the
     count actually appended (i.e. after dedup).
 
-    Uses with_review_locked() so a concurrent --serve write to the same file
-    cannot clobber the batch: we read the on-disk state INSIDE the lock,
+    Uses with_review_locked() so a concurrent --review CLI write to the same
+    file cannot clobber the batch: we read the on-disk state INSIDE the lock,
     append onto it, and write out - so any human insight that landed between
     the caller's read and this call still survives. The `review` argument is
     also mutated in place with the merged post-write state so the caller's
@@ -945,9 +960,9 @@ def emit_auto_insights(repo: Path, review, tuples, log_prefix="auto-insight"):
     appended_count = [0]
     def _mutate(disk_review):
         # Merge caller's in-memory review dict onto the fresh disk read - any
-        # human edit from the server that landed between the caller's read
-        # and now sits in disk_review, and we want to keep it. Then apply
-        # the auto-insight appends onto the merged state.
+        # human edit from a concurrent --review CLI invocation that landed
+        # between the caller's read and now sits in disk_review, and we want
+        # to keep it. Then apply the auto-insight appends onto the merged state.
         for path, entry in review.items():
             if path not in disk_review:
                 disk_review[path] = entry
@@ -2185,431 +2200,6 @@ def load_warm_summary(repo: Path):
         return None
 
 # ============================================================================
-# PHASE 5 #3 - HTTP SERVER (--serve)
-# ============================================================================
-# Stdlib-only threaded HTTP server that turns the static report into an editable
-# team workspace. Binds to 127.0.0.1 (never 0.0.0.0). Reads product_review.json
-# at startup and every SERVE_REFRESH_SECONDS; writes go through _append_insight
-# / save_review_locked so file writes serialize against warm-cache workers.
-#
-# Routes:
-#   GET  /                    -> product_report.html (regenerated on first hit
-#                                if missing)
-#   GET  /product_report.html -> same
-#   GET  /api/state           -> {review, cache_summary, warm_status}
-#   POST /api/review/<id>     -> update fields on that product's review entry
-#   POST /api/insight/<id>    -> append a new human insight
-#   GET  /healthz             -> plain '200 OK' for liveness
-
-SERVE_DEFAULT_PORT       = 8080
-SERVE_DEFAULT_REFRESH_S  = 30
-SERVE_HOST_ADDR          = "127.0.0.1"    # HARDCODED - never bind to 0.0.0.0
-
-# Allowed keys the review-edit route accepts. Anything else is silently dropped
-# (defense in depth: even if the UI evolves, we won't stamp arbitrary fields
-# into review entries).
-SERVE_REVIEW_ALLOWED = {"status", "composite_role", "composite_role_note",
-                        "sample_config", "notes"}
-
-def _serve_regenerate(repo: Path, out_path: Path):
-    """Blocking regen; run in the server's request thread when product_report.html
-    is missing. Reuses main()'s pipeline via a subprocess so any change to the
-    render path automatically flows here - no separate code duplication.
-    Silent on success. Returns the subprocess result."""
-    return subprocess.run(
-        [sys.executable, str(Path(__file__).resolve()), "--repo", str(repo)],
-        capture_output=True, text=True, timeout=120)
-
-def _serve_load_state(repo: Path):
-    """Snapshot of everything the client's UI needs, in one JSON blob.
-    Called by /api/state and by the background refresher. Kept slim - no
-    catalog / no evidence, just the fields the UI writes to plus enough
-    summary state that the reader can spot drift in another tab."""
-    review_p = repo / "product_review.json"
-    review = {}
-    if review_p.exists():
-        try:
-            review = json.loads(review_p.read_text(encoding="utf-8"))
-        except Exception:
-            review = {}
-    warm = load_warm_summary(repo) or {}
-    dc = load_data_cache(repo) or {}
-    probes = load_probes(repo) or {}
-    cache_summary = {
-        "sampled":       len(dc),
-        "probed":        sum(1 for v in probes.values() if v.get("ok")),
-        "last_regen":    _read_last_regen(repo),
-    }
-    return {"review": review, "cache_summary": cache_summary, "warm_status": warm}
-
-def _serve_normalise_review_body(body):
-    """Coerce a request body into a dict of {allowed_key: value, ...} plus
-    optional 'who'. Accepts JSON (Content-Type: application/json) already
-    parsed into a dict, or a dict from urllib.parse.parse_qs (form-encoded
-    fallback used by the no-JS submit path). Empty and None values pass
-    through so callers can distinguish 'clear the field' from 'not set'."""
-    if not isinstance(body, dict): return {}
-    out = {"__who__": ""}
-    for k, v in body.items():
-        # parse_qs returns lists; take the first element.
-        if isinstance(v, list): v = v[0] if v else ""
-        if k == "who":
-            out["__who__"] = str(v or "").strip()
-        elif k in SERVE_REVIEW_ALLOWED:
-            out[k] = "" if v is None else str(v)
-    return out
-
-def _serve_validate_review_patch(entry, patch):
-    """Business-logic checks that must pass before we persist. Returns "" on
-    success or a plain-English error string ready for the 4xx body.
-
-    Rules:
-      * status must be one of STAGES (case-insensitive; lowercase on store)
-      * composite_role, if present and non-empty, must be one of
-        COMPOSITE_ROLES AND must land with a non-empty composite_role_note.
-        This enforces the same note-required contract validate_review()
-        applies at load time.
-      * sample_config must be one of SAMPLE_CONFIG_VALUES if provided.
-      * Nothing else is validated - notes is free text, composite_role_note
-        is free text; both are trusted with only the JSON.dumps escaping.
-    """
-    if "status" in patch:
-        s = (patch["status"] or "").strip().lower()
-        if s and s not in STAGES:
-            return f"status must be one of {'/'.join(STAGES)} (got {s!r})"
-    # composite_role + note contract: check on the MERGED entry so a client
-    # can send the role and note in one POST, or clear the role by sending
-    # only role="" (in which case we blank the note too).
-    if "composite_role" in patch:
-        merged_role = (patch.get("composite_role") or "").strip()
-        if merged_role and merged_role not in COMPOSITE_ROLES:
-            return (f"composite_role must be one of "
-                    f"{'/'.join(COMPOSITE_ROLES)} (got {merged_role!r})")
-        if merged_role:
-            # Note may arrive in the same patch or already exist on the entry.
-            merged_note = (patch.get("composite_role_note",
-                                       entry.get("composite_role_note", "")) or "").strip()
-            if not merged_note:
-                return ("composite_role requires a matching composite_role_note "
-                        "(free text, non-empty)")
-    if "sample_config" in patch:
-        cfg = (patch.get("sample_config") or "").strip().lower()
-        if cfg and cfg not in SAMPLE_CONFIG_VALUES:
-            return (f"sample_config must be one of "
-                    f"{'/'.join(SAMPLE_CONFIG_VALUES)} (got {cfg!r})")
-    return ""
-
-def _serve_apply_review_patch(entry, patch, reviewer):
-    """Mutate entry with patch fields and stamp last_reviewed_by/date. Only
-    called after _serve_validate_review_patch returned "".
-
-    Handles the field rename between the UI ('status' / 'notes') and the
-    review schema ('stage' / 'note') - a deliberate mismatch: the UI labels
-    match what a reviewer sees (Status / Notes), the file keys match what
-    the earlier phases already committed to (stage / note)."""
-    _ensure_review_shape(entry)
-    if "status" in patch:
-        entry["stage"] = (patch["status"] or "cataloged").strip().lower()
-    if "composite_role" in patch:
-        role = (patch["composite_role"] or "").strip().lower()
-        entry["composite_role"] = role
-        if "composite_role_note" in patch:
-            entry["composite_role_note"] = str(patch["composite_role_note"] or "")
-        if not role:
-            # Blanking the role also blanks the note - keep the contract clean.
-            entry["composite_role_note"] = ""
-    elif "composite_role_note" in patch:
-        entry["composite_role_note"] = str(patch["composite_role_note"] or "")
-    if "sample_config" in patch:
-        cfg = (patch["sample_config"] or "default").strip().lower()
-        entry["sample_config"] = cfg
-    if "notes" in patch:
-        entry["note"] = str(patch["notes"] or "")
-    entry["last_reviewed_by"]   = reviewer or entry.get("last_reviewed_by", "") or ""
-    entry["last_reviewed_date"] = datetime.date.today().isoformat()
-    return entry
-
-def build_serve_handler(repo: Path, out_path: Path, state_ref, state_lock):
-    """Factory - returns a BaseHTTPRequestHandler subclass closed over the
-    per-server state. Kept as a factory so `python -m unittest` can drive the
-    handler directly without instantiating an ThreadingHTTPServer.
-
-    state_ref is a mutable list ([current_state_dict]) refreshed periodically
-    by the background thread. state_lock guards concurrent reads/writes of
-    state_ref inside the handler."""
-    import http.server
-    import urllib.parse
-
-    class _Handler(http.server.BaseHTTPRequestHandler):
-        server_version = "ProductScope/5"
-
-        # Quiet the default per-request stderr line - the server prints its
-        # own compact log on POSTs and keeps GETs silent.
-        def log_message(self, fmt, *args):
-            return
-
-        def _send_json(self, code, obj):
-            body = json.dumps(obj, indent=2).encode("utf-8")
-            self.send_response(code)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Content-Length", str(len(body)))
-            self.send_header("Cache-Control", "no-store")
-            self.end_headers()
-            self.wfile.write(body)
-
-        def _send_text(self, code, text, ctype="text/plain; charset=utf-8"):
-            body = text.encode("utf-8") if isinstance(text, str) else text
-            self.send_response(code)
-            self.send_header("Content-Type", ctype)
-            self.send_header("Content-Length", str(len(body)))
-            self.send_header("Cache-Control", "no-store")
-            self.end_headers()
-            self.wfile.write(body)
-
-        def _send_redirect(self, url):
-            self.send_response(303)
-            self.send_header("Location", url)
-            self.send_header("Content-Length", "0")
-            self.end_headers()
-
-        def _parse_body(self):
-            """Return (parsed_body_dict, is_form). Handles JSON and
-            application/x-www-form-urlencoded; unknown Content-Type ->
-            best-effort JSON parse; empty body -> ({}, False)."""
-            n = int(self.headers.get("Content-Length") or 0)
-            if n <= 0: return {}, False
-            raw = self.rfile.read(n)
-            ctype = (self.headers.get("Content-Type") or "").lower()
-            if "application/json" in ctype:
-                try:
-                    return json.loads(raw.decode("utf-8")), False
-                except Exception:
-                    return {}, False
-            if "application/x-www-form-urlencoded" in ctype:
-                try:
-                    return urllib.parse.parse_qs(raw.decode("utf-8"),
-                                                  keep_blank_values=True), True
-                except Exception:
-                    return {}, True
-            # Unknown type: try JSON first, then form.
-            try:
-                return json.loads(raw.decode("utf-8")), False
-            except Exception:
-                try:
-                    return urllib.parse.parse_qs(raw.decode("utf-8"),
-                                                  keep_blank_values=True), True
-                except Exception:
-                    return {}, False
-
-        # ---------- GET ---------------------------------------------------
-        def do_GET(self):
-            path = urllib.parse.urlparse(self.path).path
-            if path == "/healthz":
-                return self._send_text(200, "OK")
-            if path in ("/", "/product_report.html"):
-                return self._serve_report()
-            if path == "/api/state":
-                with state_lock:
-                    state = state_ref[0]
-                return self._send_json(200, state)
-            return self._send_text(404, "Not Found")
-
-        def _serve_report(self):
-            if not out_path.exists():
-                # Regen on first hit. Blocking; a real reviewer opens the tab
-                # once at start of session.
-                try:
-                    print(f"  [serve] regenerating {out_path.name} (first hit)")
-                    r = _serve_regenerate(repo, out_path)
-                    if r.returncode != 0:
-                        return self._send_text(500,
-                            "regen failed:\n" + (r.stderr or r.stdout))
-                except Exception as ex:
-                    return self._send_text(500, f"regen failed: {ex!r}")
-            try:
-                data = out_path.read_bytes()
-            except Exception as ex:
-                return self._send_text(500, f"could not read report: {ex!r}")
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Length", str(len(data)))
-            self.send_header("Cache-Control", "no-store")
-            self.end_headers()
-            self.wfile.write(data)
-
-        # ---------- POST --------------------------------------------------
-        def do_POST(self):
-            parsed = urllib.parse.urlparse(self.path)
-            path = parsed.path
-            if path.startswith("/api/review/"):
-                return self._api_review(path[len("/api/review/"):])
-            if path.startswith("/api/insight/"):
-                return self._api_insight(path[len("/api/insight/"):])
-            return self._send_text(404, "Not Found")
-
-        def _api_review(self, product_id):
-            product_id = urllib.parse.unquote(product_id)
-            body, is_form = self._parse_body()
-            if not isinstance(body, dict) or not product_id:
-                return self._send_json(400, {"error":
-                    "body must be a JSON object; product_id required in URL"})
-            patch = _serve_normalise_review_body(body)
-            reviewer = (self.headers.get("X-Reviewer") or
-                        patch.pop("__who__", "") or "").strip()
-
-            # Do the read-modify-write under the review lock so a concurrent
-            # writer (server thread OR --warm-cache subprocess) can't clobber
-            # our append. The mutator captures out params via closure.
-            outcome = {"err": None, "code": 200, "entry": None}
-            def _mutate(review):
-                if product_id not in review or not isinstance(review[product_id], dict):
-                    outcome["err"] = ("no review entry for "
-                                       f"{product_id!r} - is this a real catalog path?")
-                    outcome["code"] = 404
-                    return
-                _ensure_review_shape(review[product_id])
-                err = _serve_validate_review_patch(review[product_id], patch)
-                if err:
-                    outcome["err"] = err; outcome["code"] = 400
-                    return
-                _serve_apply_review_patch(review[product_id], patch, reviewer)
-                outcome["entry"] = review[product_id]
-            try:
-                with_review_locked(repo, _mutate)
-            except Exception as ex:
-                return self._send_json(500, {"error": f"write failed: {ex!r}"})
-            if outcome["err"]:
-                return self._send_json(outcome["code"], {"error": outcome["err"]})
-            # Refresh cached snapshot so a subsequent /api/state sees the
-            # write (background thread would catch it within 30s anyway).
-            with state_lock:
-                state_ref[0] = _serve_load_state(repo)
-            if is_form:
-                return self._send_redirect("/product_report.html")
-            print(f"  [serve] PATCH review/{product_id} by {reviewer or 'anonymous'}: "
-                  + ", ".join(sorted(k for k in patch if not k.startswith("__"))))
-            return self._send_json(200, {"ok": True,
-                                          "path": product_id,
-                                          "entry": outcome["entry"]})
-
-        def _api_insight(self, product_id):
-            product_id = urllib.parse.unquote(product_id)
-            body, is_form = self._parse_body()
-            if not isinstance(body, dict) or not product_id:
-                return self._send_json(400, {"error":
-                    "body must be a JSON object; product_id required in URL"})
-            if is_form:
-                def _one(k, default=""):
-                    v = body.get(k, default)
-                    if isinstance(v, list): v = v[0] if v else default
-                    return v
-                who = _one("who").strip()
-                text = _one("text").strip()
-                source = _one("source", "human").strip() or INSIGHT_HUMAN
-            else:
-                who = str(body.get("who") or "").strip()
-                text = str(body.get("text") or "").strip()
-                source = str(body.get("source") or INSIGHT_HUMAN).strip()
-            # Server-side rule: the insight endpoint only accepts human sources.
-            # Auto-sources are emitted internally by --warm-cache and --sample
-            # --refresh; letting a client stamp arbitrary source strings would
-            # break the dedup semantics and the source-icon legend.
-            if source != INSIGHT_HUMAN:
-                return self._send_json(400, {"error":
-                    "source must be 'human' on this route; auto-sources are "
-                    "emitted internally by --warm-cache and --sample --refresh"})
-            if not text:
-                return self._send_json(400, {"error": "text is required"})
-            if not who:
-                return self._send_json(400, {"error":
-                    "who is required (set a reviewer name)"})
-            outcome = {"err": None, "code": 200, "insight": None}
-            def _mutate(review):
-                if product_id not in review or not isinstance(review[product_id], dict):
-                    outcome["err"] = f"no review entry for {product_id!r}"
-                    outcome["code"] = 404
-                    return
-                ins = _append_insight(review, product_id, INSIGHT_HUMAN, text, who=who)
-                if ins is None:
-                    outcome["err"] = "insight rejected"
-                    outcome["code"] = 500
-                    return
-                outcome["insight"] = ins
-            try:
-                with_review_locked(repo, _mutate)
-            except Exception as ex:
-                return self._send_json(500, {"error": f"write failed: {ex!r}"})
-            if outcome["err"]:
-                return self._send_json(outcome["code"], {"error": outcome["err"]})
-            with state_lock:
-                state_ref[0] = _serve_load_state(repo)
-            if is_form:
-                return self._send_redirect("/product_report.html")
-            print(f"  [serve] APPEND insight for {product_id} by {who}: {text[:60]!r}")
-            return self._send_json(200, {"ok": True, "path": product_id,
-                                          "insight": outcome["insight"]})
-
-    return _Handler
-
-def serve_forever(repo: Path, out_path: Path, port, refresh_seconds):
-    """Bring up ThreadingHTTPServer on 127.0.0.1:<port>. Blocks until SIGINT
-    (Ctrl-C) or shutdown() is called. The background refresher re-reads
-    product_review.json every refresh_seconds so /api/state reflects out-of-
-    band writes (e.g. a parallel --warm-cache subprocess appending auto-
-    insights)."""
-    import http.server
-    import signal
-    import threading
-    import time as _t
-
-    # Cold state read; the handler falls back to a fresh disk read on every
-    # POST anyway, but /api/state and the initial UI paint want a value here.
-    state_ref  = [_serve_load_state(repo)]
-    state_lock = _threading.Lock()
-
-    handler_cls = build_serve_handler(repo, out_path, state_ref, state_lock)
-    server = http.server.ThreadingHTTPServer((SERVE_HOST_ADDR, port), handler_cls)
-    server.daemon_threads = True   # threads die on process exit
-
-    stop_evt = threading.Event()
-    def _refresher():
-        while not stop_evt.is_set():
-            if stop_evt.wait(refresh_seconds): return
-            try:
-                fresh = _serve_load_state(repo)
-                with state_lock:
-                    state_ref[0] = fresh
-            except Exception as ex:
-                print(f"  [serve] refresh failed: {ex!r}", file=sys.stderr)
-    refresher = threading.Thread(target=_refresher, daemon=True,
-                                  name="serve-refresher")
-    refresher.start()
-
-    print(f"serving product scope tracker on http://{SERVE_HOST_ADDR}:{port} "
-          f"- Ctrl+C to stop")
-    print(f"  (--port N to change; refreshing state every {refresh_seconds}s)")
-
-    def _shutdown(*_):
-        # Called from the signal thread. Use shutdown() (not server_close) so
-        # the serve_forever loop returns cleanly before we tear down sockets.
-        stop_evt.set()
-        threading.Thread(target=server.shutdown, daemon=True).start()
-
-    signal.signal(signal.SIGINT, _shutdown)
-    try:
-        signal.signal(signal.SIGTERM, _shutdown)   # not on Windows for some
-    except (AttributeError, ValueError):
-        pass
-
-    try:
-        server.serve_forever(poll_interval=0.5)
-    finally:
-        server.server_close()
-        stop_evt.set()
-        print("shut down")
-    return 0
-
-# ============================================================================
 # REPORT
 # ============================================================================
 
@@ -2924,85 +2514,9 @@ footer{padding:22px 44px;color:var(--muted);font-size:11.5px;}
 .facet .fhint code{font-family:ui-monospace,Consolas,monospace;font-size:10.5px;
      background:var(--ice);color:var(--navy);padding:0 4px;border-radius:3px;font-style:normal;}
 @media(max-width:900px){.products-shell{flex-direction:column;} .facets{position:static;width:100%;flex:none;}}
-/* Phase 5 #5 - no-JS fallback. When scripts don't run at all we can still
-   read the report AND POST edits via native <form> submits. This block only
-   applies inside <noscript>, so it's a no-op for the 99.99% path. */
-.scope-nojs-banner{display:none;background:#FBF0D6;color:#6E4E11;
-     border-left:4px solid var(--gold);padding:9px 14px;font-size:12px;
-     margin:0 44px 12px;max-width:1020px;border-radius:5px;line-height:1.4;}
-/* Phase 5 #4 - inline edit UI + insight feed. Every card has a Review-
-   controls bcard and an Insights bcard; the JS at the bottom hijacks change/
-   blur events on the controls and POSTs to /api/review/<id>. When the
-   /healthz probe (Phase 5 #5) fails, .read-only is added to <body> and every
-   .scope-edit control becomes disabled + the .scope-ro-banner unhides. */
-.scope-edit{display:flex;flex-direction:column;gap:8px;margin-top:2px;}
-.scope-hint{font-family:"Segoe UI",sans-serif;font-weight:400;font-style:italic;
-     text-transform:none;letter-spacing:0;color:var(--muted);font-size:10.5px;
-     margin-left:6px;}
-.scope-field{display:grid;grid-template-columns:120px 1fr auto;
-     column-gap:8px;row-gap:4px;align-items:center;}
-.scope-field label{font-size:10px;letter-spacing:.09em;text-transform:uppercase;
-     font-weight:800;color:var(--muted);}
-.scope-field select,
-.scope-field textarea,
-.scope-field input[type=text]{border:1px solid var(--line);border-radius:5px;
-     padding:4px 7px;font:inherit;font-size:12px;background:#fff;color:var(--ink);
-     min-width:0;width:100%;}
-.scope-field select:focus,
-.scope-field textarea:focus,
-.scope-field input[type=text]:focus{outline:2px solid #8FA8D8;outline-offset:0;
-     border-color:#3A4890;}
-.scope-field textarea{resize:vertical;min-height:34px;font-family:inherit;line-height:1.4;}
-.scope-role{grid-template-columns:120px 1fr auto;}
-.scope-role textarea[name="composite_role_note"]{grid-column:2 / span 2;
-     font-size:11.5px;background:#FCFDFF;}
-.scope-role textarea[disabled]{background:#F6F7FA;color:var(--muted);
-     cursor:not-allowed;}
-.scope-notes textarea{grid-column:2 / span 2;font-size:11.5px;background:#FCFDFF;}
-.scope-dirty{color:var(--gold);font-size:14px;line-height:1;width:12px;
-     text-align:center;font-weight:700;user-select:none;}
-.scope-dirty.saving{color:#3A4890;}
-.scope-dirty.saving::before{content:"\21BB";animation:scope-spin 1s linear infinite;}
-.scope-dirty.saving{content:"";}   /* let ::before drive the glyph */
-@keyframes scope-spin{from{transform:rotate(0);} to{transform:rotate(360deg);}}
-.scope-err{color:#C0392B;font-size:10.5px;line-height:1.3;grid-column:2 / span 2;
-     min-height:0;display:none;}
-.scope-err.on{display:block;padding-top:2px;}
-.scope-lastreviewed{font-size:10px;color:var(--muted);margin-top:5px;
-     font-style:italic;letter-spacing:.02em;}
-/* No-JS Save button: hidden by default; the <noscript> block below flips
-   display:inline-block via a CSS trick. Real reviewers with JS enabled never
-   see this; JS-disabled reviewers see it and use it to force a native form
-   POST (the form's action= + method="POST" attributes carry the round trip). */
-.scope-nojs-save{display:none;font:inherit;font-size:11px;padding:4px 12px;
-     background:var(--line);border:0;border-radius:4px;color:var(--navy);
-     font-weight:700;cursor:pointer;margin-top:4px;align-self:flex-start;}
-/* Read-only banner (Phase 5 #5). Only shown when the /healthz probe fails.
-   Subtle grey box - no red, no alarming icon; edits are gracefully unavailable
-   rather than "broken". */
-.scope-ro-banner{background:#F6F7FA;border:1px solid var(--line);
-     border-left:3px solid #8FA8D8;border-radius:5px;padding:6px 10px;
-     font-size:11px;color:var(--ink);line-height:1.4;display:flex;
-     align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:6px;}
-.scope-ro-banner .copy-cmd{margin-left:4px;}
-.scope-nojs{font-size:11px;color:#6E4E11;background:#FBF0D6;
-     border-left:3px solid var(--gold);padding:5px 9px;border-radius:4px;
-     margin-bottom:5px;}
-/* Read-only state - JS toggles body.scope-read-only when /healthz fails.
-   Every form control becomes non-interactive; the banner + copy hint appear;
-   the noJS submit button also stays hidden because the API round-trip still
-   requires the server. */
-body.scope-read-only .scope-edit select,
-body.scope-read-only .scope-edit textarea,
-body.scope-read-only .scope-edit input[type=text],
-body.scope-read-only .scope-add-insight button,
-body.scope-read-only .scope-insight-form input,
-body.scope-read-only .scope-insight-form textarea,
-body.scope-read-only .scope-insight-form button{
-     background:#F6F7FA;color:var(--muted);cursor:not-allowed;
-     pointer-events:none;opacity:0.75;}
-body.scope-read-only .scope-ro-banner{display:flex !important;}
-/* Insight feed */
+/* Insight feed (Phase 5 #6 dual-render). Read-only display used by the Quick
+   Look drill-down. Writes come from `python tools/product_scope.py --review
+   <id> --insight "..."`; nothing in this page mutates the JSON. */
 .scope-insights-feed{list-style:none;padding:0;margin:4px 0 0;
      max-height:340px;overflow-y:auto;}
 .ins-empty{font-size:11px;color:var(--muted);font-style:italic;padding:4px 0;}
@@ -3027,38 +2541,6 @@ body.scope-read-only .scope-ro-banner{display:flex !important;}
 .ins-badge.ins-src-human{background:#F1E7C8;color:#6B4E11;}
 .ins-text{color:var(--ink);line-height:1.45;margin-top:1px;
      overflow-wrap:anywhere;}
-.ins-count{font-family:"Segoe UI",sans-serif;font-weight:400;color:var(--muted);
-     text-transform:none;letter-spacing:0;font-size:11px;margin-left:4px;}
-/* Add-insight form (collapsed by default). */
-.scope-add-insight{margin-top:6px;}
-.scope-add-toggle{background:var(--ice);border:1px dashed var(--line);
-     border-radius:5px;padding:4px 12px;font:inherit;font-size:11px;
-     color:var(--navy);font-weight:700;cursor:pointer;}
-.scope-add-toggle:hover{background:#E4EBFA;}
-.scope-insight-form{display:flex;flex-direction:column;gap:6px;margin-top:6px;
-     padding:8px 10px;background:#FCFDFF;border:1px solid var(--line);
-     border-radius:5px;}
-.scope-insight-form input[type=text],
-.scope-insight-form textarea{border:1px solid var(--line);border-radius:4px;
-     padding:5px 8px;font:inherit;font-size:12px;color:var(--ink);}
-.scope-insight-form textarea{resize:vertical;font-family:inherit;line-height:1.45;}
-.scope-insight-actions{display:flex;gap:6px;align-items:center;}
-.scope-save-ins{background:var(--navy);color:#F5D77A;border:0;border-radius:5px;
-     padding:5px 14px;font:inherit;font-size:11.5px;font-weight:700;cursor:pointer;
-     letter-spacing:.02em;}
-.scope-save-ins:hover{background:#28356B;}
-.scope-cancel-ins{background:#F6F7FA;color:var(--muted);border:1px solid var(--line);
-     border-radius:5px;padding:5px 10px;font:inherit;font-size:11.5px;cursor:pointer;}
-.scope-cancel-ins:hover{background:var(--ice);color:var(--navy);}
-/* Toast (network-level errors + save-success). Sits above everything. */
-#scope-toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);
-     background:#22283B;color:#F5F7FA;padding:9px 18px;border-radius:20px;
-     font-size:12.5px;box-shadow:0 4px 14px rgba(0,0,0,.24);z-index:20;
-     opacity:0;pointer-events:none;transition:opacity .18s ease-out;
-     font-weight:600;letter-spacing:.02em;max-width:520px;}
-#scope-toast.show{opacity:1;}
-#scope-toast.err{background:#7A1F1F;color:#FFE8E4;}
-#scope-toast.ok{background:#1F4A2E;color:#E6F5EA;}
 /* Phase 5 #6 - Quick Look TL;DR insight sub-line. Compact list, no borders,
    inherits the tier stripe so the eye reads it as part of the TL;DR pack. */
 .ql-insights{list-style:none;padding:0;margin:3px 0 0;font-size:10.5px;
@@ -3075,26 +2557,7 @@ body.scope-read-only .scope-ro-banner{display:flex !important;}
      text-decoration:underline dotted;font-family:inherit;}
 .ql-ins-more:hover{color:var(--navy);}
 </style>
-<noscript><style>
-/* When scripts are disabled: unhide the JS-fallback controls so a reviewer
-   can still edit via native form POSTs (which the server accepts as
-   Content-Type: application/x-www-form-urlencoded, per Phase 5 #5 spec). */
-.scope-nojs-save{display:inline-block !important;}
-.scope-nojs-banner{display:block !important;}
-/* Auto-save no longer works; the "edits save automatically" hint is a lie,
-   so hide it. */
-.scope-hint{display:none !important;}
-/* Add-insight form: unhide by default so the reviewer can post without
-   needing the JS "expand" toggle. */
-.scope-insight-form{display:flex !important;}
-.scope-add-toggle{display:none !important;}
-</style></noscript>
 </head><body>
-<noscript><div class="scope-nojs-banner">
-JavaScript is disabled. Edits still work via native form submits (each save
-triggers a full-page reload) but auto-save, keyboard shortcuts, and the
-per-card localStorage-remembered expanded state are unavailable.
-</div></noscript>
 <header>
   <div class="kicker">PRODUCT SCOPE &bull; GENERATED __DATE__ &bull; __CATNOTE__</div>
   <h1>What the Bureau publishes, and where our work has reached</h1>
@@ -3388,298 +2851,11 @@ document.querySelectorAll('.filter input').forEach(function(inp){
     target.open = !target.open;
   });
 })();
-/* --- Phase 5 #4 / #5 - inline edit UI + read-only degradation ---------------
-   Two responsibilities in this block:
-     (a) probe /healthz on load; if the server is unreachable, add
-         body.scope-read-only so every edit control disables.
-     (b) hijack change/blur events on .scope-edit form controls and POST to
-         /api/review/<id>; hijack the .scope-insight-form submit and POST to
-         /api/insight/<id>; render inline validation errors from the server.
-
-   Toast (bottom center) is used ONLY for network-level failures (server went
-   away mid-session, request timed out). Validation errors from the server
-   render inline near the offending control, not as a toast. */
+/* --- Phase 5 #6 - Quick Look TL;DR "N more" button opens the sibling
+   <details> so the reader can jump into the full insights feed. Delegated
+   listener stays trivial: this is the only Phase 5 client-side behaviour
+   left after the CLI-helper pivot dropped the inline edit UI. */
 (function(){
-  var TOAST_TTL_MS = 2000;
-  var LS_REVIEWER  = 'product_scope:reviewer';
-
-  function _toast(msg, kind){
-    var el = document.getElementById('scope-toast');
-    if (!el){
-      el = document.createElement('div');
-      el.id = 'scope-toast';
-      document.body.appendChild(el);
-    }
-    el.textContent = msg;
-    el.className = 'show' + (kind ? ' ' + kind : '');
-    if (el._t) clearTimeout(el._t);
-    el._t = setTimeout(function(){ el.className = ''; }, TOAST_TTL_MS);
-  }
-
-  function _lsGet(k){ try { return localStorage.getItem(k); } catch(_){ return null; } }
-  function _lsSet(k, v){ try { localStorage.setItem(k, v); } catch(_){} }
-
-  /* Probe the server once at load. 1s timeout: a static file opened from
-     disk fails immediately (no server), and a live server responds instantly
-     on loopback. AbortController is standard in every browser we support. */
-  function _probeHealthz(){
-    return new Promise(function(resolve){
-      if (!window.fetch){ resolve(false); return; }
-      var ctrl = new AbortController();
-      var timer = setTimeout(function(){ ctrl.abort(); }, 1000);
-      fetch('/healthz', {signal: ctrl.signal, cache: 'no-store'})
-        .then(function(r){ clearTimeout(timer); resolve(r.ok); })
-        .catch(function(){ clearTimeout(timer); resolve(false); });
-    });
-  }
-
-  function _markDirty(field, on){
-    var dot = field.parentNode.querySelector('.scope-dirty');
-    if (!dot) return;
-    dot.hidden = !on;
-    dot.classList.remove('saving');
-  }
-  function _markSaving(field, on){
-    var dot = field.parentNode.querySelector('.scope-dirty');
-    if (!dot) return;
-    dot.hidden = false;
-    dot.classList.toggle('saving', !!on);
-    if (on) dot.textContent = ''; /* let ::before drive the spinner glyph */
-    else    dot.textContent = '•';
-  }
-  function _clearErr(field){
-    var er = field.parentNode.querySelector('.scope-err');
-    if (er){ er.textContent = ''; er.classList.remove('on'); }
-  }
-  function _setErr(field, msg){
-    var er = field.parentNode.querySelector('.scope-err');
-    if (er){ er.textContent = msg; er.classList.add('on'); }
-  }
-
-  /* POST a partial review update. Body is a plain object with allowed keys
-     from #4 (status | composite_role | composite_role_note | sample_config |
-     notes). `who` comes from the localStorage reviewer + X-Reviewer header. */
-  function _postReview(productId, patch){
-    var who = _lsGet(LS_REVIEWER) || '';
-    var url = '/api/review/' + productId.split('/').map(encodeURIComponent).join('/');
-    return fetch(url, {
-      method: 'POST',
-      cache: 'no-store',
-      headers: {'Content-Type': 'application/json',
-                'X-Reviewer': who},
-      body: JSON.stringify(patch)
-    }).then(function(r){
-      return r.json().then(function(body){
-        return {ok: r.ok, code: r.status, body: body};
-      });
-    });
-  }
-
-  /* Human insight append. Server rejects source != 'human' from this route. */
-  function _postInsight(productId, who, text){
-    var url = '/api/insight/' + productId.split('/').map(encodeURIComponent).join('/');
-    return fetch(url, {
-      method: 'POST',
-      cache: 'no-store',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({who: who, text: text, source: 'human'})
-    }).then(function(r){
-      return r.json().then(function(body){
-        return {ok: r.ok, code: r.status, body: body};
-      });
-    });
-  }
-
-  function _ensureReviewer(){
-    var who = _lsGet(LS_REVIEWER);
-    if (who) return who;
-    var name = prompt('Set your reviewer name (used to attribute your edits + insights).\nSaved locally.');
-    if (name && name.trim()){
-      _lsSet(LS_REVIEWER, name.trim());
-      return name.trim();
-    }
-    return null;
-  }
-
-  function _bindEditForm(form){
-    var productId = form.dataset.productId;
-    var noteTa   = form.querySelector('textarea[name="composite_role_note"]');
-    var roleSel  = form.querySelector('select[name="composite_role"]');
-    var status_  = form.querySelector('select[name="status"]');
-    var cfgSel   = form.querySelector('select[name="sample_config"]');
-    var notesTa  = form.querySelector('textarea[name="notes"]');
-
-    /* Role/note gating: if role is set, note textarea is enabled and
-       required; if role is empty, note is cleared + disabled. */
-    function _syncRoleNoteGate(){
-      var role = roleSel.value;
-      if (!role){
-        noteTa.value = '';
-        noteTa.disabled = true;
-        _clearErr(roleSel);
-      } else {
-        noteTa.disabled = false;
-      }
-    }
-
-    function _save(field, patchKey, alsoNote){
-      if (document.body.classList.contains('scope-read-only')) return;
-      _ensureReviewer();  // prompt on first save if not set
-      _clearErr(field);
-      _markSaving(field, true);
-      var patch = {};
-      patch[patchKey] = field.value;
-      /* Send the note alongside the role so the server's contract check has
-         both in one round trip. */
-      if (alsoNote) patch['composite_role_note'] = noteTa.value;
-      var who = _lsGet(LS_REVIEWER); if (who) patch['who'] = who;
-      _postReview(productId, patch).then(function(res){
-        _markSaving(field, false);
-        if (!res.ok){
-          _setErr(field, (res.body && res.body.error) || ('server ' + res.code));
-          return;
-        }
-        _markDirty(field, false);
-        _toast('Saved', 'ok');
-        if (res.body && res.body.entry){
-          var e = res.body.entry;
-          /* Sync any control we didn't just save from - covers the case where
-             the server clears a field (e.g. blanking role also blanks note). */
-          if (e.composite_role !== undefined && roleSel.value !== e.composite_role){
-            roleSel.value = e.composite_role || '';
-          }
-          if (e.composite_role_note !== undefined){
-            noteTa.value = e.composite_role_note || '';
-          }
-          _syncRoleNoteGate();
-        }
-      }).catch(function(){
-        _markSaving(field, false);
-        _toast('Network error - could not save (is the server running?)', 'err');
-      });
-    }
-
-    /* Selects fire onchange - immediate save. */
-    if (status_) status_.addEventListener('change', function(){ _markDirty(status_, true); _save(status_, 'status'); });
-    if (cfgSel)  cfgSel.addEventListener('change',  function(){ _markDirty(cfgSel,  true); _save(cfgSel,  'sample_config'); });
-    if (roleSel){
-      roleSel.addEventListener('change', function(){
-        _syncRoleNoteGate();
-        _markDirty(roleSel, true);
-        if (roleSel.value && !noteTa.value.trim()){
-          /* Focus the note so the reviewer sees where to type. Don't save
-             until they blur the note - saving now would fail the contract. */
-          noteTa.focus();
-          _setErr(roleSel, 'Note required - type a reason then click away to save');
-          return;
-        }
-        _save(roleSel, 'composite_role', true);
-      });
-    }
-    if (noteTa){
-      noteTa.addEventListener('input',  function(){ _markDirty(noteTa, true); });
-      noteTa.addEventListener('blur',   function(){
-        /* Blur triggers save when role is set AND note is populated. */
-        if (roleSel && roleSel.value && noteTa.value.trim()){
-          _save(roleSel, 'composite_role', true);
-        }
-      });
-    }
-    /* Notes: save on blur. */
-    if (notesTa){
-      notesTa.addEventListener('input', function(){ _markDirty(notesTa, true); });
-      notesTa.addEventListener('blur',  function(){
-        _save(notesTa, 'notes');
-      });
-    }
-  }
-
-  function _bindInsightForm(container){
-    var toggle = container.querySelector('.scope-add-toggle');
-    var form   = container.querySelector('.scope-insight-form');
-    var cancel = container.querySelector('.scope-cancel-ins');
-    var save   = container.querySelector('.scope-save-ins');
-    var whoIn  = container.querySelector('.scope-who');
-    var textTa = container.querySelector('textarea[name="text"]');
-    var errSp  = container.querySelector('.scope-err');
-    var productId = form && form.dataset.productId;
-
-    toggle.addEventListener('click', function(){
-      if (document.body.classList.contains('scope-read-only')) return;
-      form.hidden = !form.hidden;
-      if (!form.hidden){
-        var who = _lsGet(LS_REVIEWER);
-        if (who) whoIn.value = who;
-        (whoIn.value ? textTa : whoIn).focus();
-      }
-    });
-    cancel.addEventListener('click', function(){
-      form.hidden = true;
-      textTa.value = '';
-      errSp.textContent = ''; errSp.classList.remove('on');
-    });
-    save.addEventListener('click', function(){
-      var who  = (whoIn.value || '').trim();
-      var text = (textTa.value || '').trim();
-      errSp.textContent = ''; errSp.classList.remove('on');
-      if (!who){ errSp.textContent = 'Name is required'; errSp.classList.add('on'); whoIn.focus(); return; }
-      if (!text){ errSp.textContent = 'Insight text is required'; errSp.classList.add('on'); textTa.focus(); return; }
-      _lsSet(LS_REVIEWER, who);
-      save.disabled = true; save.textContent = 'Saving...';
-      _postInsight(productId, who, text).then(function(res){
-        save.disabled = false; save.textContent = 'Post insight';
-        if (!res.ok){
-          errSp.textContent = (res.body && res.body.error) || ('server ' + res.code);
-          errSp.classList.add('on');
-          return;
-        }
-        _toast('Insight posted', 'ok');
-        /* Prepend a new row into the feed so the reader sees it without a reload. */
-        var feed = container.querySelector('.scope-insights-feed');
-        if (feed && res.body.insight){
-          var i = res.body.insight;
-          var li = document.createElement('li');
-          li.className = 'ins-row';
-          li.setAttribute('data-source', i.source);
-          li.innerHTML = ''
-            + '<span class="ins-ico" title="' + i.source + '">\u{1F464}</span>'
-            + '<div class="ins-body">'
-            +   '<div class="ins-meta">'
-            +     '<span class="ins-when" title="' + i.when + '">just now</span>'
-            +     '<span class="ins-who">' + _esc(i.who) + '</span>'
-            +     '<span class="ins-badge ins-src-human">human</span>'
-            +   '</div>'
-            +   '<div class="ins-text">' + _esc(i.text) + '</div>'
-            + '</div>';
-          feed.insertBefore(li, feed.firstChild);
-          /* Also bump the visible count in the branch label. */
-          var cnt = container.querySelector('.ins-count');
-          if (cnt){
-            var n = feed.querySelectorAll('.ins-row').length;
-            cnt.textContent = '(' + n + ')';
-          }
-          /* Empty state, if present, goes away now. */
-          var empty = container.querySelector('.ins-empty');
-          if (empty) empty.remove();
-        }
-        textTa.value = '';
-        form.hidden = true;
-      }).catch(function(){
-        save.disabled = false; save.textContent = 'Post insight';
-        _toast('Network error - could not post insight', 'err');
-      });
-    });
-  }
-
-  function _esc(s){
-    return String(s == null ? '' : s)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-  }
-
-  /* Phase 5 #6 - Quick Look TL;DR "N more →" button opens the sibling
-     <details> so the reader can jump into the full insights feed. Delegated
-     listener so newly-inserted rows (from an insight POST) also work. */
   document.addEventListener('click', function(e){
     var btn = e.target.closest && e.target.closest('.ql-ins-more');
     if (!btn) return;
@@ -3695,24 +2871,6 @@ document.querySelectorAll('.filter input').forEach(function(inp){
       }
     }
   });
-
-  /* Boot on DOM ready. Probe /healthz, then wire either the read-only banner
-     or the edit handlers, per outcome. */
-  function _boot(){
-    _probeHealthz().then(function(alive){
-      if (!alive){
-        document.body.classList.add('scope-read-only');
-        document.querySelectorAll('.scope-ro-banner').forEach(function(b){ b.hidden = false; });
-      }
-      document.querySelectorAll('.scope-edit').forEach(_bindEditForm);
-      document.querySelectorAll('.scope-add-insight').forEach(_bindInsightForm);
-    });
-  }
-  if (document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', _boot);
-  } else {
-    _boot();
-  }
 })();
 </script>
 <footer>product_scope.py &bull; re-run before each biweekly &bull; --online refreshes the catalog &bull;
@@ -4728,12 +3886,14 @@ def _ql_insights_tldr_html(insights):
             + (f'<div style="margin:2px 0 0">{more_link}</div>' if more_link else ""))
 
 def _ql_insights_drill_html(insights, product_id):
-    """Full chronological feed of insights for the drill-down. Above the
-    feed sits an 'Add insight' toggle + form that mirrors the standalone
-    Insights branch below the card. Rendered inside the tier-flavoured
-    ql-d-block wrapper so it fits the drill-down visual language."""
+    """Full chronological feed of insights for the drill-down, read-only.
+    Wrapped inside the tier-flavoured ql-d-block so it fits the drill-down
+    visual language. Writes come from the CLI helper (`python tools/product_scope.py
+    --review <id> --insight "..."`) - the HTML itself never mutates anything."""
     if not insights:
-        insights_html = ('<div class="ins-empty">No insights yet.</div>')
+        insights_html = ('<div class="ins-empty">No insights yet. '
+                         'Add one with <code>python tools/product_scope.py '
+                         '--review ' + _esc(product_id) + ' --insight "..."</code>.</div>')
     else:
         ordered = sorted(insights, key=lambda i: i.get("when") or "", reverse=True)
         insights_html = ('<ul class="scope-insights-feed" style="max-height:none">'
@@ -4745,24 +3905,17 @@ def _ql_insights_drill_html(insights, product_id):
             + insights_html + '</div>')
 
 # ============================================================================
-# PHASE 5 #4 - INLINE EDIT UI (per-card controls + insight feed)
+# PHASE 5 #6 - INSIGHT ROW / RELATIVE-TIME HELPERS
 # ============================================================================
-# Every product card now carries an editable review section (Status, composite
-# role + note, sample_config, notes) plus a per-card insight feed. Controls
-# post to /api/review/<id> and /api/insight/<id> - see the JS block at the
-# bottom of the template for the client-side logic (dirty state, spinner,
-# toast, error rendering). Server-side path lives in the PHASE 5 #3 section.
-#
-# When no server is running, Phase 5 #5's read-only mode kicks in: the JS
-# probes /healthz on page load; if it 404s or times out, every control is
-# disabled and a subtle 'Read-only mode. Run --serve to enable editing.'
-# banner appears. See render_edit_section() for the DOM the JS operates on.
+# Shared by the TL;DR sub-line inside Quick Look AND by the full drill-down
+# feed. Server-side rendering only - no client-side JS mutates these once
+# generated. Writes to the underlying JSON come from the CLI helper (--review
+# <id> --insight "..."), never from the page itself.
 
 def _rel_time_html(iso_when, absolute_title=True):
     """Return an HTML span with relative-time text ('3h ago') plus the absolute
-    ISO timestamp in title= for hover reveal. Client-side JS could redo this
-    for live updating, but rendering server-side keeps insights readable when
-    JS is disabled (Phase 5 #5 requirement)."""
+    ISO timestamp in title= for hover reveal. Rendered server-side so the
+    insight feed stays readable without any JavaScript on the page."""
     if not iso_when:
         return '<span class="ins-when" title="">just now</span>'
     try:
@@ -4811,144 +3964,6 @@ def _insight_row_html(ins, kind="drill"):
             f'</div>'
             f'<div class="ins-text">{_esc(text)}</div>'
             f'</div></li>')
-
-def render_edit_section(f, r):
-    """Per-card 'Review controls' branch. Emits form controls for status,
-    composite_role (+note), sample_config, and notes. Native <form> element
-    with `action="/api/review/<id>" method="POST"` so the no-JS fallback
-    (Phase 5 #5) can submit via a full-page reload; the JS in the template
-    hijacks the change/blur events and does a fetch() POST instead.
-
-    Server-side validation errors get shown next to the offending control
-    (spec Phase 5 #5); the .scope-err <span> is where the JS writes them."""
-    path = f["path"]
-    stage = (r.get("stage") or "cataloged").lower()
-    role  = (r.get("composite_role") or "").lower()
-    note  = r.get("composite_role_note") or ""
-    cfg   = (r.get("sample_config") or "default").lower()
-    notes = r.get("note") or ""
-
-    def _sel(name, opts, current, extra_attrs=""):
-        """One <select> tag with `opts` = [(value, label), ...], current pre-
-        selected. `extra_attrs` for e.g. data-* hooks."""
-        options = []
-        for val, lbl in opts:
-            sel = " selected" if val == current else ""
-            options.append(f'<option value="{_esc(val)}"{sel}>{_esc(lbl)}</option>')
-        return (f'<select name="{name}" data-field="{name}" {extra_attrs}>'
-                + "".join(options) + '</select>')
-
-    status_opts = [("cataloged", "Cataloged"), ("reviewed", "Reviewed"),
-                   ("candidate", "Candidate"), ("focus", "FOCUS"),
-                   ("set-aside", "Set aside")]
-    role_opts = [("", "(unset)")] + [(k, v) for k, v in COMPOSITE_ROLE_LABELS.items()]
-    cfg_opts  = [("default", "default"), ("always", "always"),
-                 ("skip",    "skip")]
-
-    lrb = _esc(r.get("last_reviewed_by") or "")
-    lrd = _esc(r.get("last_reviewed_date") or "")
-    review_tail = ""
-    if lrb or lrd:
-        review_tail = (f'<div class="scope-lastreviewed">'
-                       f'Last reviewed{" by " + lrb if lrb else ""}'
-                       f'{" on " + lrd if lrd else ""}.</div>')
-
-    return ('<div class="branch"><div class="bcard">'
-            '<div class="blabel">Review controls '
-            '<span class="scope-hint">edits save automatically</span></div>'
-            # Read-only banner (Phase 5 #5). JS unhides on /healthz failure.
-            '<div class="scope-ro-banner" hidden>'
-            'Read-only mode. Start the server to enable editing: '
-            '<span class="copy-cmd light">'
-            '<code>python tools/product_scope.py --repo . --serve</code>'
-            '<button data-copy="python tools/product_scope.py --repo . --serve">Copy</button>'
-            '</span></div>'
-            '<noscript><div class="scope-nojs">'
-            'JavaScript is disabled. Edits will submit as full-page reloads.'
-            '</div></noscript>'
-            f'<form class="scope-edit" data-product-id="{_esc(path)}" '
-            f'action="/api/review/{_esc(path)}" method="POST" '
-            f'onsubmit="return false;">'
-            # Status
-            '<div class="scope-field">'
-            '<label>Status</label>'
-            + _sel("status", status_opts, stage) +
-            '<span class="scope-dirty" hidden>&#8226;</span>'
-            '<span class="scope-err"></span>'
-            '</div>'
-            # Composite role + note
-            '<div class="scope-field scope-role">'
-            '<label>Composite role</label>'
-            + _sel("composite_role", role_opts, role, 'data-note-target="composite_role_note"') +
-            '<span class="scope-dirty" hidden>&#8226;</span>'
-            f'<textarea name="composite_role_note" data-field="composite_role_note" '
-            f'rows="2" placeholder="Note required to save role"'
-            + (' disabled' if not role else '') + '>'
-            + _esc(note) +
-            '</textarea>'
-            '<span class="scope-err"></span>'
-            '</div>'
-            # Sample config
-            '<div class="scope-field">'
-            '<label>Sample config</label>'
-            + _sel("sample_config", cfg_opts, cfg) +
-            '<span class="scope-dirty" hidden>&#8226;</span>'
-            '<span class="scope-err"></span>'
-            '</div>'
-            # Notes
-            '<div class="scope-field scope-notes">'
-            '<label>Notes</label>'
-            f'<textarea name="notes" data-field="notes" rows="2" '
-            f'placeholder="Free text notes; saves on blur">'
-            + _esc(notes) +
-            '</textarea>'
-            '<span class="scope-dirty" hidden>&#8226;</span>'
-            '<span class="scope-err"></span>'
-            '</div>'
-            # No-JS fallback: a bare submit that native form POST will hit.
-            '<button type="submit" class="scope-nojs-save">Save (no-JS)</button>'
-            '</form>'
-            + review_tail
-            + '</div></div>')
-
-def render_insight_feed(f, r):
-    """Full 'Insights' branch on each card - always visible, chronological
-    (newest first), one row per insight. Below the feed sits the 'Add insight'
-    collapsed input that expands on click. This is the drill-down home for
-    the feed; Quick Look TL;DR (Phase 5 #6) surfaces the last 2 as a compact
-    sub-line but the full history lives here."""
-    path = f["path"]
-    insights = list(r.get("insights") or [])
-    insights.sort(key=lambda i: i.get("when") or "", reverse=True)
-    rows_html = "".join(_insight_row_html(i, kind="drill") for i in insights)
-    empty_state = ""
-    if not insights:
-        empty_state = ('<div class="ins-empty">No insights yet. Add one below '
-                       'or run <code>--warm-cache</code> / regenerate to '
-                       'trigger auto-insights.</div>')
-    return ('<div class="branch"><div class="bcard">'
-            '<div class="blabel">Insights '
-            f'<span class="ins-count">({len(insights)})</span></div>'
-            + empty_state +
-            f'<ul class="scope-insights-feed" data-product-id="{_esc(path)}">'
-            + rows_html + '</ul>'
-            # Collapsed 'Add insight' button + hidden form.
-            '<div class="scope-add-insight">'
-            '<button type="button" class="scope-add-toggle">+ Add insight</button>'
-            f'<form class="scope-insight-form" data-product-id="{_esc(path)}" '
-            f'action="/api/insight/{_esc(path)}" method="POST" '
-            f'hidden onsubmit="return false;">'
-            '<input type="hidden" name="source" value="human">'
-            '<input type="text" name="who" placeholder="Your name" '
-            'class="scope-who" required>'
-            '<textarea name="text" placeholder="What did you observe or confirm? '
-            '(1-3 sentences; posted verbatim to the team feed)" '
-            'rows="3" required></textarea>'
-            '<div class="scope-insight-actions">'
-            '<button type="submit" class="scope-save-ins">Post insight</button>'
-            '<button type="button" class="scope-cancel-ins">Cancel</button>'
-            '<span class="scope-err"></span>'
-            '</div></form></div></div></div>')
 
 def render_quick_look(f, probe_entry, cache_entry, warm_summary=None, insights=None):
     """One card's Quick Look branch. Always shows a compact 2-3 line TL;DR:
@@ -5198,11 +4213,10 @@ def product_row(f, review, work, probes, ctx=None):
         branches.append('<div class="branch"><div class="bcard"><div class="blabel">'
                         f'Curated insights ({len(finds)})</div>{cards}</div></div>')
 
-    # Phase 5 #4 - editable review controls + insight feed. Both sections are
-    # always rendered; Phase 5 #5's read-only mode disables the form controls
-    # client-side when /healthz fails.
-    branches.append(render_edit_section(f, r))
-    branches.append(render_insight_feed(f, r))
+    # Phase 5 #6 - insights render inside Quick Look (TL;DR + drill-down feed).
+    # No standalone Insights branch and no inline edit controls: after the
+    # CLI-helper pivot, writes come from `python tools/product_scope.py
+    # --review <id> --insight "..."`, not from the browser.
 
     search = (f["path"] + " " + f["title"] + " " + f["group"] + " " + f["subject"]).lower()
     folded = "" if st == "focus" else " folded"
@@ -5633,20 +4647,6 @@ def main():
     ap.add_argument("--concurrency", type=int, default=WARM_DEFAULT_WORKERS, metavar="N",
                     help=f"worker count for --warm-cache (default {WARM_DEFAULT_WORKERS}). "
                          "Set to 1 for a sequential run (easier to debug).")
-    # ---- Phase 5 #3: --serve HTTP server (see PHASE 5 #3 section) -----------
-    ap.add_argument("--serve", action="store_true",
-                    help="bring up a local HTTP server on 127.0.0.1:<port> that "
-                         "serves product_report.html and exposes JSON write "
-                         "endpoints so teammates can edit review fields + insights "
-                         "from the browser instead of hand-editing product_review.json. "
-                         "Non-negotiably 127.0.0.1 only (never 0.0.0.0).")
-    ap.add_argument("--port", type=int, default=SERVE_DEFAULT_PORT, metavar="N",
-                    help=f"port for --serve (default {SERVE_DEFAULT_PORT})")
-    ap.add_argument("--refresh-interval", type=int, default=SERVE_DEFAULT_REFRESH_S,
-                    metavar="N",
-                    help=f"seconds between background /api/state refreshes "
-                         f"(default {SERVE_DEFAULT_REFRESH_S}). Lower = fresher state "
-                         "in the UI but more disk reads.")
     args = ap.parse_args()
     repo = Path(args.repo).resolve()
     if not (repo / "ingestion").exists():
@@ -5656,13 +4656,6 @@ def main():
         out = Path(args.out).resolve() if args.out else repo / default_name
     else:
         out = Path(args.out).resolve() if args.out else repo / "product_report.html"
-
-    # Phase 5 #3 - --serve exits via serve_forever() and never falls through to
-    # the render pipeline. Runs the HTTP loop on 127.0.0.1:<port>. Regen on
-    # first hit (when product_report.html is missing) uses a subprocess so the
-    # server thread never blocks on the full main() pipeline.
-    if args.serve:
-        sys.exit(serve_forever(repo, out, args.port, args.refresh_interval))
 
     print(f"Scanning {repo} ...")
     evidence = deep_scan(repo) if DEEP else fallback_scan(repo)

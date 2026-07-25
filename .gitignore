@@ -49,9 +49,10 @@ scope_data_cache.json
 # scope `git log --since=<T>` to the window since the previous run. Written
 # at end of every regen. Local-only; not shareable state.
 .product_scope_last_regen.json
-# Phase 5 --serve companion lock file (fcntl.flock target so the server and
-# --warm-cache serialize their writes to product_review.json). Byte content
-# is empty; only the file's exclusive lock is used. Also the temp file the
-# atomic-rename writer stages under (.product_review.json.tmp.<pid>).
+# Phase 5 review-lock companion file (fcntl.flock target so the --review CLI
+# helper, --warm-cache, and regen serialize their writes to
+# product_review.json). Byte content is empty; only the file's exclusive
+# lock is used. Also the temp file the atomic-rename writer stages under
+# (.product_review.json.tmp.<pid>).
 .product_review.json.lock
 .product_review.json.tmp.*
