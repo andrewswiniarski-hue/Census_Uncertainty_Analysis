@@ -86,6 +86,42 @@ Results land in **`product_probes.json` at the repo root, which IS committed** �
 
 ---
 
+## Sampling a product — asking the API for actual data
+
+A **probe** tells you what a product publishes. A **sample** fetches an actual data slice and runs a canonical EDA on it — dtype, missingness, numeric summaries, categorical top-5, geography breakdown, unicode sparklines. Same principle as the probe: it reports what the data looks like, it never writes a verdict.
+
+**To sample one product directly:**
+
+```powershell
+python tools\product_scope.py --repo . --sample --product acs/acs5
+```
+
+**To batch-sample every Candidate:**
+
+```powershell
+python tools\product_scope.py --repo . --sample
+```
+
+Batch mode picks up every product currently `stage: "candidate"` in `product_review.json`, skips ones with a fresh cache (< 7 days), and skips non-API products (DAS demo, TIGER, anything without a queryable `variables.json`) with a clear message. Sequential requests with a 500 ms delay to be polite to the Census API.
+
+**Force a re-sample** even if the cache is fresh:
+
+```powershell
+python tools\product_scope.py --repo . --sample --refresh
+```
+
+`--refresh` also runs a **diff** against the previous cached sample and surfaces material changes (new/removed columns, dtype changes, missingness deltas > 10 percentage points, row-count deltas > 10 %) both on the affected card and in the Home tab's "Since last regeneration" banner.
+
+**Sample size** defaults to 100 rows; override with `--sample-size N`. The Census data API truncates automatically, so smaller = faster.
+
+**API key:** if a `CENSUS_API_KEY` line is present in `.env`, it's appended to every request (higher rate limits). Public endpoints work without one, subject to the usual 500-requests-per-day cap.
+
+Results land in **`scope_data_cache.json` at the repo root, which is GITIGNORED** — a sample is a moment-in-time slice against a rate-limited endpoint, not shareable factual state (unlike probes, which describe what an endpoint publishes and ARE committed). If two teammates need the same slice, each runs their own sample.
+
+**Where the EDA appears in the report:** every product with a cached sample gets an "EDA snapshot" section on its card (below "Our progress"), showing the freshness pill, the source URL, the four EDA tables, and — if `--refresh` produced any drift — a per-card amber banner listing what changed. Products marked Candidate without a cached sample get a copyable `--sample` command in the "Suggested next step" panel instead.
+
+---
+
 ## Reviewing a product — the actual work
 
 Everything starts blank on purpose. **The tool has no built-in knowledge of what uncertainty any product publishes**, and that is deliberate: a catalog path identifies a *program*, not a *methodology*. `acs/acs5` and `acs/acs5/pums` share a prefix and have completely different uncertainty surfaces — one publishes a 90% margin of error on every estimate, the other hands you replicate weights and expects you to compute your own standard errors. Any rule that guesses from the path will be confidently wrong somewhere, so we don't guess.
@@ -147,6 +183,7 @@ Subject and program affect **display order only**. They say nothing about a prod
 | `product_probes.json` | **yes** | what the API told us; probe once, share with the team |
 | `product_report.html` | no | regenerated every run |
 | `scope_field_cache.json` | no | ~4 MB API catalog cache, regenerable with `--online` |
+| `scope_data_cache.json` | no | Phase 3 sample cache: EDA on actual API-fetched rows, regenerable with `--sample`. Local-only because it's a moment-in-time slice against a rate-limited endpoint — probes report facts about an endpoint, samples report facts about one download. |
 
 ---
 
