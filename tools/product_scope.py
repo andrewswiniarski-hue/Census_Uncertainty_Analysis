@@ -2881,6 +2881,146 @@ footer{padding:22px 44px;color:var(--muted);font-size:11.5px;}
 .facet .fhint code{font-family:ui-monospace,Consolas,monospace;font-size:10.5px;
      background:var(--ice);color:var(--navy);padding:0 4px;border-radius:3px;font-style:normal;}
 @media(max-width:900px){.products-shell{flex-direction:column;} .facets{position:static;width:100%;flex:none;}}
+/* Phase 5 #4 - inline edit UI + insight feed. Every card has a Review-
+   controls bcard and an Insights bcard; the JS at the bottom hijacks change/
+   blur events on the controls and POSTs to /api/review/<id>. When the
+   /healthz probe (Phase 5 #5) fails, .read-only is added to <body> and every
+   .scope-edit control becomes disabled + the .scope-ro-banner unhides. */
+.scope-edit{display:flex;flex-direction:column;gap:8px;margin-top:2px;}
+.scope-hint{font-family:"Segoe UI",sans-serif;font-weight:400;font-style:italic;
+     text-transform:none;letter-spacing:0;color:var(--muted);font-size:10.5px;
+     margin-left:6px;}
+.scope-field{display:grid;grid-template-columns:120px 1fr auto;
+     column-gap:8px;row-gap:4px;align-items:center;}
+.scope-field label{font-size:10px;letter-spacing:.09em;text-transform:uppercase;
+     font-weight:800;color:var(--muted);}
+.scope-field select,
+.scope-field textarea,
+.scope-field input[type=text]{border:1px solid var(--line);border-radius:5px;
+     padding:4px 7px;font:inherit;font-size:12px;background:#fff;color:var(--ink);
+     min-width:0;width:100%;}
+.scope-field select:focus,
+.scope-field textarea:focus,
+.scope-field input[type=text]:focus{outline:2px solid #8FA8D8;outline-offset:0;
+     border-color:#3A4890;}
+.scope-field textarea{resize:vertical;min-height:34px;font-family:inherit;line-height:1.4;}
+.scope-role{grid-template-columns:120px 1fr auto;}
+.scope-role textarea[name="composite_role_note"]{grid-column:2 / span 2;
+     font-size:11.5px;background:#FCFDFF;}
+.scope-role textarea[disabled]{background:#F6F7FA;color:var(--muted);
+     cursor:not-allowed;}
+.scope-notes textarea{grid-column:2 / span 2;font-size:11.5px;background:#FCFDFF;}
+.scope-dirty{color:var(--gold);font-size:14px;line-height:1;width:12px;
+     text-align:center;font-weight:700;user-select:none;}
+.scope-dirty.saving{color:#3A4890;}
+.scope-dirty.saving::before{content:"\21BB";animation:scope-spin 1s linear infinite;}
+.scope-dirty.saving{content:"";}   /* let ::before drive the glyph */
+@keyframes scope-spin{from{transform:rotate(0);} to{transform:rotate(360deg);}}
+.scope-err{color:#C0392B;font-size:10.5px;line-height:1.3;grid-column:2 / span 2;
+     min-height:0;display:none;}
+.scope-err.on{display:block;padding-top:2px;}
+.scope-lastreviewed{font-size:10px;color:var(--muted);margin-top:5px;
+     font-style:italic;letter-spacing:.02em;}
+.scope-nojs-save{display:none;font:inherit;font-size:11px;padding:4px 12px;
+     background:var(--line);border:0;border-radius:4px;color:var(--navy);
+     font-weight:700;cursor:pointer;margin-top:4px;align-self:flex-start;}
+/* Read-only banner (Phase 5 #5). Only shown when the /healthz probe fails.
+   Subtle grey box - no red, no alarming icon; edits are gracefully unavailable
+   rather than "broken". */
+.scope-ro-banner{background:#F6F7FA;border:1px solid var(--line);
+     border-left:3px solid #8FA8D8;border-radius:5px;padding:6px 10px;
+     font-size:11px;color:var(--ink);line-height:1.4;display:flex;
+     align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:6px;}
+.scope-ro-banner .copy-cmd{margin-left:4px;}
+.scope-nojs{font-size:11px;color:#6E4E11;background:#FBF0D6;
+     border-left:3px solid var(--gold);padding:5px 9px;border-radius:4px;
+     margin-bottom:5px;}
+/* Read-only state - JS toggles body.scope-read-only when /healthz fails.
+   Every form control becomes non-interactive; the banner + copy hint appear;
+   the noJS submit button also stays hidden because the API round-trip still
+   requires the server. */
+body.scope-read-only .scope-edit select,
+body.scope-read-only .scope-edit textarea,
+body.scope-read-only .scope-edit input[type=text],
+body.scope-read-only .scope-add-insight button,
+body.scope-read-only .scope-insight-form input,
+body.scope-read-only .scope-insight-form textarea,
+body.scope-read-only .scope-insight-form button{
+     background:#F6F7FA;color:var(--muted);cursor:not-allowed;
+     pointer-events:none;opacity:0.75;}
+body.scope-read-only .scope-ro-banner{display:flex !important;}
+/* Insight feed */
+.scope-insights-feed{list-style:none;padding:0;margin:4px 0 0;
+     max-height:340px;overflow-y:auto;}
+.ins-empty{font-size:11px;color:var(--muted);font-style:italic;padding:4px 0;}
+.ins-empty code{font-family:ui-monospace,Consolas,monospace;font-size:10.5px;
+     background:var(--ice);color:var(--navy);padding:0 4px;border-radius:3px;
+     font-style:normal;}
+.ins-row{display:flex;gap:8px;align-items:flex-start;padding:5px 0;
+     border-bottom:1px dotted #E1E7F0;font-size:11.5px;}
+.ins-row:last-child{border-bottom:0;}
+.ins-ico{font-size:14px;line-height:1;padding-top:2px;flex:0 0 18px;text-align:center;}
+.ins-body{flex:1;min-width:0;}
+.ins-meta{display:flex;gap:6px;align-items:baseline;font-size:10.5px;
+     color:var(--muted);flex-wrap:wrap;}
+.ins-when{font-family:ui-monospace,Consolas,monospace;}
+.ins-who{color:var(--navy);font-weight:600;font-size:11px;}
+.ins-badge{background:var(--ice);color:var(--navy);border-radius:8px;
+     padding:0 6px;font-size:9.5px;letter-spacing:.03em;font-weight:700;
+     text-transform:uppercase;}
+.ins-badge.ins-src-auto-repo{background:#F1F5FF;color:#1F2A5C;}
+.ins-badge.ins-src-auto-cache_diff{background:#EEF7EF;color:#1F5A2E;}
+.ins-badge.ins-src-auto-divergence{background:#FBF0D6;color:#6E4E11;}
+.ins-badge.ins-src-human{background:#F1E7C8;color:#6B4E11;}
+.ins-text{color:var(--ink);line-height:1.45;margin-top:1px;
+     overflow-wrap:anywhere;}
+.ins-count{font-family:"Segoe UI",sans-serif;font-weight:400;color:var(--muted);
+     text-transform:none;letter-spacing:0;font-size:11px;margin-left:4px;}
+/* Add-insight form (collapsed by default). */
+.scope-add-insight{margin-top:6px;}
+.scope-add-toggle{background:var(--ice);border:1px dashed var(--line);
+     border-radius:5px;padding:4px 12px;font:inherit;font-size:11px;
+     color:var(--navy);font-weight:700;cursor:pointer;}
+.scope-add-toggle:hover{background:#E4EBFA;}
+.scope-insight-form{display:flex;flex-direction:column;gap:6px;margin-top:6px;
+     padding:8px 10px;background:#FCFDFF;border:1px solid var(--line);
+     border-radius:5px;}
+.scope-insight-form input[type=text],
+.scope-insight-form textarea{border:1px solid var(--line);border-radius:4px;
+     padding:5px 8px;font:inherit;font-size:12px;color:var(--ink);}
+.scope-insight-form textarea{resize:vertical;font-family:inherit;line-height:1.45;}
+.scope-insight-actions{display:flex;gap:6px;align-items:center;}
+.scope-save-ins{background:var(--navy);color:#F5D77A;border:0;border-radius:5px;
+     padding:5px 14px;font:inherit;font-size:11.5px;font-weight:700;cursor:pointer;
+     letter-spacing:.02em;}
+.scope-save-ins:hover{background:#28356B;}
+.scope-cancel-ins{background:#F6F7FA;color:var(--muted);border:1px solid var(--line);
+     border-radius:5px;padding:5px 10px;font:inherit;font-size:11.5px;cursor:pointer;}
+.scope-cancel-ins:hover{background:var(--ice);color:var(--navy);}
+/* Toast (network-level errors + save-success). Sits above everything. */
+#scope-toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);
+     background:#22283B;color:#F5F7FA;padding:9px 18px;border-radius:20px;
+     font-size:12.5px;box-shadow:0 4px 14px rgba(0,0,0,.24);z-index:20;
+     opacity:0;pointer-events:none;transition:opacity .18s ease-out;
+     font-weight:600;letter-spacing:.02em;max-width:520px;}
+#scope-toast.show{opacity:1;}
+#scope-toast.err{background:#7A1F1F;color:#FFE8E4;}
+#scope-toast.ok{background:#1F4A2E;color:#E6F5EA;}
+/* Phase 5 #6 - Quick Look TL;DR insight sub-line. Compact list, no borders,
+   inherits the tier stripe so the eye reads it as part of the TL;DR pack. */
+.ql-insights{list-style:none;padding:0;margin:3px 0 0;font-size:10.5px;
+     line-height:1.55;color:var(--muted);}
+.ql-insights li.ins-tldr{display:flex;gap:5px;align-items:baseline;padding:1px 0;
+     overflow-wrap:anywhere;}
+.ql-insights .ins-ico{font-size:11px;line-height:1;flex:0 0 15px;padding-top:1px;
+     text-align:center;}
+.ql-insights .ins-when{font-family:ui-monospace,Consolas,monospace;color:var(--muted);}
+.ql-insights .ins-who{color:var(--navy);font-weight:600;font-size:10.5px;}
+.ql-insights .ins-text{color:var(--ink);}
+.ql-ins-more{font-size:10px;color:#3A4890;cursor:pointer;font-weight:600;
+     background:none;border:0;padding:1px 0;letter-spacing:.02em;
+     text-decoration:underline dotted;font-family:inherit;}
+.ql-ins-more:hover{color:var(--navy);}
 </style></head><body>
 <header>
   <div class="kicker">PRODUCT SCOPE &bull; GENERATED __DATE__ &bull; __CATNOTE__</div>
@@ -3174,6 +3314,313 @@ document.querySelectorAll('.filter input').forEach(function(inp){
     e.preventDefault();
     target.open = !target.open;
   });
+})();
+/* --- Phase 5 #4 / #5 - inline edit UI + read-only degradation ---------------
+   Two responsibilities in this block:
+     (a) probe /healthz on load; if the server is unreachable, add
+         body.scope-read-only so every edit control disables.
+     (b) hijack change/blur events on .scope-edit form controls and POST to
+         /api/review/<id>; hijack the .scope-insight-form submit and POST to
+         /api/insight/<id>; render inline validation errors from the server.
+
+   Toast (bottom center) is used ONLY for network-level failures (server went
+   away mid-session, request timed out). Validation errors from the server
+   render inline near the offending control, not as a toast. */
+(function(){
+  var TOAST_TTL_MS = 2000;
+  var LS_REVIEWER  = 'product_scope:reviewer';
+
+  function _toast(msg, kind){
+    var el = document.getElementById('scope-toast');
+    if (!el){
+      el = document.createElement('div');
+      el.id = 'scope-toast';
+      document.body.appendChild(el);
+    }
+    el.textContent = msg;
+    el.className = 'show' + (kind ? ' ' + kind : '');
+    if (el._t) clearTimeout(el._t);
+    el._t = setTimeout(function(){ el.className = ''; }, TOAST_TTL_MS);
+  }
+
+  function _lsGet(k){ try { return localStorage.getItem(k); } catch(_){ return null; } }
+  function _lsSet(k, v){ try { localStorage.setItem(k, v); } catch(_){} }
+
+  /* Probe the server once at load. 1s timeout: a static file opened from
+     disk fails immediately (no server), and a live server responds instantly
+     on loopback. AbortController is standard in every browser we support. */
+  function _probeHealthz(){
+    return new Promise(function(resolve){
+      if (!window.fetch){ resolve(false); return; }
+      var ctrl = new AbortController();
+      var timer = setTimeout(function(){ ctrl.abort(); }, 1000);
+      fetch('/healthz', {signal: ctrl.signal, cache: 'no-store'})
+        .then(function(r){ clearTimeout(timer); resolve(r.ok); })
+        .catch(function(){ clearTimeout(timer); resolve(false); });
+    });
+  }
+
+  function _markDirty(field, on){
+    var dot = field.parentNode.querySelector('.scope-dirty');
+    if (!dot) return;
+    dot.hidden = !on;
+    dot.classList.remove('saving');
+  }
+  function _markSaving(field, on){
+    var dot = field.parentNode.querySelector('.scope-dirty');
+    if (!dot) return;
+    dot.hidden = false;
+    dot.classList.toggle('saving', !!on);
+    if (on) dot.textContent = ''; /* let ::before drive the spinner glyph */
+    else    dot.textContent = '•';
+  }
+  function _clearErr(field){
+    var er = field.parentNode.querySelector('.scope-err');
+    if (er){ er.textContent = ''; er.classList.remove('on'); }
+  }
+  function _setErr(field, msg){
+    var er = field.parentNode.querySelector('.scope-err');
+    if (er){ er.textContent = msg; er.classList.add('on'); }
+  }
+
+  /* POST a partial review update. Body is a plain object with allowed keys
+     from #4 (status | composite_role | composite_role_note | sample_config |
+     notes). `who` comes from the localStorage reviewer + X-Reviewer header. */
+  function _postReview(productId, patch){
+    var who = _lsGet(LS_REVIEWER) || '';
+    var url = '/api/review/' + productId.split('/').map(encodeURIComponent).join('/');
+    return fetch(url, {
+      method: 'POST',
+      cache: 'no-store',
+      headers: {'Content-Type': 'application/json',
+                'X-Reviewer': who},
+      body: JSON.stringify(patch)
+    }).then(function(r){
+      return r.json().then(function(body){
+        return {ok: r.ok, code: r.status, body: body};
+      });
+    });
+  }
+
+  /* Human insight append. Server rejects source != 'human' from this route. */
+  function _postInsight(productId, who, text){
+    var url = '/api/insight/' + productId.split('/').map(encodeURIComponent).join('/');
+    return fetch(url, {
+      method: 'POST',
+      cache: 'no-store',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({who: who, text: text, source: 'human'})
+    }).then(function(r){
+      return r.json().then(function(body){
+        return {ok: r.ok, code: r.status, body: body};
+      });
+    });
+  }
+
+  function _ensureReviewer(){
+    var who = _lsGet(LS_REVIEWER);
+    if (who) return who;
+    var name = prompt('Set your reviewer name (used to attribute your edits + insights).\nSaved locally.');
+    if (name && name.trim()){
+      _lsSet(LS_REVIEWER, name.trim());
+      return name.trim();
+    }
+    return null;
+  }
+
+  function _bindEditForm(form){
+    var productId = form.dataset.productId;
+    var noteTa   = form.querySelector('textarea[name="composite_role_note"]');
+    var roleSel  = form.querySelector('select[name="composite_role"]');
+    var status_  = form.querySelector('select[name="status"]');
+    var cfgSel   = form.querySelector('select[name="sample_config"]');
+    var notesTa  = form.querySelector('textarea[name="notes"]');
+
+    /* Role/note gating: if role is set, note textarea is enabled and
+       required; if role is empty, note is cleared + disabled. */
+    function _syncRoleNoteGate(){
+      var role = roleSel.value;
+      if (!role){
+        noteTa.value = '';
+        noteTa.disabled = true;
+        _clearErr(roleSel);
+      } else {
+        noteTa.disabled = false;
+      }
+    }
+
+    function _save(field, patchKey, alsoNote){
+      if (document.body.classList.contains('scope-read-only')) return;
+      _ensureReviewer();  // prompt on first save if not set
+      _clearErr(field);
+      _markSaving(field, true);
+      var patch = {};
+      patch[patchKey] = field.value;
+      /* Send the note alongside the role so the server's contract check has
+         both in one round trip. */
+      if (alsoNote) patch['composite_role_note'] = noteTa.value;
+      var who = _lsGet(LS_REVIEWER); if (who) patch['who'] = who;
+      _postReview(productId, patch).then(function(res){
+        _markSaving(field, false);
+        if (!res.ok){
+          _setErr(field, (res.body && res.body.error) || ('server ' + res.code));
+          return;
+        }
+        _markDirty(field, false);
+        _toast('Saved', 'ok');
+        if (res.body && res.body.entry){
+          var e = res.body.entry;
+          /* Sync any control we didn't just save from - covers the case where
+             the server clears a field (e.g. blanking role also blanks note). */
+          if (e.composite_role !== undefined && roleSel.value !== e.composite_role){
+            roleSel.value = e.composite_role || '';
+          }
+          if (e.composite_role_note !== undefined){
+            noteTa.value = e.composite_role_note || '';
+          }
+          _syncRoleNoteGate();
+        }
+      }).catch(function(){
+        _markSaving(field, false);
+        _toast('Network error - could not save (is the server running?)', 'err');
+      });
+    }
+
+    /* Selects fire onchange - immediate save. */
+    if (status_) status_.addEventListener('change', function(){ _markDirty(status_, true); _save(status_, 'status'); });
+    if (cfgSel)  cfgSel.addEventListener('change',  function(){ _markDirty(cfgSel,  true); _save(cfgSel,  'sample_config'); });
+    if (roleSel){
+      roleSel.addEventListener('change', function(){
+        _syncRoleNoteGate();
+        _markDirty(roleSel, true);
+        if (roleSel.value && !noteTa.value.trim()){
+          /* Focus the note so the reviewer sees where to type. Don't save
+             until they blur the note - saving now would fail the contract. */
+          noteTa.focus();
+          _setErr(roleSel, 'Note required - type a reason then click away to save');
+          return;
+        }
+        _save(roleSel, 'composite_role', true);
+      });
+    }
+    if (noteTa){
+      noteTa.addEventListener('input',  function(){ _markDirty(noteTa, true); });
+      noteTa.addEventListener('blur',   function(){
+        /* Blur triggers save when role is set AND note is populated. */
+        if (roleSel && roleSel.value && noteTa.value.trim()){
+          _save(roleSel, 'composite_role', true);
+        }
+      });
+    }
+    /* Notes: save on blur. */
+    if (notesTa){
+      notesTa.addEventListener('input', function(){ _markDirty(notesTa, true); });
+      notesTa.addEventListener('blur',  function(){
+        _save(notesTa, 'notes');
+      });
+    }
+  }
+
+  function _bindInsightForm(container){
+    var toggle = container.querySelector('.scope-add-toggle');
+    var form   = container.querySelector('.scope-insight-form');
+    var cancel = container.querySelector('.scope-cancel-ins');
+    var save   = container.querySelector('.scope-save-ins');
+    var whoIn  = container.querySelector('.scope-who');
+    var textTa = container.querySelector('textarea[name="text"]');
+    var errSp  = container.querySelector('.scope-err');
+    var productId = form && form.dataset.productId;
+
+    toggle.addEventListener('click', function(){
+      if (document.body.classList.contains('scope-read-only')) return;
+      form.hidden = !form.hidden;
+      if (!form.hidden){
+        var who = _lsGet(LS_REVIEWER);
+        if (who) whoIn.value = who;
+        (whoIn.value ? textTa : whoIn).focus();
+      }
+    });
+    cancel.addEventListener('click', function(){
+      form.hidden = true;
+      textTa.value = '';
+      errSp.textContent = ''; errSp.classList.remove('on');
+    });
+    save.addEventListener('click', function(){
+      var who  = (whoIn.value || '').trim();
+      var text = (textTa.value || '').trim();
+      errSp.textContent = ''; errSp.classList.remove('on');
+      if (!who){ errSp.textContent = 'Name is required'; errSp.classList.add('on'); whoIn.focus(); return; }
+      if (!text){ errSp.textContent = 'Insight text is required'; errSp.classList.add('on'); textTa.focus(); return; }
+      _lsSet(LS_REVIEWER, who);
+      save.disabled = true; save.textContent = 'Saving...';
+      _postInsight(productId, who, text).then(function(res){
+        save.disabled = false; save.textContent = 'Post insight';
+        if (!res.ok){
+          errSp.textContent = (res.body && res.body.error) || ('server ' + res.code);
+          errSp.classList.add('on');
+          return;
+        }
+        _toast('Insight posted', 'ok');
+        /* Prepend a new row into the feed so the reader sees it without a reload. */
+        var feed = container.querySelector('.scope-insights-feed');
+        if (feed && res.body.insight){
+          var i = res.body.insight;
+          var li = document.createElement('li');
+          li.className = 'ins-row';
+          li.setAttribute('data-source', i.source);
+          li.innerHTML = ''
+            + '<span class="ins-ico" title="' + i.source + '">\u{1F464}</span>'
+            + '<div class="ins-body">'
+            +   '<div class="ins-meta">'
+            +     '<span class="ins-when" title="' + i.when + '">just now</span>'
+            +     '<span class="ins-who">' + _esc(i.who) + '</span>'
+            +     '<span class="ins-badge ins-src-human">human</span>'
+            +   '</div>'
+            +   '<div class="ins-text">' + _esc(i.text) + '</div>'
+            + '</div>';
+          feed.insertBefore(li, feed.firstChild);
+          /* Also bump the visible count in the branch label. */
+          var cnt = container.querySelector('.ins-count');
+          if (cnt){
+            var n = feed.querySelectorAll('.ins-row').length;
+            cnt.textContent = '(' + n + ')';
+          }
+          /* Empty state, if present, goes away now. */
+          var empty = container.querySelector('.ins-empty');
+          if (empty) empty.remove();
+        }
+        textTa.value = '';
+        form.hidden = true;
+      }).catch(function(){
+        save.disabled = false; save.textContent = 'Post insight';
+        _toast('Network error - could not post insight', 'err');
+      });
+    });
+  }
+
+  function _esc(s){
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  /* Boot on DOM ready. Probe /healthz, then wire either the read-only banner
+     or the edit handlers, per outcome. */
+  function _boot(){
+    _probeHealthz().then(function(alive){
+      if (!alive){
+        document.body.classList.add('scope-read-only');
+        document.querySelectorAll('.scope-ro-banner').forEach(function(b){ b.hidden = false; });
+      }
+      document.querySelectorAll('.scope-edit').forEach(_bindEditForm);
+      document.querySelectorAll('.scope-add-insight').forEach(_bindInsightForm);
+    });
+  }
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', _boot);
+  } else {
+    _boot();
+  }
 })();
 </script>
 <footer>product_scope.py &bull; re-run before each biweekly &bull; --online refreshes the catalog &bull;
@@ -4153,6 +4600,212 @@ def _ql_details_html(f, probe_entry, cache_entry, tier, non_api):
         parts.append('<div class="ql-d-block ql-d-empty-wrap">' + empty + '</div>')
     return "".join(parts)
 
+# ============================================================================
+# PHASE 5 #4 - INLINE EDIT UI (per-card controls + insight feed)
+# ============================================================================
+# Every product card now carries an editable review section (Status, composite
+# role + note, sample_config, notes) plus a per-card insight feed. Controls
+# post to /api/review/<id> and /api/insight/<id> - see the JS block at the
+# bottom of the template for the client-side logic (dirty state, spinner,
+# toast, error rendering). Server-side path lives in the PHASE 5 #3 section.
+#
+# When no server is running, Phase 5 #5's read-only mode kicks in: the JS
+# probes /healthz on page load; if it 404s or times out, every control is
+# disabled and a subtle 'Read-only mode. Run --serve to enable editing.'
+# banner appears. See render_edit_section() for the DOM the JS operates on.
+
+def _rel_time_html(iso_when, absolute_title=True):
+    """Return an HTML span with relative-time text ('3h ago') plus the absolute
+    ISO timestamp in title= for hover reveal. Client-side JS could redo this
+    for live updating, but rendering server-side keeps insights readable when
+    JS is disabled (Phase 5 #5 requirement)."""
+    if not iso_when:
+        return '<span class="ins-when" title="">just now</span>'
+    try:
+        ts = iso_when
+        if ts.endswith("Z"): ts = ts[:-1] + "+00:00"
+        when = datetime.datetime.fromisoformat(ts)
+    except Exception:
+        return f'<span class="ins-when" title="{_esc(iso_when)}">{_esc(iso_when)}</span>'
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=datetime.timezone.utc)
+    now = datetime.datetime.now(datetime.timezone.utc)
+    age = (now - when).total_seconds()
+    if age < 0: age = 0
+    if   age < 90:     lbl = f"{int(max(1, age))}s ago"
+    elif age < 3600:   lbl = f"{int(round(age/60))}m ago"
+    elif age < 86400:  lbl = f"{int(round(age/3600))}h ago"
+    else:              lbl = f"{int(round(age/86400))}d ago"
+    title = _esc(iso_when) if absolute_title else ""
+    return f'<span class="ins-when" title="{title}">{_esc(lbl)}</span>'
+
+def _insight_row_html(ins, kind="drill"):
+    """Render one insight entry. `kind` is either 'drill' (full detail, in the
+    drill-down feed and the standalone Insights section) or 'tldr' (compact,
+    used by Quick Look TL;DR - text truncated to 80 chars, no source badge)."""
+    source = ins.get("source") or INSIGHT_HUMAN
+    icon = INSIGHT_SOURCE_ICON.get(source, "\U0001F4C4")  # page icon fallback
+    who = ins.get("who") or ""
+    text = ins.get("text") or ""
+    when_html = _rel_time_html(ins.get("when"))
+    if kind == "tldr":
+        # Line 1: icon + relative-time + who + text-truncated. No badge to
+        # keep the TL;DR one glance.
+        trunc = text if len(text) <= 80 else text[:77].rstrip() + "..."
+        return ('<li class="ins-tldr" data-source="' + _esc(source) + '">'
+                f'<span class="ins-ico">{icon}</span>'
+                f'{when_html}'
+                f'<span class="ins-who">{_esc(who)}</span>: '
+                f'<span class="ins-text">{_esc(trunc)}</span></li>')
+    badge = _esc(INSIGHT_SOURCE_LABEL.get(source, source))
+    return ('<li class="ins-row" data-source="' + _esc(source) + '">'
+            f'<span class="ins-ico" title="{_esc(source)}">{icon}</span>'
+            f'<div class="ins-body">'
+            f'<div class="ins-meta">{when_html}'
+            f'<span class="ins-who">{_esc(who)}</span>'
+            f'<span class="ins-badge ins-src-{_esc(source.replace(":", "-"))}">{badge}</span>'
+            f'</div>'
+            f'<div class="ins-text">{_esc(text)}</div>'
+            f'</div></li>')
+
+def render_edit_section(f, r):
+    """Per-card 'Review controls' branch. Emits form controls for status,
+    composite_role (+note), sample_config, and notes. Native <form> element
+    with `action="/api/review/<id>" method="POST"` so the no-JS fallback
+    (Phase 5 #5) can submit via a full-page reload; the JS in the template
+    hijacks the change/blur events and does a fetch() POST instead.
+
+    Server-side validation errors get shown next to the offending control
+    (spec Phase 5 #5); the .scope-err <span> is where the JS writes them."""
+    path = f["path"]
+    stage = (r.get("stage") or "cataloged").lower()
+    role  = (r.get("composite_role") or "").lower()
+    note  = r.get("composite_role_note") or ""
+    cfg   = (r.get("sample_config") or "default").lower()
+    notes = r.get("note") or ""
+
+    def _sel(name, opts, current, extra_attrs=""):
+        """One <select> tag with `opts` = [(value, label), ...], current pre-
+        selected. `extra_attrs` for e.g. data-* hooks."""
+        options = []
+        for val, lbl in opts:
+            sel = " selected" if val == current else ""
+            options.append(f'<option value="{_esc(val)}"{sel}>{_esc(lbl)}</option>')
+        return (f'<select name="{name}" data-field="{name}" {extra_attrs}>'
+                + "".join(options) + '</select>')
+
+    status_opts = [("cataloged", "Cataloged"), ("reviewed", "Reviewed"),
+                   ("candidate", "Candidate"), ("focus", "FOCUS"),
+                   ("set-aside", "Set aside")]
+    role_opts = [("", "(unset)")] + [(k, v) for k, v in COMPOSITE_ROLE_LABELS.items()]
+    cfg_opts  = [("default", "default"), ("always", "always"),
+                 ("skip",    "skip")]
+
+    lrb = _esc(r.get("last_reviewed_by") or "")
+    lrd = _esc(r.get("last_reviewed_date") or "")
+    review_tail = ""
+    if lrb or lrd:
+        review_tail = (f'<div class="scope-lastreviewed">'
+                       f'Last reviewed{" by " + lrb if lrb else ""}'
+                       f'{" on " + lrd if lrd else ""}.</div>')
+
+    return ('<div class="branch"><div class="bcard">'
+            '<div class="blabel">Review controls '
+            '<span class="scope-hint">edits save automatically</span></div>'
+            # Read-only banner (Phase 5 #5). JS unhides on /healthz failure.
+            '<div class="scope-ro-banner" hidden>'
+            'Read-only mode. Start the server to enable editing: '
+            '<span class="copy-cmd light">'
+            '<code>python tools/product_scope.py --repo . --serve</code>'
+            '<button data-copy="python tools/product_scope.py --repo . --serve">Copy</button>'
+            '</span></div>'
+            '<noscript><div class="scope-nojs">'
+            'JavaScript is disabled. Edits will submit as full-page reloads.'
+            '</div></noscript>'
+            f'<form class="scope-edit" data-product-id="{_esc(path)}" '
+            f'action="/api/review/{_esc(path)}" method="POST" '
+            f'onsubmit="return false;">'
+            # Status
+            '<div class="scope-field">'
+            '<label>Status</label>'
+            + _sel("status", status_opts, stage) +
+            '<span class="scope-dirty" hidden>&#8226;</span>'
+            '<span class="scope-err"></span>'
+            '</div>'
+            # Composite role + note
+            '<div class="scope-field scope-role">'
+            '<label>Composite role</label>'
+            + _sel("composite_role", role_opts, role, 'data-note-target="composite_role_note"') +
+            '<span class="scope-dirty" hidden>&#8226;</span>'
+            f'<textarea name="composite_role_note" data-field="composite_role_note" '
+            f'rows="2" placeholder="Note required to save role"'
+            + (' disabled' if not role else '') + '>'
+            + _esc(note) +
+            '</textarea>'
+            '<span class="scope-err"></span>'
+            '</div>'
+            # Sample config
+            '<div class="scope-field">'
+            '<label>Sample config</label>'
+            + _sel("sample_config", cfg_opts, cfg) +
+            '<span class="scope-dirty" hidden>&#8226;</span>'
+            '<span class="scope-err"></span>'
+            '</div>'
+            # Notes
+            '<div class="scope-field scope-notes">'
+            '<label>Notes</label>'
+            f'<textarea name="notes" data-field="notes" rows="2" '
+            f'placeholder="Free text notes; saves on blur">'
+            + _esc(notes) +
+            '</textarea>'
+            '<span class="scope-dirty" hidden>&#8226;</span>'
+            '<span class="scope-err"></span>'
+            '</div>'
+            # No-JS fallback: a bare submit that native form POST will hit.
+            '<button type="submit" class="scope-nojs-save">Save (no-JS)</button>'
+            '</form>'
+            + review_tail
+            + '</div></div>')
+
+def render_insight_feed(f, r):
+    """Full 'Insights' branch on each card - always visible, chronological
+    (newest first), one row per insight. Below the feed sits the 'Add insight'
+    collapsed input that expands on click. This is the drill-down home for
+    the feed; Quick Look TL;DR (Phase 5 #6) surfaces the last 2 as a compact
+    sub-line but the full history lives here."""
+    path = f["path"]
+    insights = list(r.get("insights") or [])
+    insights.sort(key=lambda i: i.get("when") or "", reverse=True)
+    rows_html = "".join(_insight_row_html(i, kind="drill") for i in insights)
+    empty_state = ""
+    if not insights:
+        empty_state = ('<div class="ins-empty">No insights yet. Add one below '
+                       'or run <code>--warm-cache</code> / regenerate to '
+                       'trigger auto-insights.</div>')
+    return ('<div class="branch"><div class="bcard">'
+            '<div class="blabel">Insights '
+            f'<span class="ins-count">({len(insights)})</span></div>'
+            + empty_state +
+            f'<ul class="scope-insights-feed" data-product-id="{_esc(path)}">'
+            + rows_html + '</ul>'
+            # Collapsed 'Add insight' button + hidden form.
+            '<div class="scope-add-insight">'
+            '<button type="button" class="scope-add-toggle">+ Add insight</button>'
+            f'<form class="scope-insight-form" data-product-id="{_esc(path)}" '
+            f'action="/api/insight/{_esc(path)}" method="POST" '
+            f'hidden onsubmit="return false;">'
+            '<input type="hidden" name="source" value="human">'
+            '<input type="text" name="who" placeholder="Your name" '
+            'class="scope-who" required>'
+            '<textarea name="text" placeholder="What did you observe or confirm? '
+            '(1-3 sentences; posted verbatim to the team feed)" '
+            'rows="3" required></textarea>'
+            '<div class="scope-insight-actions">'
+            '<button type="submit" class="scope-save-ins">Post insight</button>'
+            '<button type="button" class="scope-cancel-ins">Cancel</button>'
+            '<span class="scope-err"></span>'
+            '</div></form></div></div></div>')
+
 def render_quick_look(f, probe_entry, cache_entry, warm_summary=None):
     """One card's Quick Look branch. Always shows a compact 2-3 line TL;DR:
 
@@ -4389,6 +5042,12 @@ def product_row(f, review, work, probes, ctx=None):
             f'<div class="tkd">{_esc(x["detail"])}</div></div>' for x in finds)
         branches.append('<div class="branch"><div class="bcard"><div class="blabel">'
                         f'Curated insights ({len(finds)})</div>{cards}</div></div>')
+
+    # Phase 5 #4 - editable review controls + insight feed. Both sections are
+    # always rendered; Phase 5 #5's read-only mode disables the form controls
+    # client-side when /healthz fails.
+    branches.append(render_edit_section(f, r))
+    branches.append(render_insight_feed(f, r))
 
     search = (f["path"] + " " + f["title"] + " " + f["group"] + " " + f["subject"]).lower()
     folded = "" if st == "focus" else " folded"
