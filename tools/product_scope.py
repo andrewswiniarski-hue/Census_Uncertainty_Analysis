@@ -482,32 +482,6 @@ def fetch_catalog(cache_path: Path, online: bool):
 # REVIEW FILE (team-owned funnel) - append-only, never seeded
 # ============================================================================
 
-SAMPLE_CONFIG_VALUES = ("default", "always", "skip")
-
-def sample_config_of(review_entry):
-    """Read the (optional) sample_config field from a review entry, with the
-    'unknown value falls back to default + stderr warning' rule from Phase 4 #5.
-
-    Returns one of SAMPLE_CONFIG_VALUES:
-      'default' -> respect --warm-cache freshness + non-API skip logic (default)
-      'always'  -> always re-sample on warm even if the cache is fresh
-      'skip'    -> never sample during warm-cache runs (Set-aside, huge, or
-                   API-problematic products the team wants to exclude)
-    Missing / typo values silently downgrade to 'default'; typos also log a
-    one-line warning to stderr so the reviewer notices.
-    """
-    if not isinstance(review_entry, dict):
-        return "default"
-    raw = (review_entry.get("sample_config") or "").strip().lower()
-    if not raw:
-        return "default"
-    if raw in SAMPLE_CONFIG_VALUES:
-        return raw
-    print(f"  review: WARNING sample_config={raw!r} is not one of "
-          f"{'/'.join(SAMPLE_CONFIG_VALUES)}; treating as 'default'",
-          file=sys.stderr)
-    return "default"
-
 def load_review(repo: Path, fams):
     """The tool NEVER sets a stage and NEVER writes uncertainty text or a
     composite_role.
@@ -517,15 +491,17 @@ def load_review(repo: Path, fams):
     is never overwritten; new catalog families are appended so a fresh crawl
     cannot silently drop or reset the team's work.
 
-    Phase 4 #5: newly created entries get a `sample_config: "default"` field.
-    Existing entries are NOT rewritten - the field is read via sample_config_of()
-    with 'default' as the fallback, so old review files stay valid.
-
     Phase 5 #1: newly created entries also get `insights: []` (append-only
     list of {when, who, source, text} dicts) plus `last_reviewed_by` /
     `last_reviewed_date` (auto-populated by the --review CLI helper). Every
     reader must use `entry.get("insights", [])` etc. so the 573 existing
     entries (which lack these fields) continue to work without a migration.
+
+    Backward compat: existing entries may still carry a leftover
+    `sample_config` field from the (removed in the audit cut) warm-cache
+    path. The tool reads it via `.get()` and ignores it; we do NOT strip it
+    from existing entries on load so team members' files continue to diff
+    cleanly.
     """
     p = repo / "product_review.json"
     existing, first = {}, not p.exists()
@@ -534,7 +510,6 @@ def load_review(repo: Path, fams):
     added = 0
     default = {"stage": "cataloged", "uncertainty_metrics": "", "note": "",
                "composite_role": "", "composite_role_note": "",
-               "sample_config": "default",
                "insights": [],
                "last_reviewed_by": "", "last_reviewed_date": ""}
     for path in sorted(fams):
@@ -581,7 +556,7 @@ def validate_review(review):
     return problems
 
 # ============================================================================
-# PHASE 5 #2 - AUTO-INSIGHT LOGGING (regen + warm-cache)
+# PHASE 5 #2 - AUTO-INSIGHT LOGGING (regen)
 # ============================================================================
 # Auto-insights document what changed since the last regen so the team feed
 # on every card carries the paper trail of drift, not just the current state.
@@ -595,16 +570,15 @@ def validate_review(review):
 #   (a) dedup - never store the same (source, text) twice per product
 #   (b) file locking - a threading.Lock() (in-process) + fcntl.flock() best-
 #       effort (cross-process, when the OS supports it) so the --review CLI
-#       helper and a parallel --warm-cache cannot corrupt each other's writes
+#       helper and any other writer cannot corrupt each other's writes
 #   (c) writing the whole review file back deterministically
 
 LAST_REGEN_FILE   = ".product_scope_last_regen.json"
 LAST_REGEN_LOOKBACK_DAYS = 7   # first-ever regen has no baseline; look back a week
 
-# Module-level lock so any thread of this process (warm-cache workers,
-# main regen, --review helper) serializes review-file writes. Cross-process
-# locking sits on top via fcntl.flock() where available; see with_review_locked()
-# below.
+# Module-level lock so any thread of this process (main regen, --review
+# helper) serializes review-file writes. Cross-process locking sits on top
+# via fcntl.flock() where available; see with_review_locked() below.
 import threading as _threading
 _REVIEW_LOCK = _threading.Lock()
 
@@ -868,7 +842,7 @@ def collect_auto_repo_insights(repo: Path, fams, work, since_iso):
 
 # ---- Source B: auto:cache_diff ----------------------------------------------
 # Piggyback on the existing diff_eda() output (Phase 3 #6). eda_diffs comes
-# from _sample_ or _warm-cache_ writes to .scope_last_eda_diff.json.
+# from --sample writes to .scope_last_eda_diff.json.
 
 def collect_auto_cache_diff_insights(eda_diffs):
     """Return (path, source, text, when, who) tuples for every eda_diffs entry.
@@ -1033,13 +1007,12 @@ def cli_review_action(repo: Path, args):
         "status":        args.status,
         "role":          args.role,
         "note":          args.note,
-        "sample_config": args.sample_config,
         "notes":         args.notes,
     }
     passed = {k: v for k, v in action_flags.items() if v is not None}
     if not passed:
         print("error: --review requires at least one action flag "
-              "(--insight/--status/--role/--note/--sample-config/--notes)",
+              "(--insight/--status/--role/--note/--notes)",
               file=sys.stderr)
         return 2
 
@@ -1078,16 +1051,6 @@ def cli_review_action(repo: Path, args):
 
     if "note" in passed:
         patch["composite_role_note"] = str(passed["note"] or "")
-
-    if "sample_config" in passed:
-        raw = str(passed["sample_config"] or "").strip()
-        canon = raw.lower()
-        if canon not in SAMPLE_CONFIG_VALUES:
-            print(f"error: --sample-config must be one of "
-                  f"{'/'.join(SAMPLE_CONFIG_VALUES)} (got {raw!r})",
-                  file=sys.stderr)
-            return 2
-        patch["sample_config"] = canon
 
     if "notes" in passed:
         patch["note"] = str(passed["notes"] or "")
@@ -1148,9 +1111,6 @@ def cli_review_action(repo: Path, args):
         elif "composite_role_note" in patch:
             entry["composite_role_note"] = patch["composite_role_note"]
             bits.append("note updated")
-        if "sample_config" in patch:
-            entry["sample_config"] = patch["sample_config"]
-            bits.append(f"sample_config -> {patch['sample_config']}")
         if "note" in patch:
             entry["note"] = patch["note"]
             bits.append("notes updated")
@@ -1318,51 +1278,11 @@ def build_product_status(evidence):
 ALLOC_GROUP = re.compile(r"^B9[89]\d{3}")
 REPL_GROUP  = re.compile(r"^B\d{5}_VAR|^VAR_", re.I)
 
-# ---- Rate limiter hook (Phase 4 #2) -----------------------------------------
-# The warm-cache batch runs many outbound calls in parallel and needs to stay
-# under ~10 req/s globally, plus honor Retry-After on any 429/5xx. Rather than
-# thread a limiter arg through every function, warm_cache() installs a shared
-# _RateLimiter into this module-level slot and _api_get / _http_get_json call
-# it via the small helpers below. Outside a warm-cache run the slot stays None
-# and the helpers no-op, so single-shot --probe / --sample paths are unchanged.
-_WARM_LIMITER = None
-
-def _parse_retry_after(v):
-    """Retry-After can be seconds ('30') or an HTTP-date. We only honor the
-    integer-seconds form here; unparseable values fall back to 5s."""
-    if not v: return 0.0
-    try:
-        return float(str(v).strip())
-    except (TypeError, ValueError):
-        return 5.0
-
-def _rl_before_call():
-    """Called before each outbound API call. No-op unless a warm limiter is
-    installed. Blocks until the shared token budget allows the call."""
-    if _WARM_LIMITER is not None:
-        _WARM_LIMITER.acquire()
-
-def _rl_on_retry_after(ex):
-    """If the HTTPError carries a Retry-After header and a warm limiter is
-    installed, bump the limiter so every worker respects the server's hint."""
-    if _WARM_LIMITER is None: return
-    try:
-        ra = ex.headers.get("Retry-After") if getattr(ex, "headers", None) else None
-    except Exception:
-        ra = None
-    if not ra: return
-    _WARM_LIMITER.bump(_parse_retry_after(ra))
-
 def _api_get(url, timeout=60):
     if url.startswith("http://"):
         url = "https://" + url[len("http://"):]
-    _rl_before_call()
-    try:
-        with urllib.request.urlopen(url, timeout=timeout) as r:
-            return json.load(r)
-    except urllib.error.HTTPError as ex:
-        _rl_on_retry_after(ex)
-        raise
+    with urllib.request.urlopen(url, timeout=timeout) as r:
+        return json.load(r)
 
 def summarise_variables(payload):
     v = payload.get("variables", payload)
@@ -1671,16 +1591,10 @@ def _pick_sample_geography(fam, probe):
 def _http_get_json(url, timeout=SAMPLE_HTTP_TIMEOUT, retry=True):
     """GET + JSON decode with one retry on transient errors (HTTPError >=500,
     URLError, timeout). Returns parsed JSON, or raises the last exception.
-    Requests are silent on stdout - callers own the log line.
-
-    Phase 4 #2: when a warm-cache limiter is installed (_WARM_LIMITER), each
-    attempt calls _rl_before_call() first so parallel workers stay under the
-    shared cap, and HTTPError with a Retry-After header bumps the limiter so
-    every worker respects the server's hint. 429 (rate-limited) is retried
-    once even in the 4xx range - the one case where 4xx retry is correct."""
+    Requests are silent on stdout - callers own the log line. 429 (rate-limited)
+    is retried once even in the 4xx range - the one case where 4xx retry is correct."""
     last_exc = None
     for attempt in (1, 2 if retry else 1):
-        _rl_before_call()
         try:
             if url.startswith("http://"):
                 url = "https://" + url[len("http://"):]
@@ -1689,7 +1603,6 @@ def _http_get_json(url, timeout=SAMPLE_HTTP_TIMEOUT, retry=True):
                 return json.load(r)
         except urllib.error.HTTPError as ex:
             last_exc = ex
-            _rl_on_retry_after(ex)
             # Rate-limited: retry once even in the 4xx range.
             if ex.code == 429 and attempt == 1 and retry:
                 import time as _t; _t.sleep(1.0)
@@ -1973,14 +1886,12 @@ def sample_products(repo, fams, review, probes, only_product, size, refresh, git
     successful samples to scope_data_cache.json. Returns a summary dict with
     counts and per-product results for the caller to display.
 
-    Phase 4 #3 note - on-demand vs. bulk semantics DIFFER by design:
+    Note - on-demand semantics:
       * --sample --product X (single-product mode)   -> hits the API immediately.
         The freshness short-circuit below only applies when we're batch-iterating
         candidates without --refresh. Requesting one product by ID is a
         deliberate reviewer action, and re-fetching is what the reviewer asked
         for; the tool should not silently skip it based on a 7-day cache.
-      * --warm-cache (Phase 4 #2, separate entry point) DOES honor freshness on
-        every product because it's an unattended bulk pass over the whole catalog.
     """
     env = load_env(repo)
     api_key = env.get("CENSUS_API_KEY", "")
@@ -2015,13 +1926,10 @@ def sample_products(repo, fams, review, probes, only_product, size, refresh, git
             summary["skipped_non_api"].append(path)
             continue
         # Fresh-cache short-circuit: skip HTTP entirely when a recent entry
-        # exists and the user didn't force --refresh.
-        #
-        # Phase 4 #3: only applies in BATCH mode (only_product is None). Single
-        # --sample --product X always hits the API - the reviewer explicitly
-        # asked for that product, and silently returning a stale-ish cache
-        # instead is surprising. --warm-cache (Phase 4 #2) does honor freshness
-        # because it's an unattended bulk pass over the whole catalog.
+        # exists and the user didn't force --refresh. Only applies in BATCH
+        # mode (only_product is None). Single --sample --product X always
+        # hits the API - the reviewer explicitly asked for that product, and
+        # silently returning a stale-ish cache instead is surprising.
         cached = cache.get(path)
         if only_product is None and not refresh and is_sample_fresh(cached):
             print(f"  [sample] {path}: fresh cache from "
@@ -2092,315 +2000,6 @@ def sample_products(repo, fams, review, probes, only_product, size, refresh, git
             try: diff_path.unlink()
             except OSError: pass
     return summary
-
-# ============================================================================
-# WARM CACHE (Phase 4 #2)
-# ============================================================================
-# Batch mode that iterates every product in the catalog and, for each one,
-# runs a probe (populates product_probes.json) then a sample (populates
-# scope_data_cache.json). Runs in a thread pool with a rate-limited HTTP path
-# and incremental cache persistence so a mid-run crash keeps completed work.
-#
-# Skip rules:
-#   - Non-API products (no variables_url)          -> skipped, tag 'non_api'
-#   - sample_config == 'skip' in product_review    -> skipped_config
-#   - Both probe AND sample fresh (< 7 days each)  -> skipped_fresh
-#   - --refresh overrides freshness                -> always run
-#   - sample_config == 'always'                    -> ignores freshness
-#
-# See --sample --product X for the on-demand single-product path (Phase 3);
-# it bypasses freshness by design (Phase 4 #3 documents the difference).
-
-WARM_DEFAULT_WORKERS  = 6
-WARM_RATE_LIMIT_QPS   = 10.0
-WARM_RUN_FILE         = ".warm_cache_last_run.json"
-WARM_PROBE_FRESH_DAYS = 7
-
-class _RateLimiter:
-    """Thread-safe sliding-window rate limiter used by warm_cache to keep the
-    combined outbound rate under `cap` requests per second across all workers.
-
-    Two levers:
-      * acquire()       - blocks until a token is available (call before a request)
-      * bump(seconds)   - defers all subsequent acquires by `seconds`
-                          (used to honor Retry-After hints from the server)
-
-    Sliding window over the last second: no over-firing at window boundaries.
-    Stdlib only; no aiohttp, no tqdm.
-    """
-    def __init__(self, cap):
-        import threading, collections
-        self._cap = float(cap)
-        self._lock = threading.Lock()
-        self._times = collections.deque()
-        self._until = 0.0
-
-    def acquire(self):
-        import time as _t
-        # Loop so a Retry-After bump landing while we sleep still applies.
-        while True:
-            with self._lock:
-                now = _t.monotonic()
-                if now < self._until:
-                    sleep_for = self._until - now
-                else:
-                    # Drop timestamps older than 1s from the window.
-                    while self._times and self._times[0] < now - 1.0:
-                        self._times.popleft()
-                    if len(self._times) < self._cap:
-                        self._times.append(now)
-                        return
-                    sleep_for = 1.0 - (now - self._times[0])
-                    if sleep_for < 0: sleep_for = 0
-            _t.sleep(max(sleep_for, 0.001))
-
-    def bump(self, seconds):
-        import time as _t
-        with self._lock:
-            self._until = max(self._until, _t.monotonic() + max(0.0, float(seconds)))
-
-
-def _warm_probe_one(repo, path, fam, today, probes_lock, probes_ref):
-    """Probe one product; persist to product_probes.json under probes_lock so
-    a crash mid-run keeps every completed probe. Returns the probe dict."""
-    r = probe_one(path, fam, today)
-    with probes_lock:
-        probes_ref[path] = r
-        (repo / "product_probes.json").write_text(
-            json.dumps(dict(sorted(probes_ref.items())), indent=2), encoding="utf-8")
-    return r
-
-def _warm_sample_one(repo, path, fam, probe, size, api_key,
-                      cache_lock, cache_ref, head_sha):
-    """Sample one product; persist to scope_data_cache.json under cache_lock.
-    Returns (rows, cols, url, err, changes) - err is "" on success; changes
-    is a list of diff strings (Phase 3 #6 shape) that Phase 5 #2 turns into
-    an auto:cache_diff insight when non-empty."""
-    df, url, err = fetch_sample(fam, probe, size, api_key)
-    if err:
-        return 0, 0, url, err, []
-    eda = compute_eda(df, probe)
-    entry = {
-        "sampled_at":    datetime.datetime.now(datetime.timezone.utc)
-                             .strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "sample_size":   size,
-        "shape":         eda.get("shape", [len(df), len(df.columns)]),
-        "columns":       eda.get("columns", {}),
-        "geography":     eda.get("geography", {}),
-        "sparklines":    eda.get("sparklines", {}),
-        "source_url":    url,
-        "sha_at_sample": head_sha,
-    }
-    with cache_lock:
-        prev = cache_ref.get(path)
-        changes = diff_eda(prev, entry) if prev else []
-        cache_ref[path] = entry
-        save_data_cache(repo, cache_ref)
-    return len(df), len(df.columns), url, "", changes
-
-
-def _decide_warm(path, fams, review, probes_dict, cache_dict, refresh):
-    """One product's skip/run decision for warm_cache. Returns one of:
-       'non_api' | 'config_skip' | 'fresh' | 'run'
-    Encapsulated so unit tests can drive the decision matrix directly."""
-    fam = fams.get(path, {})
-    if not fam.get("variables_url"):
-        return "non_api"
-    cfg = sample_config_of(review.get(path, {}))
-    if cfg == "skip":
-        return "config_skip"
-    if refresh or cfg == "always":
-        return "run"
-    # Both probe AND sample cache must be fresh to skip.
-    pr = probes_dict.get(path, {}) or {}
-    probe_fresh = False
-    if pr.get("ok") and pr.get("probed"):
-        try:
-            d = datetime.date.fromisoformat(pr["probed"])
-            probe_fresh = (datetime.date.today() - d).days < WARM_PROBE_FRESH_DAYS
-        except Exception:
-            probe_fresh = False
-    sample_fresh = is_sample_fresh(cache_dict.get(path))
-    return "fresh" if (probe_fresh and sample_fresh) else "run"
-
-
-def warm_cache(repo, fams, review, probes, size, refresh, concurrency, git=None):
-    """Iterate every product in the catalog and, for each one, run a probe then
-    a sample (skipping per _decide_warm). Rate-limited to WARM_RATE_LIMIT_QPS
-    across all workers; each successful probe/sample writes its cache file
-    immediately so a mid-run crash cannot lose completed work.
-
-    Uses ThreadPoolExecutor with `concurrency` workers (default 6). When
-    concurrency<=1, runs sequentially with no thread pool - cleaner for
-    debugging or when a network is flaky.
-
-    Persists a summary of counts + path lists to .warm_cache_last_run.json
-    (gitignored) so the diff banner and cache-coverage header can display the
-    last run's outcome without recomputing it."""
-    import concurrent.futures, threading, time as _t
-    global _WARM_LIMITER
-    env = load_env(repo)
-    api_key = env.get("CENSUS_API_KEY", "")
-    head_sha = (git or {}).get("head_sha", "")
-
-    # Load current caches once; workers share the dicts under locks.
-    cache_dict  = load_data_cache(repo)
-    probes_dict = dict(probes) if probes else {}
-    cache_lock  = threading.Lock()
-    probes_lock = threading.Lock()
-
-    limiter = _RateLimiter(WARM_RATE_LIMIT_QPS)
-    _WARM_LIMITER = limiter    # installed for the duration of this run
-
-    today = datetime.date.today().isoformat()
-    ordered_paths = sorted(fams)
-    total = len(ordered_paths)
-    print(f"[warm-cache] {total} product(s); workers={concurrency}; "
-          f"rate cap={int(WARM_RATE_LIMIT_QPS)} req/s; "
-          f"api_key={'yes' if api_key else 'no (public limits)'}; "
-          f"refresh={'yes' if refresh else 'no'}")
-
-    counters = {"warmed": [], "skipped_fresh": [], "skipped_non_api": [],
-                "skipped_config": [], "failed": []}
-    counters_lock = threading.Lock()
-    progress_lock = threading.Lock()
-    progress = {"i": 0}
-    # Phase 5 #2 - warm-cache emits auto:cache_diff insights when a sample
-    # rewrite actually changed shape/dtype/missingness materially. Collected
-    # per-worker, then batch-appended under the review lock at the end so
-    # the review file only takes one save cycle.
-    cache_diffs = {}          # path -> [change_string, ...]
-    cache_diffs_lock = threading.Lock()
-
-    def _work(path):
-        t0 = _t.perf_counter()
-        fam = fams[path]
-        with progress_lock:
-            progress["i"] += 1
-            i = progress["i"]
-        try:
-            decision = _decide_warm(path, fams, review, probes_dict,
-                                     cache_dict, refresh)
-        except Exception as ex:
-            with counters_lock:
-                counters["failed"].append({"path": path, "reason": f"decide: {ex}"})
-            print(f"[{i}/{total}] {path} - internal error: {ex}")
-            return
-        if decision == "non_api":
-            with counters_lock:
-                counters["skipped_non_api"].append(path)
-            print(f"[{i}/{total}] {path} - skipped (non-api)")
-            return
-        if decision == "config_skip":
-            with counters_lock:
-                counters["skipped_config"].append(path)
-            print(f"[{i}/{total}] {path} - skipped (sample_config: skip)")
-            return
-        if decision == "fresh":
-            with counters_lock:
-                counters["skipped_fresh"].append(path)
-            print(f"[{i}/{total}] {path} - skipped (fresh)")
-            return
-
-        # Probe: only re-run if not already fresh + ok (small courtesy to
-        # the API; the skip check above already required BOTH to be fresh).
-        pr = probes_dict.get(path, {}) or {}
-        probe_msg = "cached"
-        need_probe = refresh or not pr.get("ok")
-        if need_probe:
-            try:
-                pr = _warm_probe_one(repo, path, fam, today, probes_lock, probes_dict)
-            except Exception as ex:
-                pr = {"ok": False, "error": f"{type(ex).__name__}: {ex}"}
-            probe_msg = "ok" if pr.get("ok") else "fail"
-
-        # Sample runs whether probe succeeded or failed - probe failure just
-        # means we lack the queryable_without_parent hint, and _pick_sample_geography
-        # falls back to 'state:*' in that case.
-        try:
-            rows, cols, url, err, changes = _warm_sample_one(
-                repo, path, fam, pr, size, api_key, cache_lock, cache_dict, head_sha)
-        except Exception as ex:
-            err = f"{type(ex).__name__}: {ex}"; url = ""; rows = cols = 0; changes = []
-        elapsed = _t.perf_counter() - t0
-        if err:
-            with counters_lock:
-                counters["failed"].append({"path": path, "reason": err, "url": url})
-            print(f"[{i}/{total}] {path} - probe {probe_msg}, sample FAIL: {err} ({elapsed:.1f}s)")
-        else:
-            with counters_lock:
-                counters["warmed"].append(path)
-            if changes:
-                with cache_diffs_lock:
-                    cache_diffs[path] = changes
-            print(f"[{i}/{total}] {path} - probe {probe_msg}, sample ok ({elapsed:.1f}s)"
-                  + (f"  [drift: {len(changes)} change(s)]" if changes else ""))
-
-    try:
-        if concurrency <= 1:
-            for path in ordered_paths:
-                _work(path)
-        else:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=concurrency) as ex:
-                # list() drains the iterator so exceptions surface after all
-                # workers finish. Individual _work handles its own exceptions.
-                list(ex.map(_work, ordered_paths))
-    finally:
-        _WARM_LIMITER = None    # always uninstall so single-shot paths recover
-
-    summary = {
-        "finished_at":   datetime.datetime.now(datetime.timezone.utc)
-                             .strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "head_sha":      head_sha,
-        "concurrency":   concurrency,
-        "sample_size":   size,
-        "refresh":       bool(refresh),
-        "total":         total,
-        "warmed":        counters["warmed"],
-        "skipped_fresh": counters["skipped_fresh"],
-        "skipped_non_api": counters["skipped_non_api"],
-        "skipped_config": counters["skipped_config"],
-        "failed":        counters["failed"],
-    }
-    print(f"[warm-cache] done: warmed={len(counters['warmed'])}, "
-          f"skipped_fresh={len(counters['skipped_fresh'])}, "
-          f"skipped_non_api={len(counters['skipped_non_api'])}, "
-          f"skipped_config={len(counters['skipped_config'])}, "
-          f"failed={len(counters['failed'])}")
-    if counters["failed"]:
-        print("[warm-cache] failure details:")
-        for fr in counters["failed"][:20]:
-            print(f"    - {fr['path']}: {fr.get('reason','unknown')}")
-        if len(counters["failed"]) > 20:
-            print(f"    ({len(counters['failed'])-20} more; see {WARM_RUN_FILE})")
-
-    (repo / WARM_RUN_FILE).write_text(json.dumps(summary, indent=2), encoding="utf-8")
-
-    # Phase 5 #2 - fold the collected cache diffs into auto:cache_diff
-    # insights and append them under the shared review lock. Also update the
-    # .scope_last_eda_diff.json dump so the next regen's Home-tab banner
-    # surfaces the drift alongside the per-card insight.
-    if cache_diffs:
-        emit_auto_insights(repo, review,
-                            collect_auto_cache_diff_insights(cache_diffs),
-                            log_prefix="auto-insight/warm-cache")
-        diff_path = repo / EDA_DIFF_FILE
-        diff_path.write_text(json.dumps(
-            {"written_at": _now_iso_z(),
-             "diffs": dict(sorted(cache_diffs.items()))},
-            indent=2), encoding="utf-8")
-
-    return summary
-
-def load_warm_summary(repo: Path):
-    """Read .warm_cache_last_run.json (Phase 4 #2). Returns None when the file
-    doesn't exist (no warm run has happened yet). Never raises."""
-    p = repo / WARM_RUN_FILE
-    if not p.exists(): return None
-    try:
-        return json.loads(p.read_text(encoding="utf-8"))
-    except Exception:
-        return None
 
 # ============================================================================
 # REPORT
@@ -2566,18 +2165,6 @@ footer{padding:22px 44px;color:var(--muted);font-size:11.5px;}
 .freshbar .kbd-hint kbd{display:inline-block;padding:0 5px;margin:0 2px;font-family:ui-monospace,Consolas,monospace;
      font-size:10px;background:#28356B;color:#F5D77A;border:1px solid #3A4890;border-radius:3px;
      box-shadow:inset 0 -1px 0 #0F1738;font-weight:700;line-height:14px;}
-/* Cache coverage bar (Phase 4 #4). Sits directly below the freshness bar and
-   summarises how much of the catalog has actually been sampled - green/amber/red
-   pill on the sampled fraction, plus counts of non-API and unfetched products. */
-.cachebar{background:#131C41;color:#CADCFC;padding:7px 44px;font-size:11.5px;
-     display:flex;align-items:center;gap:14px;flex-wrap:wrap;border-bottom:1px solid #263466;}
-.cachebar .cov-pill{display:inline-block;padding:2px 10px;border-radius:11px;font-weight:700;
-     font-size:11px;letter-spacing:.02em;background:#2A356C;color:#CADCFC;}
-.cachebar .cov-pill.cov-green{background:#1F7A3A;color:#E6F5EA;}
-.cachebar .cov-pill.cov-amber{background:#E9CD7A;color:#3A2F0A;}
-.cachebar .cov-pill.cov-red{background:#C0392B;color:#FFF;}
-.cachebar .cov-note{color:#8FA8D8;font-size:10.5px;}
-.cachebar .warm-when{font-family:ui-monospace,Consolas,monospace;font-size:10.5px;opacity:.75;}
 /* Reusable click-to-copy control: <span class="copy-cmd"><code>...</code><button data-copy="...">Copy</button></span> */
 .copy-cmd{display:inline-flex;align-items:center;gap:6px;background:#16204A;border:1px solid #28356B;
      border-radius:6px;padding:2px 4px 2px 8px;font-family:ui-monospace,Consolas,monospace;font-size:11px;
@@ -2777,7 +2364,6 @@ footer{padding:22px 44px;color:var(--muted);font-size:11.5px;}
   <span class="sha" title="HEAD SHA at generation time">__HEAD_SHORT__ &bull; __BRANCH__</span>
   <span class="kbd-hint" title="Press E on any product card to open or close its drill-down">Press <kbd>E</kbd> on a card to toggle details</span>
 </div>
-<div class="cachebar" data-warm-finished-at="__WARM_FINISHED_ISO__">__CACHE_COVERAGE__</div>
 <div class="wrap">__PANELS__</div>
 <div id="qbar"><span><b id="qn">0</b> queued for probe</span>
   <button id="qdl">Download queue</button><button class="sec" id="qcl">Clear</button>
@@ -2821,22 +2407,6 @@ document.addEventListener('click', function(e){
   if      (age < 86400)      pill.classList.add('fresh');   /* < 24h */
   else if (age < 3 * 86400)  pill.classList.add('stale');   /* 24-72h */
   else                       pill.classList.add('old');     /* > 3d */
-})();
-/* --- Cache-coverage bar (Phase 4 #4): renders 'last warm-cache: Xh ago'
-       from data-warm-finished-at, or 'never' when the file is absent. --- */
-(function(){
-  var el = document.getElementById('warm-when'); if(!el) return;
-  var bar = document.querySelector('.cachebar');
-  var iso = bar && bar.getAttribute('data-warm-finished-at');
-  if(!iso){ el.textContent = 'never'; return; }
-  var when = new Date(iso); var age = (Date.now() - when.getTime()) / 1000;
-  if (isNaN(age) || age < 0) age = 0;
-  var label;
-  if (age < 90)              label = Math.max(1, Math.round(age)) + 's ago';
-  else if (age < 3600)       label = Math.round(age / 60) + 'm ago';
-  else if (age < 86400)      label = Math.round(age / 3600) + 'h ago';
-  else                       label = Math.round(age / 86400) + 'd ago';
-  el.textContent = label;
 })();
 document.querySelectorAll('.tab').forEach(function(t){
   t.addEventListener('click', function(){
@@ -3084,68 +2654,6 @@ by the team in product_review.json &bull; work depth and work-log findings are r
 def _esc(s):
     return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
-# ---- Cache tier for one product (Phase 4 #4) --------------------------------
-# Highest cached tier for a single product. Matches the Quick Look chip
-# variants and is the single source of truth for both the card chip and the
-# Cache-tier facet, so filter and chip cannot drift apart.
-CACHE_TIER_SAMPLE      = "sample"
-CACHE_TIER_PROBE       = "probe"
-CACHE_TIER_CATALOG     = "catalog"
-CACHE_TIER_NOT_SAMPLED = "not sampled"    # non-API bulk-download products
-
-def cache_tier_of(f, probes, data_cache):
-    """Return one of ('sample','probe','catalog','not sampled') for a family
-    given the current probe + data caches. Sample beats probe beats catalog;
-    products without a data endpoint bucket into 'not sampled'."""
-    if data_cache is not None and f["path"] in data_cache:
-        return CACHE_TIER_SAMPLE
-    if probes.get(f["path"], {}).get("ok"):
-        return CACHE_TIER_PROBE
-    if not f.get("variables_url"):
-        return CACHE_TIER_NOT_SAMPLED
-    return CACHE_TIER_CATALOG
-
-def build_cache_coverage_html(fams, data_cache, warm_summary=None):
-    """The cache-coverage line under the freshness bar (Phase 4 #4).
-
-    Renders 'Cache coverage: 342/570 sampled (60%), 145/570 non-API,
-    83/570 unfetched' with a color pill on the sampled fraction, plus the
-    last warm-cache run timestamp (formatted client-side via JS).
-
-    Denominator for the sampled fraction is 'sample-able' (total minus
-    non-API), because non-API products can never contribute to that fraction
-    and including them makes coverage look permanently red.
-
-    Color thresholds (spec):
-      green > 80%, amber 40-80%, red < 40%
-    """
-    total = len(fams)
-    non_api = sum(1 for f in fams.values() if not f.get("variables_url"))
-    sample_able = max(0, total - non_api)
-    dc = data_cache or {}
-    sampled = sum(1 for path in fams if path in dc)
-    unfetched = max(0, total - sampled - non_api)
-    pct = (sampled * 100.0 / sample_able) if sample_able else 0.0
-    if pct > 80:      pill_class = "cov-green"
-    elif pct >= 40:   pill_class = "cov-amber"
-    else:             pill_class = "cov-red"
-    if total == 0:    pill_class = "cov-red"
-
-    return (
-        '<span>Cache coverage: '
-        f'<span class="cov-pill {pill_class}">{sampled}/{total} sampled '
-        f'({pct:.0f}%)</span> &middot; '
-        f'{non_api}/{total} non-API &middot; '
-        f'{unfetched}/{total} unfetched</span>'
-        '<span class="cov-note">sample-able denominator: '
-        f'{sample_able}</span>'
-        '<span>Last warm-cache: <time id="warm-when" '
-        f'datetime="{_esc((warm_summary or {}).get("finished_at", ""))}">'
-        'never</time></span>'
-        '<span class="copy-cmd"><code>python tools/product_scope.py --repo . --warm-cache</code>'
-        '<button data-copy="python tools/product_scope.py --repo . --warm-cache">Copy</button></span>'
-    )
-
 def _vint(f):
     v = f["vintages"]
     if len(v) > 1: return f"{v[0]}–{v[-1]}"
@@ -3157,9 +2665,6 @@ def product_facet_values(f, review, work, probes, top_families, data_cache=None)
 
     Kept small on purpose: adding a facet here + a facet block in build_kind_panel
     is all it takes to make a new filter live in the UI.
-
-    Phase 4 #4: `cache_tier` reuses cache_tier_of() so the sidebar filter cannot
-    drift from the Quick Look chip on the same card.
     """
     r = review.get(f["path"], {})
     st = r.get("stage", "cataloged")
@@ -3177,7 +2682,6 @@ def product_facet_values(f, review, work, probes, top_families, data_cache=None)
         "probe":     "yes" if probes.get(f["path"], {}).get("ok") else "no",
         "validated": "yes" if ws >= 4 else "no",
         "role":      role or "(unset)",
-        "tier":      cache_tier_of(f, probes, data_cache or {}),
     }
 
 FACET_DEFS = [
@@ -3188,17 +2692,12 @@ FACET_DEFS = [
     ("probe",     "Has API probe",       None),
     ("validated", "Notebook validated",  None),
     ("role",      "Composite role",      "count"),
-    ("tier",      "Cache tier",          None),
 ]
 FACET_ORDER = {
     "stage":     ["focus", "candidate", "reviewed", "cataloged", "set-aside"],
     "evidence":  ["yes", "no"],
     "probe":     ["yes", "no"],
     "validated": ["yes", "no"],
-    # Cache-tier order matches the Quick Look chip progression: sample beats
-    # probe beats catalog; non-API bucket sits at the bottom.
-    "tier":      [CACHE_TIER_SAMPLE, CACHE_TIER_PROBE, CACHE_TIER_CATALOG,
-                  CACHE_TIER_NOT_SAMPLED],
 }
 FACET_VALUE_LABELS = {
     "stage": STAGE_LABELS,
@@ -3206,10 +2705,6 @@ FACET_VALUE_LABELS = {
     "probe":     {"yes": "yes", "no": "no"},
     "validated": {"yes": "yes", "no": "no"},
     "role":      {**COMPOSITE_ROLE_LABELS, "(unset)": "(unset)"},
-    "tier":      {CACHE_TIER_SAMPLE:      "sample",
-                  CACHE_TIER_PROBE:       "probe",
-                  CACHE_TIER_CATALOG:     "catalog only",
-                  CACHE_TIER_NOT_SAMPLED: "not sample-able"},
 }
 
 SNAPSHOT_FILE = ".product_scope_last_run.json"
@@ -4168,7 +3663,7 @@ def _insight_row_html(ins, kind="drill"):
             f'<div class="ins-text">{_esc(text)}</div>'
             f'</div></li>')
 
-def render_quick_look(f, probe_entry, cache_entry, warm_summary=None, insights=None):
+def render_quick_look(f, probe_entry, cache_entry, insights=None):
     """One card's Quick Look branch. Always shows a compact 2-3 line TL;DR:
 
       * Line 1 (always): tier chip + Tier-0 catalog facts.
@@ -4188,15 +3683,10 @@ def render_quick_look(f, probe_entry, cache_entry, warm_summary=None, insights=N
     commands. The toggle shape is intentionally identical regardless of tier
     so the reader learns "drill is always here" (Phase 4b #6).
 
-    warm_summary: optional dict from .warm_cache_last_run.json (or None).
-    insights:     list of insight dicts (from review[path]["insights"]).
+    insights: list of insight dicts (from review[path]["insights"]).
     """
     tier, chip_label, chip_class = _quick_look_tier(f, probe_entry, cache_entry)
     non_api = not f.get("variables_url")
-    if warm_summary and isinstance(warm_summary, dict):
-        non_api_list = set(warm_summary.get("skipped_non_api") or [])
-        if f["path"] in non_api_list:
-            non_api = True
 
     chip = f'<span class="tier-chip {chip_class}">{_esc(chip_label)}</span>'
     tier_desc = {
@@ -4294,9 +3784,8 @@ def product_row(f, review, work, probes, ctx=None):
     # cached data. Sits above every other section so the reader's first glimpse
     # of the card is a summary tagged with a tier chip.
     _data_cache = ctx.get("data_cache") or {}
-    _warm_summary = ctx.get("warm_summary")
     branches.append(render_quick_look(f, probes.get(f["path"]),
-                                       _data_cache.get(f["path"]), _warm_summary,
+                                       _data_cache.get(f["path"]),
                                        insights=r.get("insights") or []))
 
     # Contextual affordances: state-driven copyable commands that fill
@@ -4478,8 +3967,7 @@ def build_facet_sidebar(prods, review, work, probes, top_families, data_cache=No
             '</div>' + "".join(blocks) + '</aside>')
 
 def build_kind_panel(kind, fams, review, work, probes, git=None, snapshot=None,
-                     jl_refs=None, jl_errors=None, data_cache=None, eda_diffs=None,
-                     warm_summary=None):
+                     jl_refs=None, jl_errors=None, data_cache=None, eda_diffs=None):
     prods = [f for f in fams.values() if f["kind"] == kind]
     # Compute per-panel "top families" bucket for the Family facet.
     fam_counts = {}
@@ -4487,8 +3975,7 @@ def build_kind_panel(kind, fams, review, work, probes, git=None, snapshot=None,
     top_families = set(sorted(fam_counts, key=lambda g: -fam_counts[g])[:12])
     ctx = {"top_families": top_families, "git": git or {}, "snapshot": snapshot,
            "jl_refs": jl_refs or {}, "jl_errors": jl_errors or {},
-           "data_cache": data_cache or {}, "eda_diffs": eda_diffs or {},
-           "warm_summary": warm_summary}
+           "data_cache": data_cache or {}, "eda_diffs": eda_diffs or {}}
 
     groups = {}
     for f in prods: groups.setdefault(f["group"], []).append(f)
@@ -4773,7 +4260,7 @@ def export_xlsx(rows, out_path):
 
 def render(fams, review, work, worklog, notebooks, probes, repo_name, catnote, out_path, git,
            snapshot=None, diff=None, jl_refs=None, jl_errors=None, divergences=None,
-           data_cache=None, eda_diffs=None, warm_summary=None):
+           data_cache=None, eda_diffs=None):
     eda_diffs = eda_diffs or {}
     counts = {s: 0 for s in STAGES}
     for path in fams:
@@ -4788,13 +4275,12 @@ def render(fams, review, work, worklog, notebooks, probes, repo_name, catnote, o
         tabs.append(f'<button class="tab" data-k="k{i}">{_esc(k)}<span class="n">{n}</span></button>')
         panels.append(f'<div class="panel" id="panel-k{i}">'
                       + build_kind_panel(k, fams, review, work, probes, git, snapshot,
-                                          jl_refs, jl_errors, data_cache, eda_diffs,
-                                          warm_summary) + '</div>')
+                                          jl_refs, jl_errors, data_cache, eda_diffs)
+                      + '</div>')
 
     gen_iso = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     head_short = (git.get("head_sha") or "")[:7] or "no-git"
     branch = git.get("branch") or "detached"
-    warm_finished_iso = (warm_summary or {}).get("finished_at", "")
     html = (TEMPLATE
             .replace("__DATE__", datetime.date.today().strftime("%B %d, %Y"))
             .replace("__CATNOTE__", catnote).replace("__REPO__", repo_name)
@@ -4803,10 +4289,7 @@ def render(fams, review, work, worklog, notebooks, probes, repo_name, catnote, o
             .replace("__GEN_ISO__", gen_iso)
             .replace("__HEAD_SHA__", _esc(git.get("head_sha") or ""))
             .replace("__HEAD_SHORT__", _esc(head_short))
-            .replace("__BRANCH__", _esc(branch))
-            .replace("__CACHE_COVERAGE__",
-                      build_cache_coverage_html(fams, data_cache, warm_summary))
-            .replace("__WARM_FINISHED_ISO__", _esc(warm_finished_iso)))
+            .replace("__BRANCH__", _esc(branch)))
     Path(out_path).write_text(html, encoding="utf-8")
     return counts
 
@@ -4840,16 +4323,6 @@ def main():
     ap.add_argument("--product", metavar="ID", default=None,
                     help="target product for --sample (single-product mode). "
                          "Ignored otherwise.")
-    # ---- Phase 4: warm-cache batch (see WARM CACHE section) ----------------
-    ap.add_argument("--warm-cache", action="store_true",
-                    help="iterate every product in the catalog and probe + sample "
-                         "each one (skipping non-API, fresh cache, and sample_config "
-                         "'skip'). Rate-limited across a thread pool; incremental "
-                         "cache persistence. Use --refresh to override freshness and "
-                         "--concurrency N to change the worker count (default 6).")
-    ap.add_argument("--concurrency", type=int, default=WARM_DEFAULT_WORKERS, metavar="N",
-                    help=f"worker count for --warm-cache (default {WARM_DEFAULT_WORKERS}). "
-                         "Set to 1 for a sequential run (easier to debug).")
     # ---- Phase 5 (CLI helper): --review + action flags ----------------------
     # Additive, atomic write to product_review.json. Preserves the schema +
     # auto-insight pieces from earlier Phase 5 commits; replaces the (dropped)
@@ -4858,7 +4331,7 @@ def main():
     rvw.add_argument("--review", metavar="PRODUCT_ID", default=None,
                     help="target product id (e.g. acs/acs5). Requires at least "
                          "one of --insight / --status / --role / --note / "
-                         "--sample-config / --notes. All actions apply atomically.")
+                         "--notes. All actions apply atomically.")
     rvw.add_argument("--insight", metavar="TEXT", default=None,
                     help="append a human insight (source='human'). Non-empty "
                          "text required; who defaults to git config user.name.")
@@ -4872,9 +4345,6 @@ def main():
                          "carries a non-empty composite_role_note.")
     rvw.add_argument("--note", metavar="TEXT", default=None,
                     help="set composite_role_note (justification for --role).")
-    rvw.add_argument("--sample-config", metavar="VALUE", default=None,
-                    help="set sample_config; one of "
-                         + "/".join(SAMPLE_CONFIG_VALUES) + ".")
     rvw.add_argument("--notes", metavar="TEXT", default=None,
                     help="set free-text notes (the review file's `note` field).")
     rvw.add_argument("--author", metavar="NAME", default=None,
@@ -4952,13 +4422,6 @@ def main():
     if args.sample:
         sample_products(repo, fams, review, probes, args.product,
                         args.sample_size, args.refresh, git)
-    # Phase 4 #2: --warm-cache runs before HTML render too; it repopulates both
-    # product_probes.json and scope_data_cache.json, then the render below
-    # picks up the fresh state (probes reload, data_cache reload just below).
-    if args.warm_cache:
-        warm_cache(repo, fams, review, probes, args.sample_size, args.refresh,
-                   max(1, int(args.concurrency)), git)
-        probes = load_probes(repo)   # reload after warm-cache touched it
 
     if args.export:
         # Export mode skips HTML generation entirely - the export IS the deliverable.
@@ -5000,9 +4463,6 @@ def main():
     # eda_diffs come from the last --sample run's diff dump (Phase 3 #6).
     data_cache = load_data_cache(repo)
     eda_diffs  = load_eda_diffs(repo)
-    # Phase 4 #4: warm-cache summary drives the coverage bar's 'last warm-cache'
-    # timestamp and the Quick Look non-api detection on hand-listed products.
-    warm_summary = load_warm_summary(repo)
 
     # Phase 5 #2 - emit auto:cache_diff insights alongside repo + divergence
     # ones. Do a single batched save so the review file only takes one lock
@@ -5012,8 +4472,7 @@ def main():
                        log_prefix="auto-insight/regen")
     _write_last_regen(repo)
     counts = render(fams, review, work, worklog, notebooks, probes, repo.name, catnote, out, git,
-                    snapshot_prev, diff, jl_refs, jl_errors, divergences, data_cache, eda_diffs,
-                    warm_summary)
+                    snapshot_prev, diff, jl_refs, jl_errors, divergences, data_cache, eda_diffs)
     print("  funnel: " + " -> ".join(f"{STAGE_LABELS[s]} {counts.get(s, 0)}" for s in STAGES))
     print(f"Report written to {out}")
 
