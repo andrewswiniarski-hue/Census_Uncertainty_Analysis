@@ -97,6 +97,30 @@ STAGE_LABELS = {"cataloged": "Cataloged", "reviewed": "Reviewed", "candidate": "
 STAGE_COLORS = {"cataloged": "#EDF0F7", "reviewed": "#CADCFC", "candidate": "#E9CD7A",
                 "focus": "#1F2A5C", "set-aside": "#F6F7FA"}
 
+# Human-declared role a product plays in the composite score. Set only by a
+# person, in product_review.json, and never touched by the tool. When set, a
+# free-text composite_role_note is REQUIRED - the two fields must land together.
+COMPOSITE_ROLES = ["cv_source", "allocation_source", "privacy_noise",
+                   "geometry", "benchmark", "unused"]
+COMPOSITE_ROLE_LABELS = {
+    "cv_source":         "CV source",
+    "allocation_source": "Allocation source",
+    "privacy_noise":     "Privacy noise",
+    "geometry":          "Geometry",
+    "benchmark":         "Benchmark",
+    "unused":            "Unused",
+}
+
+def effective_role(r):
+    """Role as it should be RENDERED. Enforces the note-required contract:
+    a role without a matching note is treated as unset (see validate_review
+    which logs the mismatch to stderr on load)."""
+    if not r: return ""
+    role = (r.get("composite_role") or "").strip()
+    note = (r.get("composite_role_note") or "").strip()
+    if role and not note: return ""
+    return role
+
 # Tabs, from the Bureau's own dataset flags. Not our categories.
 KINDS = ["Aggregate tables", "Microdata", "Time series", "Unflagged"]
 KIND_BLURB = {
@@ -423,23 +447,51 @@ def fetch_catalog(cache_path: Path, online: bool):
 # ============================================================================
 
 def load_review(repo: Path, fams):
-    """The tool NEVER sets a stage and NEVER writes uncertainty text.
+    """The tool NEVER sets a stage and NEVER writes uncertainty text or a
+    composite_role.
 
-    Every product is created as `cataloged` with empty `uncertainty_metrics`.
-    An existing file is never overwritten; new catalog families are appended, so a
-    fresh crawl cannot silently drop or reset the team's work."""
+    Every product is created as `cataloged` with empty `uncertainty_metrics`,
+    empty `composite_role` and empty `composite_role_note`. An existing entry
+    is never overwritten; new catalog families are appended so a fresh crawl
+    cannot silently drop or reset the team's work.
+    """
     p = repo / "product_review.json"
     existing, first = {}, not p.exists()
     if not first:
         existing = json.loads(p.read_text(encoding="utf-8"))
     added = 0
+    default = {"stage": "cataloged", "uncertainty_metrics": "", "note": "",
+               "composite_role": "", "composite_role_note": ""}
     for path in sorted(fams):
         if path not in existing:
-            existing[path] = {"stage": "cataloged", "uncertainty_metrics": "", "note": ""}
+            existing[path] = dict(default)
             added += 1
     if added or first:
         p.write_text(json.dumps(dict(sorted(existing.items())), indent=2), encoding="utf-8")
     return existing, p, first, added
+
+def validate_review(review):
+    """Check the composite_role/composite_role_note contract.
+
+    A composite_role without a matching composite_role_note is a schema
+    violation. We do NOT rewrite the file (the human's intent is captured
+    even if incomplete) - the effective_role() reader downgrades it to
+    unset, and we log the offense here so `python tools/product_scope.py
+    --repo .` prints it once per run.
+    """
+    problems = []
+    for path, r in review.items():
+        if not isinstance(r, dict): continue
+        role = (r.get("composite_role") or "").strip()
+        note = (r.get("composite_role_note") or "").strip()
+        if role and not note:
+            problems.append((path, role, "composite_role_note is empty"))
+        elif role and role not in COMPOSITE_ROLES:
+            problems.append((path, role, "not one of " + "/".join(COMPOSITE_ROLES)))
+    for path, role, msg in problems:
+        print(f"  review: WARNING {path}: composite_role={role!r} {msg}; "
+              "treating as unset until fixed", file=sys.stderr)
+    return problems
 
 # ============================================================================
 # REPO EVIDENCE -> work depth per product
@@ -725,10 +777,11 @@ table.rep td{border-bottom:1px solid var(--ice);padding:7px 9px;vertical-align:t
       border-radius:6px;padding:5px 11px;cursor:pointer;background:#F5D77A;color:#16204A;font-weight:700;}
 #qbar button.sec{background:#28356B;color:#CADCFC;font-weight:400;}
 #qbar code{background:#16204A;padding:2px 6px;border-radius:4px;display:block;margin-top:7px;font-size:11px;}
-.stagechip,.workchip,.kindchip{display:inline-block;padding:2px 9px;border-radius:10px;font-size:10px;
+.stagechip,.workchip,.kindchip,.rolechip{display:inline-block;padding:2px 9px;border-radius:10px;font-size:10px;
       font-weight:700;border:1px solid var(--line);margin-right:5px;}
 .workchip{font-weight:600;}
 .kindchip{font-weight:600;background:#fff;color:var(--muted);}
+.rolechip{background:#F1E7C8;color:#6B4E11;border-color:var(--gold);font-weight:700;cursor:help;}
 .w4{background:var(--navy);color:#F5D77A;} .w3{background:#50639B;color:#fff;} .w2{background:#8FA8D8;color:#16204A;}
 .w1{background:var(--ice);color:var(--navy);} .w0{background:#F6F7FA;color:#9AA0B0;}
 .fcount{font-size:10px;color:var(--gold);font-weight:700;}
@@ -1079,7 +1132,7 @@ def product_facet_values(f, review, work, probes, top_families):
     ws = w.get("status", 0)
     family = f.get("group") or ""
     fbucket = family if family in top_families else "Other"
-    role = (r.get("composite_role") or "").strip()  # populated by feature #7; empty today
+    role = effective_role(r)   # empty when composite_role_note is missing
     return {
         "stage":     st,
         "family":    family,
@@ -1111,6 +1164,7 @@ FACET_VALUE_LABELS = {
     "evidence":  {"yes": "yes", "no": "no"},
     "probe":     {"yes": "yes", "no": "no"},
     "validated": {"yes": "yes", "no": "no"},
+    "role":      {**COMPOSITE_ROLE_LABELS, "(unset)": "(unset)"},
 }
 
 SNAPSHOT_FILE = ".product_scope_last_run.json"
@@ -1279,7 +1333,7 @@ def build_snapshot(fams, review, work, probes, git):
             "stage":           r.get("stage", "cataloged"),
             "evidence_count":  int(w.get("hit_count", 0)),
             "has_probe":       bool(pr.get("ok")),
-            "composite_role":  (r.get("composite_role") or "").strip(),
+            "composite_role":  effective_role(r),   # note-required rule enforced
             "head_sha":        git.get("head_sha", "") if git else "",
         }
     return {
@@ -1494,6 +1548,10 @@ def product_row(f, review, work, probes, ctx=None):
 
     mini = (f'<span class="stagechip" style="background:{STAGE_COLORS[st]};color:{chipcolor}">'
             f'{STAGE_LABELS[st]}</span><span class="workchip w{ws}">{STATUS_LABELS[ws]}</span>')
+    role = effective_role(r)  # feature #7: human-set, note required
+    if role:
+        role_lbl = COMPOSITE_ROLE_LABELS.get(role, role)
+        mini += f'<span class="rolechip" title="{_esc(r.get("composite_role_note",""))}">{_esc(role_lbl)}</span>'
     if finds:
         plural = "s" if len(finds) > 1 else ""
         mini += f'<span class="fcount">{len(finds)} insight{plural}</span>'
@@ -2018,6 +2076,7 @@ def main():
         print("               stages and uncertainty notes are yours to fill in - the tool sets neither")
     elif added:
         print(f"  review file: {added} new product(s) appended; existing entries untouched")
+    validate_review(review)   # feature #7: composite_role requires composite_role_note
 
     if args.export:
         # Export mode skips HTML generation entirely - the export IS the deliverable.
