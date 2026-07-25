@@ -34,7 +34,7 @@ Usage:
 Output: product_report.html (self-contained, no CDN, no storage APIs).
 """
 
-import argparse, json, re, sys, datetime, urllib.request
+import argparse, json, re, subprocess, sys, datetime, urllib.request
 from pathlib import Path
 
 try:
@@ -42,6 +42,44 @@ try:
     DEEP = True
 except ImportError:
     DEEP = False
+
+# ============================================================================
+# GIT INFO - captured once per run, embedded into the report so contextual
+# affordances (freshness pill, "regenerate to refresh" prompts, evidence
+# permalinks, diff snapshots) all see the same commit state.
+# ============================================================================
+
+def _git(repo: Path, args):
+    """Run a git command in `repo`. Returns stripped stdout, or "" on failure.
+    Silent on error - the tool must never crash because git is missing."""
+    try:
+        r = subprocess.run(["git", "-C", str(repo)] + list(args),
+                           capture_output=True, text=True, timeout=10)
+        if r.returncode == 0:
+            return r.stdout.strip()
+    except Exception:
+        pass
+    return ""
+
+def git_info(repo: Path):
+    """Snapshot of the repo state the report is being generated against.
+
+    Fields:
+      head_sha    -> current HEAD SHA (full)
+      branch      -> current branch name (usually 'main'); "" in detached-HEAD
+      remote_url  -> origin remote URL, e.g. https://github.com/foo/bar.git
+      github_slug -> "owner/repo" if origin looks like GitHub, else ""
+    """
+    remote = _git(repo, ["remote", "get-url", "origin"])
+    slug = ""
+    m = re.search(r"github\.com[:/]([^/]+)/([^/]+?)(?:\.git)?/?$", remote)
+    if m: slug = f"{m.group(1)}/{m.group(2)}"
+    return {
+        "head_sha":    _git(repo, ["rev-parse", "HEAD"]),
+        "branch":      _git(repo, ["rev-parse", "--abbrev-ref", "HEAD"]),
+        "remote_url":  remote,
+        "github_slug": slug,
+    }
 
 # ============================================================================
 # CONFIG
@@ -658,6 +696,29 @@ table.rep td{border-bottom:1px solid var(--ice);padding:7px 9px;vertical-align:t
        font-size:10.5px;margin-right:6px;font-family:ui-monospace,Consolas,monospace;}
 .nohit{display:none;font-size:12.5px;color:var(--muted);font-style:italic;padding:10px 0;}
 footer{padding:22px 44px;color:var(--muted);font-size:11.5px;}
+/* Freshness pill bar (shown on every page - reads data-generated-at at page load). */
+.freshbar{background:#0F1738;color:#CADCFC;padding:9px 44px;font-size:12px;
+     display:flex;align-items:center;gap:14px;flex-wrap:wrap;border-bottom:1px solid #263466;}
+.freshbar .pill{display:inline-block;padding:3px 12px;border-radius:11px;font-weight:700;font-size:11.5px;
+     letter-spacing:.02em;background:#2A356C;color:#CADCFC;}
+.freshbar .pill.fresh{background:#1F7A3A;color:#E6F5EA;}
+.freshbar .pill.stale{background:#E9CD7A;color:#3A2F0A;}
+.freshbar .pill.old{background:#C0392B;color:#FFF;}
+.freshbar .sha{font-family:ui-monospace,Consolas,monospace;font-size:10.5px;opacity:.7;}
+/* Reusable click-to-copy control: <span class="copy-cmd"><code>...</code><button data-copy="...">Copy</button></span> */
+.copy-cmd{display:inline-flex;align-items:center;gap:6px;background:#16204A;border:1px solid #28356B;
+     border-radius:6px;padding:2px 4px 2px 8px;font-family:ui-monospace,Consolas,monospace;font-size:11px;
+     color:#CADCFC;max-width:100%;}
+.copy-cmd code{background:transparent;color:inherit;padding:0;font-size:inherit;white-space:nowrap;
+     overflow:hidden;text-overflow:ellipsis;max-width:520px;}
+.copy-cmd button{background:#28356B;color:#F5D77A;border:0;border-radius:4px;padding:2px 8px;
+     font:inherit;font-size:10.5px;font-weight:700;cursor:pointer;letter-spacing:.03em;}
+.copy-cmd button:hover{background:#3A4890;}
+.copy-cmd button.done{background:#1F7A3A;color:#fff;}
+/* Light variant, for use inside product cards on white backgrounds. */
+.copy-cmd.light{background:#F6F7FA;border-color:var(--line);color:var(--ink);}
+.copy-cmd.light button{background:var(--line);color:var(--navy);}
+.copy-cmd.light button.done{background:#1F7A3A;color:#fff;}
 </style></head><body>
 <header>
   <div class="kicker">PRODUCT SCOPE &bull; GENERATED __DATE__ &bull; __CATNOTE__</div>
@@ -667,11 +728,57 @@ footer{padding:22px 44px;color:var(--muted);font-size:11.5px;}
   Repo: <b>__REPO__</b>.</p>
   <div class="tabs">__TABS__</div>
 </header>
+<div class="freshbar" data-generated-at="__GEN_ISO__" data-head-sha="__HEAD_SHA__">
+  <span>Regenerated <span id="fresh-pill" class="pill">just now</span></span>
+  <span>Rerun:</span>
+  <span class="copy-cmd"><code>python tools/product_scope.py --repo .</code>
+    <button data-copy="python tools/product_scope.py --repo .">Copy</button></span>
+  <span class="sha" title="HEAD SHA at generation time">__HEAD_SHORT__ &bull; __BRANCH__</span>
+</div>
 <div class="wrap">__PANELS__</div>
 <div id="qbar"><span><b id="qn">0</b> queued for probe</span>
   <button id="qdl">Download queue</button><button class="sec" id="qcl">Clear</button>
   <code>python tools\product_scope.py --repo . --probe-queue &lt;downloaded file&gt;</code></div>
 <script>
+/* --- Click-to-copy (reused by freshness bar, per-card action prompts, etc.) --- */
+function _copyText(txt, btn){
+  var done = function(){
+    if(!btn) return;
+    var old = btn.textContent; btn.textContent = 'Copied'; btn.classList.add('done');
+    setTimeout(function(){ btn.textContent = old; btn.classList.remove('done'); }, 1200);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(done, function(){});
+  } else {
+    var ta = document.createElement('textarea'); ta.value = txt;
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); done(); } catch(_){}
+    document.body.removeChild(ta);
+  }
+}
+document.addEventListener('click', function(e){
+  var b = e.target.closest && e.target.closest('button[data-copy]');
+  if(!b) return;
+  e.preventDefault(); e.stopPropagation();
+  _copyText(b.getAttribute('data-copy'), b);
+});
+/* --- Freshness pill: computes age from data-generated-at on every load --- */
+(function(){
+  var bar = document.querySelector('.freshbar'); if(!bar) return;
+  var pill = document.getElementById('fresh-pill'); if(!pill) return;
+  var iso = bar.getAttribute('data-generated-at'); if(!iso) return;
+  var gen = new Date(iso); var age = (Date.now() - gen.getTime()) / 1000;
+  if (isNaN(age) || age < 0) age = 0;
+  var label;
+  if (age < 90)              label = Math.max(1, Math.round(age)) + 's ago';
+  else if (age < 3600)       label = Math.round(age / 60) + 'm ago';
+  else if (age < 86400)      label = Math.round(age / 3600) + 'h ago';
+  else                       label = Math.round(age / 86400) + 'd ago';
+  pill.textContent = label;
+  if      (age < 86400)      pill.classList.add('fresh');   /* < 24h */
+  else if (age < 3 * 86400)  pill.classList.add('stale');   /* 24-72h */
+  else                       pill.classList.add('old');     /* > 3d */
+})();
 document.querySelectorAll('.tab').forEach(function(t){
   t.addEventListener('click', function(){
     document.querySelectorAll('.tab').forEach(function(x){ x.classList.remove('on'); });
@@ -1051,7 +1158,7 @@ def export_xlsx(rows, out_path):
     wb.save(out_path)
 
 
-def render(fams, review, work, worklog, notebooks, probes, repo_name, catnote, out_path):
+def render(fams, review, work, worklog, notebooks, probes, repo_name, catnote, out_path, git):
     counts = {s: 0 for s in STAGES}
     for path in fams:
         counts[review.get(path, {}).get("stage", "cataloged")] += 1
@@ -1066,11 +1173,18 @@ def render(fams, review, work, worklog, notebooks, probes, repo_name, catnote, o
         panels.append(f'<div class="panel" id="panel-k{i}">'
                       + build_kind_panel(k, fams, review, work, probes) + '</div>')
 
+    gen_iso = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    head_short = (git.get("head_sha") or "")[:7] or "no-git"
+    branch = git.get("branch") or "detached"
     html = (TEMPLATE
             .replace("__DATE__", datetime.date.today().strftime("%B %d, %Y"))
             .replace("__CATNOTE__", catnote).replace("__REPO__", repo_name)
             .replace("__TABS__", "".join(tabs))
-            .replace("__PANELS__", "".join(panels)))
+            .replace("__PANELS__", "".join(panels))
+            .replace("__GEN_ISO__", gen_iso)
+            .replace("__HEAD_SHA__", _esc(git.get("head_sha") or ""))
+            .replace("__HEAD_SHORT__", _esc(head_short))
+            .replace("__BRANCH__", _esc(branch)))
     Path(out_path).write_text(html, encoding="utf-8")
     return counts
 
@@ -1152,7 +1266,11 @@ def main():
         print(f"Wrote {len(rows)} product row(s) to {out} ({args.export})")
         return
 
-    counts = render(fams, review, work, worklog, notebooks, probes, repo.name, catnote, out)
+    git = git_info(repo)
+    if git.get("head_sha"):
+        print(f"  git: HEAD {git['head_sha'][:7]} on '{git.get('branch') or 'detached'}'"
+              + (f" | github: {git['github_slug']}" if git.get("github_slug") else ""))
+    counts = render(fams, review, work, worklog, notebooks, probes, repo.name, catnote, out, git)
     print("  funnel: " + " -> ".join(f"{STAGE_LABELS[s]} {counts.get(s, 0)}" for s in STAGES))
     print(f"Report written to {out}")
 
