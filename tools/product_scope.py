@@ -1538,6 +1538,28 @@ footer{padding:22px 44px;color:var(--muted);font-size:11.5px;}
 .eda-diff{background:#FBF0D6;border-left:3px solid #C9A227;border-radius:4px;
      padding:5px 8px;margin:4px 0;font-size:11px;color:#6E4E11;line-height:1.45;}
 .eda-diff b{color:#6E4E11;}
+/* Quick Look (Phase 4 #1) - tiered summary section at the top of every card.
+   Tier chip colors: grey (catalog), blue (probe), green (sample). */
+.tier-chip{display:inline-block;padding:2px 10px;border-radius:11px;font-size:10.5px;
+     font-weight:700;letter-spacing:.02em;border:1px solid var(--line);}
+.tier-chip.tier-catalog{background:#EDF0F7;color:#5A6072;border-color:#D6DBE8;}
+.tier-chip.tier-probe{background:#DCE7FA;color:#1F2A5C;border-color:#8FA8D8;}
+.tier-chip.tier-sample{background:#D6EDD9;color:#1F5A2E;border-color:#7ABF89;}
+.ql-head{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:5px;}
+.ql-sub{font-size:10.5px;color:var(--muted);font-style:italic;}
+.ql-facts{font-size:11.5px;color:var(--ink);line-height:1.5;margin:3px 0;}
+.ql-facts b{color:var(--navy);font-weight:600;}
+.ql-desc{font-size:11px;color:var(--muted);line-height:1.45;margin:4px 0;}
+.ql-endpoint{font-size:10.5px;color:var(--muted);font-family:ui-monospace,Consolas,monospace;
+     margin:3px 0;overflow:hidden;text-overflow:ellipsis;}
+.ql-endpoint b{font-family:"Segoe UI",sans-serif;color:var(--navy);}
+.ql-endpoint a{color:#3A4890;text-decoration:none;border-bottom:1px dotted #8FA8D8;}
+.ql-nonapi{font-size:11px;color:#8a4d1c;font-style:italic;margin:4px 0;}
+.ql-tier1{font-size:11.5px;color:var(--ink);line-height:1.55;margin:5px 0;
+     background:#F1F5FF;border-left:3px solid #8FA8D8;padding:5px 8px;border-radius:4px;}
+.ql-tier1 b{color:var(--navy);font-weight:600;}
+.ql-empty{font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5;}
+.ql-empty-cmd{margin-top:4px;}
 /* Faceted browsing sidebar (only on the Products tabs). */
 .products-shell{display:flex;gap:22px;align-items:flex-start;}
 .products-main{flex:1;min-width:0;}
@@ -2297,19 +2319,10 @@ def _fmt_num(v):
     except Exception:
         return str(v)
 
-def render_eda_card_section(f, cache_entry, diff_note=None):
-    """HTML for the 'EDA snapshot' branch on one product card.
-
-    cache_entry: dict from scope_data_cache.json (may be None -> renders the
-                 'not sampled yet' state).
-    diff_note:   optional string describing changes since a previous sample
-                 (produced by #6 on --refresh). Rendered as a small amber
-                 banner above the table when present.
-
-    Consistent with the probe branch's structure: header + headline + tables.
-    Never editorialises: reports what the data looks like and lets the >30%
-    missing highlight speak for itself.
-    """
+def _eda_header_html(cache_entry):
+    """Header line for the EDA card / Quick Look tier 2: freshness pill, shape,
+    source SHA + URL. Extracted so the Quick Look and the standalone EDA
+    snapshot branch share the exact same header markup."""
     pill = sample_age_pill(cache_entry)
     src_url = (cache_entry or {}).get("source_url", "")
     if cache_entry:
@@ -2330,16 +2343,16 @@ def render_eda_card_section(f, cache_entry, diff_note=None):
     if src_url:
         head_bits.append(f'<span class="eda-src"><a href="{_esc(src_url)}" target="_blank" '
                          f'rel="noopener" title="{_esc(src_url)}">{_esc(src_url)}</a></span>')
-    header = '<div class="eda-head">' + "".join(head_bits) + '</div>'
+    return '<div class="eda-head">' + "".join(head_bits) + '</div>'
 
+def _eda_body_html(cache_entry, diff_note=None):
+    """Inner EDA tables (columns / numerics / categoricals / geography /
+    sparklines) plus optional refresh-diff banner. Returns just the tables
+    HTML, no branch/bcard wrapper, no header - so Quick Look tier 2 and the
+    standalone EDA snapshot section can share the renderer (Phase 4 #1)."""
     if not cache_entry:
-        body = ('<div class="eda-empty">No sample cached yet. Run '
-                '<code>python tools/product_scope.py --repo . --sample --product '
-                + _esc(f["path"]) + '</code> to fetch one.</div>')
-        return ('<div class="branch"><div class="bcard"><div class="blabel">EDA snapshot</div>'
-                + header + body + '</div></div>')
-
-    parts = [header]
+        return ""
+    parts = []
     if diff_note:
         # Accept either a single string or a list of change strings (Phase 3 #6).
         if isinstance(diff_note, (list, tuple)):
@@ -2426,7 +2439,154 @@ def render_eda_card_section(f, cache_entry, diff_note=None):
             '<th>range</th></tr>'
             + "".join(rows_html) + '</table>')
 
+    return "".join(parts)
+
+def render_eda_card_section(f, cache_entry, diff_note=None):
+    """HTML for the 'EDA snapshot' branch on one product card.
+
+    cache_entry: dict from scope_data_cache.json (may be None -> renders the
+                 'not sampled yet' state).
+    diff_note:   optional string describing changes since a previous sample
+                 (produced by #6 on --refresh). Rendered as a small amber
+                 banner above the table when present.
+
+    Consistent with the probe branch's structure: header + headline + tables.
+    Never editorialises: reports what the data looks like and lets the >30%
+    missing highlight speak for itself.
+
+    Body-rendering delegated to _eda_body_html so Quick Look tier 2 (Phase 4 #1)
+    shows the same tables without duplicating the renderer.
+    """
+    header = _eda_header_html(cache_entry)
+    if not cache_entry:
+        body = ('<div class="eda-empty">No sample cached yet. Run '
+                '<code>python tools/product_scope.py --repo . --sample --product '
+                + _esc(f["path"]) + '</code> to fetch one.</div>')
+        return ('<div class="branch"><div class="bcard"><div class="blabel">EDA snapshot</div>'
+                + header + body + '</div></div>')
     return ('<div class="branch"><div class="bcard"><div class="blabel">EDA snapshot</div>'
+            + header + _eda_body_html(cache_entry, diff_note) + '</div></div>')
+
+# ============================================================================
+# QUICK LOOK (Phase 4 #1)
+# ============================================================================
+# A persistent summary section at the top of every product card that renders
+# the HIGHEST tier of data currently cached. Chip tells the reader at a glance
+# which tier they're seeing:
+#   Tier 0 (catalog metadata)        - grey    "Cached: catalog"
+#   Tier 1 (probe results)           - blue    "Cached: probe"
+#   Tier 2 (sample + EDA)            - green   "Cached: sample"
+#
+# Non-API products (no variables_url in the catalog) never advance past Tier 0
+# and render a "not sample-able via API" note where the run-a-probe hint would
+# otherwise sit.
+
+def _quick_look_tier(f, probe_entry, cache_entry):
+    """Highest tier currently cached for one product. Returns (tier, label,
+    class) where class matches the CSS chip variants defined in TEMPLATE."""
+    if cache_entry:
+        return (2, "Cached: sample", "tier-sample")
+    if probe_entry and probe_entry.get("ok"):
+        return (1, "Cached: probe", "tier-probe")
+    return (0, "Cached: catalog", "tier-catalog")
+
+def _quick_look_tier0_bits(f):
+    """Tier-0 (always-available) facts for the Quick Look. Everything here
+    comes from the catalog record - zero API cost, no fetch required."""
+    bits = []
+    fam_bit = f.get("group") or ""
+    if fam_bit:
+        bits.append(f'<b>Family:</b> {_esc(fam_bit)}')
+    bits.append('<b>Agency:</b> U.S. Census Bureau')
+    kind = f.get("kind") or ""
+    if kind:
+        bits.append(f'<b>Kind:</b> {_esc(kind)}')
+    v = f.get("vintages") or []
+    if v:
+        bits.append(f'<b>Vintages:</b> {_esc(_vint(f))}')
+    return bits
+
+def render_quick_look(f, probe_entry, cache_entry, warm_summary=None):
+    """One card's Quick Look branch. Picks the highest tier currently cached
+    and renders a summary. Sits above every other section on the card.
+
+    warm_summary: optional dict from .warm_cache_last_run.json (or None). Only
+                  consulted to detect the 'non_api' tag persisted by --warm-cache
+                  so Quick Look's Tier 0 empty state shows the right message.
+    """
+    tier, chip_label, chip_class = _quick_look_tier(f, probe_entry, cache_entry)
+    non_api = not f.get("variables_url")
+    if warm_summary and isinstance(warm_summary, dict):
+        non_api_list = set(warm_summary.get("skipped_non_api") or [])
+        if f["path"] in non_api_list:
+            non_api = True
+
+    chip = f'<span class="tier-chip {chip_class}">{_esc(chip_label)}</span>'
+
+    parts = [f'<div class="ql-head">{chip}']
+    # Small subtitle next to the chip: what tier tells us in plain English.
+    tier_desc = {
+        0: "catalog record only",
+        1: "API probe results cached",
+        2: "sample fetched and EDA cached",
+    }[tier]
+    parts.append(f'<span class="ql-sub">{_esc(tier_desc)}</span></div>')
+
+    # ---- Tier 0: catalog basics (always shown) ----
+    t0_bits = _quick_look_tier0_bits(f)
+    parts.append('<div class="ql-facts">' + ' &middot; '.join(t0_bits) + '</div>')
+
+    desc = f.get("desc") or ""
+    if desc:
+        cut = desc[:280] + ("..." if len(desc) > 280 else "")
+        parts.append(f'<div class="ql-desc">{_esc(cut)}</div>')
+
+    endpoint = f.get("variables_url") or ""
+    if endpoint:
+        # Convert variables.json URL back to the base data endpoint for display.
+        base = endpoint.replace("/variables.json", "")
+        parts.append(f'<div class="ql-endpoint"><b>Endpoint:</b> '
+                     f'<a href="{_esc(endpoint)}" target="_blank" rel="noopener">'
+                     f'{_esc(base)}</a></div>')
+    elif non_api:
+        parts.append('<div class="ql-nonapi">Not sample-able via API '
+                     '(bulk-download product - e.g. TIGER shapefiles, DAS demo).</div>')
+
+    # ---- Tier 1: probe adds real MOE / allocation / geography levels ----
+    if tier >= 1 and probe_entry and probe_entry.get("ok"):
+        p1 = []
+        if probe_entry.get("variables") is not None:
+            p1.append(f'<b>Variables:</b> {int(probe_entry["variables"]):,}')
+        if probe_entry.get("moe_variables") is not None:
+            p1.append(f'<b>MOE vars:</b> {int(probe_entry["moe_variables"]):,}')
+        if probe_entry.get("allocation_group_count") is not None:
+            p1.append(f'<b>Allocation groups:</b> {int(probe_entry["allocation_group_count"])}')
+        levels = probe_entry.get("levels") or []
+        if levels:
+            preview = ", ".join(levels[:8]) + (" ..." if len(levels) > 8 else "")
+            p1.append(f'<b>Geography levels:</b> {_esc(preview)}')
+        if p1:
+            parts.append('<div class="ql-tier1">' + ' &middot; '.join(p1) + '</div>')
+
+    # ---- Tier 2: sample + full EDA (uses the shared body helper so both
+    # Quick Look and the deeper "EDA snapshot" branch below render identically) ----
+    if tier >= 2 and cache_entry:
+        parts.append(_eda_header_html(cache_entry))
+        parts.append(_eda_body_html(cache_entry))
+
+    # ---- Tier 0 empty-state hint (only when a probe/sample is possible) ----
+    if tier == 0 and not non_api:
+        cmd_probe  = f'python tools/product_scope.py --repo . --probe {f["path"]}'
+        cmd_sample = f'python tools/product_scope.py --repo . --sample --product {f["path"]}'
+        parts.append(
+            '<div class="ql-empty">Catalog entry only - run a probe or sample for deeper data:'
+            f'<div class="ql-empty-cmd"><span class="copy-cmd light"><code>{_esc(cmd_probe)}</code>'
+            f'<button data-copy="{_esc(cmd_probe)}">Copy</button></span></div>'
+            f'<div class="ql-empty-cmd"><span class="copy-cmd light"><code>{_esc(cmd_sample)}</code>'
+            f'<button data-copy="{_esc(cmd_sample)}">Copy</button></span></div>'
+            '</div>')
+
+    return ('<div class="branch"><div class="bcard"><div class="blabel">Quick Look</div>'
             + "".join(parts) + '</div></div>')
 
 def product_row(f, review, work, probes, ctx=None):
@@ -2463,13 +2623,20 @@ def product_row(f, review, work, probes, ctx=None):
             f'<div class="mini">{mini}</div></div>')
 
     branches = []
-    # Contextual affordances first: state-driven copyable commands that fill
+    # Quick Look (Phase 4 #1) - persistent summary showing the highest tier of
+    # cached data. Sits above every other section so the reader's first glimpse
+    # of the card is a summary tagged with a tier chip.
+    _data_cache = ctx.get("data_cache") or {}
+    _warm_summary = ctx.get("warm_summary")
+    branches.append(render_quick_look(f, probes.get(f["path"]),
+                                       _data_cache.get(f["path"]), _warm_summary))
+
+    # Contextual affordances: state-driven copyable commands that fill
     # what would otherwise be a blank section. Rules in _affordances().
     has_probe = bool(probes.get(f["path"], {}).get("ok"))
     # Phase 3 #8: cached EDA sample is a separate state signal - a probe alone
     # doesn't satisfy 'candidate with a sample', because a probe reports what
     # the API says it publishes, and a sample reports what the data looks like.
-    _data_cache = ctx.get("data_cache") or {}
     has_eda = bool(_data_cache.get(f["path"]))
     banners = _affordances(f, r, ws, has_probe, git, snapshot, has_eda)
     banners += card_divergence_banners(f, r, jl_refs)
