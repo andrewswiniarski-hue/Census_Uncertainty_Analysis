@@ -1872,6 +1872,18 @@ footer{padding:22px 44px;color:var(--muted);font-size:11.5px;}
 .freshbar .pill.stale{background:#E9CD7A;color:#3A2F0A;}
 .freshbar .pill.old{background:#C0392B;color:#FFF;}
 .freshbar .sha{font-family:ui-monospace,Consolas,monospace;font-size:10.5px;opacity:.7;}
+/* Cache coverage bar (Phase 4 #4). Sits directly below the freshness bar and
+   summarises how much of the catalog has actually been sampled - green/amber/red
+   pill on the sampled fraction, plus counts of non-API and unfetched products. */
+.cachebar{background:#131C41;color:#CADCFC;padding:7px 44px;font-size:11.5px;
+     display:flex;align-items:center;gap:14px;flex-wrap:wrap;border-bottom:1px solid #263466;}
+.cachebar .cov-pill{display:inline-block;padding:2px 10px;border-radius:11px;font-weight:700;
+     font-size:11px;letter-spacing:.02em;background:#2A356C;color:#CADCFC;}
+.cachebar .cov-pill.cov-green{background:#1F7A3A;color:#E6F5EA;}
+.cachebar .cov-pill.cov-amber{background:#E9CD7A;color:#3A2F0A;}
+.cachebar .cov-pill.cov-red{background:#C0392B;color:#FFF;}
+.cachebar .cov-note{color:#8FA8D8;font-size:10.5px;}
+.cachebar .warm-when{font-family:ui-monospace,Consolas,monospace;font-size:10.5px;opacity:.75;}
 /* Reusable click-to-copy control: <span class="copy-cmd"><code>...</code><button data-copy="...">Copy</button></span> */
 .copy-cmd{display:inline-flex;align-items:center;gap:6px;background:#16204A;border:1px solid #28356B;
      border-radius:6px;padding:2px 4px 2px 8px;font-family:ui-monospace,Consolas,monospace;font-size:11px;
@@ -1983,6 +1995,7 @@ footer{padding:22px 44px;color:var(--muted);font-size:11.5px;}
     <button data-copy="python tools/product_scope.py --repo .">Copy</button></span>
   <span class="sha" title="HEAD SHA at generation time">__HEAD_SHORT__ &bull; __BRANCH__</span>
 </div>
+<div class="cachebar" data-warm-finished-at="__WARM_FINISHED_ISO__">__CACHE_COVERAGE__</div>
 <div class="wrap">__PANELS__</div>
 <div id="qbar"><span><b id="qn">0</b> queued for probe</span>
   <button id="qdl">Download queue</button><button class="sec" id="qcl">Clear</button>
@@ -2026,6 +2039,22 @@ document.addEventListener('click', function(e){
   if      (age < 86400)      pill.classList.add('fresh');   /* < 24h */
   else if (age < 3 * 86400)  pill.classList.add('stale');   /* 24-72h */
   else                       pill.classList.add('old');     /* > 3d */
+})();
+/* --- Cache-coverage bar (Phase 4 #4): renders 'last warm-cache: Xh ago'
+       from data-warm-finished-at, or 'never' when the file is absent. --- */
+(function(){
+  var el = document.getElementById('warm-when'); if(!el) return;
+  var bar = document.querySelector('.cachebar');
+  var iso = bar && bar.getAttribute('data-warm-finished-at');
+  if(!iso){ el.textContent = 'never'; return; }
+  var when = new Date(iso); var age = (Date.now() - when.getTime()) / 1000;
+  if (isNaN(age) || age < 0) age = 0;
+  var label;
+  if (age < 90)              label = Math.max(1, Math.round(age)) + 's ago';
+  else if (age < 3600)       label = Math.round(age / 60) + 'm ago';
+  else if (age < 86400)      label = Math.round(age / 3600) + 'h ago';
+  else                       label = Math.round(age / 86400) + 'd ago';
+  el.textContent = label;
 })();
 document.querySelectorAll('.tab').forEach(function(t){
   t.addEventListener('click', function(){
@@ -2182,17 +2211,82 @@ by the team in product_review.json &bull; work depth and work-log findings are r
 def _esc(s):
     return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
+# ---- Cache tier for one product (Phase 4 #4) --------------------------------
+# Highest cached tier for a single product. Matches the Quick Look chip
+# variants and is the single source of truth for both the card chip and the
+# Cache-tier facet, so filter and chip cannot drift apart.
+CACHE_TIER_SAMPLE      = "sample"
+CACHE_TIER_PROBE       = "probe"
+CACHE_TIER_CATALOG     = "catalog"
+CACHE_TIER_NOT_SAMPLED = "not sampled"    # non-API bulk-download products
+
+def cache_tier_of(f, probes, data_cache):
+    """Return one of ('sample','probe','catalog','not sampled') for a family
+    given the current probe + data caches. Sample beats probe beats catalog;
+    products without a data endpoint bucket into 'not sampled'."""
+    if data_cache is not None and f["path"] in data_cache:
+        return CACHE_TIER_SAMPLE
+    if probes.get(f["path"], {}).get("ok"):
+        return CACHE_TIER_PROBE
+    if not f.get("variables_url"):
+        return CACHE_TIER_NOT_SAMPLED
+    return CACHE_TIER_CATALOG
+
+def build_cache_coverage_html(fams, data_cache, warm_summary=None):
+    """The cache-coverage line under the freshness bar (Phase 4 #4).
+
+    Renders 'Cache coverage: 342/570 sampled (60%), 145/570 non-API,
+    83/570 unfetched' with a color pill on the sampled fraction, plus the
+    last warm-cache run timestamp (formatted client-side via JS).
+
+    Denominator for the sampled fraction is 'sample-able' (total minus
+    non-API), because non-API products can never contribute to that fraction
+    and including them makes coverage look permanently red.
+
+    Color thresholds (spec):
+      green > 80%, amber 40-80%, red < 40%
+    """
+    total = len(fams)
+    non_api = sum(1 for f in fams.values() if not f.get("variables_url"))
+    sample_able = max(0, total - non_api)
+    dc = data_cache or {}
+    sampled = sum(1 for path in fams if path in dc)
+    unfetched = max(0, total - sampled - non_api)
+    pct = (sampled * 100.0 / sample_able) if sample_able else 0.0
+    if pct > 80:      pill_class = "cov-green"
+    elif pct >= 40:   pill_class = "cov-amber"
+    else:             pill_class = "cov-red"
+    if total == 0:    pill_class = "cov-red"
+
+    return (
+        '<span>Cache coverage: '
+        f'<span class="cov-pill {pill_class}">{sampled}/{total} sampled '
+        f'({pct:.0f}%)</span> &middot; '
+        f'{non_api}/{total} non-API &middot; '
+        f'{unfetched}/{total} unfetched</span>'
+        '<span class="cov-note">sample-able denominator: '
+        f'{sample_able}</span>'
+        '<span>Last warm-cache: <time id="warm-when" '
+        f'datetime="{_esc((warm_summary or {}).get("finished_at", ""))}">'
+        'never</time></span>'
+        '<span class="copy-cmd"><code>python tools/product_scope.py --repo . --warm-cache</code>'
+        '<button data-copy="python tools/product_scope.py --repo . --warm-cache">Copy</button></span>'
+    )
+
 def _vint(f):
     v = f["vintages"]
     if len(v) > 1: return f"{v[0]}–{v[-1]}"
     return str(v[0]) if v else EMDASH
 
-def product_facet_values(f, review, work, probes, top_families):
+def product_facet_values(f, review, work, probes, top_families, data_cache=None):
     """Facet metadata for one product family - emitted as data-* on the .prod card
     and consumed by the sidebar JS to filter and recount without a page reload.
 
     Kept small on purpose: adding a facet here + a facet block in build_kind_panel
     is all it takes to make a new filter live in the UI.
+
+    Phase 4 #4: `cache_tier` reuses cache_tier_of() so the sidebar filter cannot
+    drift from the Quick Look chip on the same card.
     """
     r = review.get(f["path"], {})
     st = r.get("stage", "cataloged")
@@ -2210,6 +2304,7 @@ def product_facet_values(f, review, work, probes, top_families):
         "probe":     "yes" if probes.get(f["path"], {}).get("ok") else "no",
         "validated": "yes" if ws >= 4 else "no",
         "role":      role or "(unset)",
+        "tier":      cache_tier_of(f, probes, data_cache or {}),
     }
 
 FACET_DEFS = [
@@ -2220,12 +2315,17 @@ FACET_DEFS = [
     ("probe",     "Has API probe",       None),
     ("validated", "Notebook validated",  None),
     ("role",      "Composite role",      "count"),
+    ("tier",      "Cache tier",          None),
 ]
 FACET_ORDER = {
     "stage":     ["focus", "candidate", "reviewed", "cataloged", "set-aside"],
     "evidence":  ["yes", "no"],
     "probe":     ["yes", "no"],
     "validated": ["yes", "no"],
+    # Cache-tier order matches the Quick Look chip progression: sample beats
+    # probe beats catalog; non-API bucket sits at the bottom.
+    "tier":      [CACHE_TIER_SAMPLE, CACHE_TIER_PROBE, CACHE_TIER_CATALOG,
+                  CACHE_TIER_NOT_SAMPLED],
 }
 FACET_VALUE_LABELS = {
     "stage": STAGE_LABELS,
@@ -2233,6 +2333,10 @@ FACET_VALUE_LABELS = {
     "probe":     {"yes": "yes", "no": "no"},
     "validated": {"yes": "yes", "no": "no"},
     "role":      {**COMPOSITE_ROLE_LABELS, "(unset)": "(unset)"},
+    "tier":      {CACHE_TIER_SAMPLE:      "sample",
+                  CACHE_TIER_PROBE:       "probe",
+                  CACHE_TIER_CATALOG:     "catalog only",
+                  CACHE_TIER_NOT_SAMPLED: "not sample-able"},
 }
 
 SNAPSHOT_FILE = ".product_scope_last_run.json"
@@ -2975,7 +3079,8 @@ def product_row(f, review, work, probes, ctx=None):
     snapshot = ctx.get("snapshot")
     jl_refs = ctx.get("jl_refs") or {}
     jl_errors = ctx.get("jl_errors") or {}
-    facets = product_facet_values(f, review, work, probes, top_families)
+    facets = product_facet_values(f, review, work, probes, top_families,
+                                    ctx.get("data_cache"))
     r = review.get(f["path"], {})
     st = r.get("stage", "cataloged")
     w = work.get(f["product"], {}) if f["product"] else {}
@@ -3136,7 +3241,7 @@ def product_row(f, review, work, probes, ctx=None):
             f'{facet_attrs}><div class="pnode">{node}</div>'
             f'<div class="branches">{"".join(branches)}</div></div>')
 
-def build_facet_sidebar(prods, review, work, probes, top_families):
+def build_facet_sidebar(prods, review, work, probes, top_families, data_cache=None):
     """Left-column facet blocks for the Products tabs.
 
     For each facet we render every value present in this tab's product set, with
@@ -3144,7 +3249,8 @@ def build_facet_sidebar(prods, review, work, probes, top_families):
     the cards AND rewrites every other facet's counts to reflect the intersection.
     """
     # Collect all facet values across the tab's products.
-    rows = [product_facet_values(f, review, work, probes, top_families) for f in prods]
+    rows = [product_facet_values(f, review, work, probes, top_families, data_cache)
+            for f in prods]
     blocks = []
     for key, label, sortmode in FACET_DEFS:
         vals = {}
@@ -3185,7 +3291,8 @@ def build_facet_sidebar(prods, review, work, probes, top_families):
             '</div>' + "".join(blocks) + '</aside>')
 
 def build_kind_panel(kind, fams, review, work, probes, git=None, snapshot=None,
-                     jl_refs=None, jl_errors=None, data_cache=None, eda_diffs=None):
+                     jl_refs=None, jl_errors=None, data_cache=None, eda_diffs=None,
+                     warm_summary=None):
     prods = [f for f in fams.values() if f["kind"] == kind]
     # Compute per-panel "top families" bucket for the Family facet.
     fam_counts = {}
@@ -3193,7 +3300,8 @@ def build_kind_panel(kind, fams, review, work, probes, git=None, snapshot=None,
     top_families = set(sorted(fam_counts, key=lambda g: -fam_counts[g])[:12])
     ctx = {"top_families": top_families, "git": git or {}, "snapshot": snapshot,
            "jl_refs": jl_refs or {}, "jl_errors": jl_errors or {},
-           "data_cache": data_cache or {}, "eda_diffs": eda_diffs or {}}
+           "data_cache": data_cache or {}, "eda_diffs": eda_diffs or {},
+           "warm_summary": warm_summary}
 
     groups = {}
     for f in prods: groups.setdefault(f["group"], []).append(f)
@@ -3215,7 +3323,7 @@ def build_kind_panel(kind, fams, review, work, probes, git=None, snapshot=None,
                 (f' across {len(subs)} subjects' if len(subs) > 1 else ""))
         secs.append(f'<div class="gsec gfold"><div class="ghead">{_esc(g)} '
                     f'<em>{tail}</em></div>{"".join(inner)}</div>')
-    sidebar = build_facet_sidebar(prods, review, work, probes, top_families)
+    sidebar = build_facet_sidebar(prods, review, work, probes, top_families, data_cache)
     body = ('<div class="blurb">' + KIND_BLURB.get(kind, "") + '</div>'
             f'<div class="filter"><input type="text" placeholder="Filter {len(prods)} products '
             f'by path, title, subject or program..."><span class="fcnt">{len(prods)} shown</span></div>'
@@ -3478,7 +3586,7 @@ def export_xlsx(rows, out_path):
 
 def render(fams, review, work, worklog, notebooks, probes, repo_name, catnote, out_path, git,
            snapshot=None, diff=None, jl_refs=None, jl_errors=None, divergences=None,
-           data_cache=None, eda_diffs=None):
+           data_cache=None, eda_diffs=None, warm_summary=None):
     eda_diffs = eda_diffs or {}
     counts = {s: 0 for s in STAGES}
     for path in fams:
@@ -3493,11 +3601,13 @@ def render(fams, review, work, worklog, notebooks, probes, repo_name, catnote, o
         tabs.append(f'<button class="tab" data-k="k{i}">{_esc(k)}<span class="n">{n}</span></button>')
         panels.append(f'<div class="panel" id="panel-k{i}">'
                       + build_kind_panel(k, fams, review, work, probes, git, snapshot,
-                                          jl_refs, jl_errors, data_cache, eda_diffs) + '</div>')
+                                          jl_refs, jl_errors, data_cache, eda_diffs,
+                                          warm_summary) + '</div>')
 
     gen_iso = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     head_short = (git.get("head_sha") or "")[:7] or "no-git"
     branch = git.get("branch") or "detached"
+    warm_finished_iso = (warm_summary or {}).get("finished_at", "")
     html = (TEMPLATE
             .replace("__DATE__", datetime.date.today().strftime("%B %d, %Y"))
             .replace("__CATNOTE__", catnote).replace("__REPO__", repo_name)
@@ -3506,7 +3616,10 @@ def render(fams, review, work, worklog, notebooks, probes, repo_name, catnote, o
             .replace("__GEN_ISO__", gen_iso)
             .replace("__HEAD_SHA__", _esc(git.get("head_sha") or ""))
             .replace("__HEAD_SHORT__", _esc(head_short))
-            .replace("__BRANCH__", _esc(branch)))
+            .replace("__BRANCH__", _esc(branch))
+            .replace("__CACHE_COVERAGE__",
+                      build_cache_coverage_html(fams, data_cache, warm_summary))
+            .replace("__WARM_FINISHED_ISO__", _esc(warm_finished_iso)))
     Path(out_path).write_text(html, encoding="utf-8")
     return counts
 
@@ -3655,8 +3768,12 @@ def main():
     # eda_diffs come from the last --sample run's diff dump (Phase 3 #6).
     data_cache = load_data_cache(repo)
     eda_diffs  = load_eda_diffs(repo)
+    # Phase 4 #4: warm-cache summary drives the coverage bar's 'last warm-cache'
+    # timestamp and the Quick Look non-api detection on hand-listed products.
+    warm_summary = load_warm_summary(repo)
     counts = render(fams, review, work, worklog, notebooks, probes, repo.name, catnote, out, git,
-                    snapshot_prev, diff, jl_refs, jl_errors, divergences, data_cache, eda_diffs)
+                    snapshot_prev, diff, jl_refs, jl_errors, divergences, data_cache, eda_diffs,
+                    warm_summary)
     print("  funnel: " + " -> ".join(f"{STAGE_LABELS[s]} {counts.get(s, 0)}" for s in STAGES))
     print(f"Report written to {out}")
 
