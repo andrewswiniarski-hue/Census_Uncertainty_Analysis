@@ -2216,20 +2216,22 @@ def build_diff_banner(diff, eda_diffs=None):
 # shows state or offers an action. These helpers turn per-product state into
 # copyable commands and JSON snippets - never paragraphs of tutorial text.
 
-def _affordances(f, r, ws, has_probe, git, snapshot):
+def _affordances(f, r, ws, has_probe, git, snapshot, has_eda=False):
     """Return a list of {"tone", "text", "cmd"} banners for one product card.
 
-    Rules (documented in the redesign spec):
-      1. No repo evidence           -> probe command
-      2. Candidate without a probe  -> amber probe command
-      3. FOCUS + snapshot's captured SHA != current HEAD -> regen command
-      4. Still cataloged            -> nudge to edit product_review.json
+    Rules (documented in the redesign spec + Phase 3):
+      1. No repo evidence                           -> probe command
+      2. Candidate without a probe                  -> amber probe command
+      3. Candidate without a cached EDA sample      -> amber sample command
+      4. FOCUS + snapshot's captured SHA != current HEAD -> regen command
+      5. Still cataloged                            -> nudge to edit product_review.json
     """
     path = f["path"]
     stage = r.get("stage", "cataloged")
     out = []
-    probe_cmd = f'python tools/product_scope.py --repo . --probe {path}'
-    regen_cmd = 'python tools/product_scope.py --repo .'
+    probe_cmd  = f'python tools/product_scope.py --repo . --probe {path}'
+    sample_cmd = f'python tools/product_scope.py --repo . --sample --product {path}'
+    regen_cmd  = 'python tools/product_scope.py --repo .'
     if ws == 0:
         out.append({"tone": "info",
                     "text": "No repo evidence yet - ask the API what this product publishes:",
@@ -2238,6 +2240,15 @@ def _affordances(f, r, ws, has_probe, git, snapshot):
         out.append({"tone": "amber",
                     "text": "Candidate without a probe. Probe first, then document what it publishes:",
                     "cmd":  probe_cmd})
+    if stage == "candidate" and not has_eda:
+        # Phase 3 #8: candidates need actual data, not just a probe. This is
+        # deliberately its own affordance rather than a suffix on the probe
+        # one: probing and sampling are separate steps a reviewer takes in
+        # order (probe first to understand the shape, sample second to see it).
+        out.append({"tone": "amber",
+                    "text": "Candidate without a cached EDA sample. Fetch actual "
+                            "rows and run canonical EDA:",
+                    "cmd":  sample_cmd})
     if stage == "focus" and snapshot:
         snap_head = (snapshot.get("head_sha") or "")
         cur_head  = (git.get("head_sha") or "") if git else ""
@@ -2455,8 +2466,13 @@ def product_row(f, review, work, probes, ctx=None):
     # Contextual affordances first: state-driven copyable commands that fill
     # what would otherwise be a blank section. Rules in _affordances().
     has_probe = bool(probes.get(f["path"], {}).get("ok"))
-    banners = _affordances(f, r, ws, has_probe, git, snapshot)
-    banners += card_divergence_banners(f, r, jl_refs)   # feature #8
+    # Phase 3 #8: cached EDA sample is a separate state signal - a probe alone
+    # doesn't satisfy 'candidate with a sample', because a probe reports what
+    # the API says it publishes, and a sample reports what the data looks like.
+    _data_cache = ctx.get("data_cache") or {}
+    has_eda = bool(_data_cache.get(f["path"]))
+    banners = _affordances(f, r, ws, has_probe, git, snapshot, has_eda)
+    banners += card_divergence_banners(f, r, jl_refs)
     aff = _affordance_html(banners)
     if aff: branches.append(aff)
     unc = r.get("uncertainty_metrics", "")
