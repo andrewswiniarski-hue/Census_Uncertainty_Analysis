@@ -446,6 +446,32 @@ def fetch_catalog(cache_path: Path, online: bool):
 # REVIEW FILE (team-owned funnel) - append-only, never seeded
 # ============================================================================
 
+SAMPLE_CONFIG_VALUES = ("default", "always", "skip")
+
+def sample_config_of(review_entry):
+    """Read the (optional) sample_config field from a review entry, with the
+    'unknown value falls back to default + stderr warning' rule from Phase 4 #5.
+
+    Returns one of SAMPLE_CONFIG_VALUES:
+      'default' -> respect --warm-cache freshness + non-API skip logic (default)
+      'always'  -> always re-sample on warm even if the cache is fresh
+      'skip'    -> never sample during warm-cache runs (Set-aside, huge, or
+                   API-problematic products the team wants to exclude)
+    Missing / typo values silently downgrade to 'default'; typos also log a
+    one-line warning to stderr so the reviewer notices.
+    """
+    if not isinstance(review_entry, dict):
+        return "default"
+    raw = (review_entry.get("sample_config") or "").strip().lower()
+    if not raw:
+        return "default"
+    if raw in SAMPLE_CONFIG_VALUES:
+        return raw
+    print(f"  review: WARNING sample_config={raw!r} is not one of "
+          f"{'/'.join(SAMPLE_CONFIG_VALUES)}; treating as 'default'",
+          file=sys.stderr)
+    return "default"
+
 def load_review(repo: Path, fams):
     """The tool NEVER sets a stage and NEVER writes uncertainty text or a
     composite_role.
@@ -454,6 +480,10 @@ def load_review(repo: Path, fams):
     empty `composite_role` and empty `composite_role_note`. An existing entry
     is never overwritten; new catalog families are appended so a fresh crawl
     cannot silently drop or reset the team's work.
+
+    Phase 4 #5: newly created entries get a `sample_config: "default"` field.
+    Existing entries are NOT rewritten - the field is read via sample_config_of()
+    with 'default' as the fallback, so old review files stay valid.
     """
     p = repo / "product_review.json"
     existing, first = {}, not p.exists()
@@ -461,7 +491,8 @@ def load_review(repo: Path, fams):
         existing = json.loads(p.read_text(encoding="utf-8"))
     added = 0
     default = {"stage": "cataloged", "uncertainty_metrics": "", "note": "",
-               "composite_role": "", "composite_role_note": ""}
+               "composite_role": "", "composite_role_note": "",
+               "sample_config": "default"}
     for path in sorted(fams):
         if path not in existing:
             existing[path] = dict(default)
