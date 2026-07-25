@@ -2803,9 +2803,9 @@ def _fmt_num(v):
         return str(v)
 
 def _eda_header_html(cache_entry):
-    """Header line for the EDA card / Quick Look tier 2: freshness pill, shape,
-    source SHA + URL. Extracted so the Quick Look and the standalone EDA
-    snapshot branch share the exact same header markup."""
+    """Header line for Quick Look tier 2: freshness pill, shape, source SHA + URL.
+    (Formerly shared with the standalone EDA snapshot branch; that branch was
+    removed in Phase 4b because it duplicated Quick Look tier 2 verbatim.)"""
     pill = sample_age_pill(cache_entry)
     src_url = (cache_entry or {}).get("source_url", "")
     if cache_entry:
@@ -2831,8 +2831,9 @@ def _eda_header_html(cache_entry):
 def _eda_body_html(cache_entry, diff_note=None):
     """Inner EDA tables (columns / numerics / categoricals / geography /
     sparklines) plus optional refresh-diff banner. Returns just the tables
-    HTML, no branch/bcard wrapper, no header - so Quick Look tier 2 and the
-    standalone EDA snapshot section can share the renderer (Phase 4 #1)."""
+    HTML, no branch/bcard wrapper, no header - now used exclusively by Quick
+    Look tier 2 (the standalone EDA snapshot section was removed in Phase 4b,
+    and the same helper feeds the More-details drill-down)."""
     if not cache_entry:
         return ""
     parts = []
@@ -2924,31 +2925,11 @@ def _eda_body_html(cache_entry, diff_note=None):
 
     return "".join(parts)
 
-def render_eda_card_section(f, cache_entry, diff_note=None):
-    """HTML for the 'EDA snapshot' branch on one product card.
-
-    cache_entry: dict from scope_data_cache.json (may be None -> renders the
-                 'not sampled yet' state).
-    diff_note:   optional string describing changes since a previous sample
-                 (produced by #6 on --refresh). Rendered as a small amber
-                 banner above the table when present.
-
-    Consistent with the probe branch's structure: header + headline + tables.
-    Never editorialises: reports what the data looks like and lets the >30%
-    missing highlight speak for itself.
-
-    Body-rendering delegated to _eda_body_html so Quick Look tier 2 (Phase 4 #1)
-    shows the same tables without duplicating the renderer.
-    """
-    header = _eda_header_html(cache_entry)
-    if not cache_entry:
-        body = ('<div class="eda-empty">No sample cached yet. Run '
-                '<code>python tools/product_scope.py --repo . --sample --product '
-                + _esc(f["path"]) + '</code> to fetch one.</div>')
-        return ('<div class="branch"><div class="bcard"><div class="blabel">EDA snapshot</div>'
-                + header + body + '</div></div>')
-    return ('<div class="branch"><div class="bcard"><div class="blabel">EDA snapshot</div>'
-            + header + _eda_body_html(cache_entry, diff_note) + '</div></div>')
+# NOTE: render_eda_card_section() was removed in Phase 4b. Its body was a thin
+# wrapper around _eda_header_html() + _eda_body_html(), both of which now live
+# inside the Quick Look Tier 2 renderer below. Deleting it here keeps a card
+# from showing the same EDA tables twice; the shared helpers survive because
+# Quick Look still calls them.
 
 # ============================================================================
 # QUICK LOOK (Phase 4 #1)
@@ -3192,14 +3173,12 @@ def product_row(f, review, work, probes, ctx=None):
         branches.append('<div class="branch"><div class="bcard"><div class="blabel">Our progress</div>'
                         f'<span class="nowork">No repo work yet.{note}</span></div></div>')
 
-    # Phase 3 EDA snapshot - what the fetched data actually looks like. Only
-    # renders when a sample has been taken (Candidate products without cache
-    # get an affordance instead, see #8). Data cache is passed through ctx.
-    data_cache = ctx.get("data_cache") or {}
-    eda_entry = data_cache.get(f["path"])
-    eda_diffs = ctx.get("eda_diffs") or {}
-    if eda_entry:
-        branches.append(render_eda_card_section(f, eda_entry, eda_diffs.get(f["path"])))
+    # Phase 4b: the standalone "EDA snapshot" section was removed here. It
+    # rendered the same tables Quick Look Tier 2 already shows via
+    # _eda_body_html(), so on any card with a cached sample the reader saw the
+    # full EDA twice. Quick Look is now the single home for the sample view;
+    # the sampling logic (fetch_sample, compute_eda, scope_data_cache.json) is
+    # untouched, and the eda_diffs dump still feeds the Home-tab drift banner.
 
     # Composite code references (feature #6) - AST-derived hits from JL_Work_Tree.
     card_refs = _card_jl_refs_for(f, jl_refs)
