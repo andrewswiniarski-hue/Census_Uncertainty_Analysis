@@ -1195,6 +1195,32 @@ def fetch_sample(fam, probe, size, api_key):
         df = df.head(size)
     return df, url, ""
 
+def _print_sample_summary(summary, single_mode):
+    """End-of-run summary, human-readable. Called by sample_products() once
+    all targets have been processed. Kept plain-text - it goes to stdout, not
+    the HTML report."""
+    sampled = summary.get("sampled", [])
+    fresh   = summary.get("skipped_fresh", [])
+    nonapi  = summary.get("skipped_non_api", [])
+    failed  = summary.get("failed", [])
+    diffs   = summary.get("diffs", {})
+    banner  = "sample" if single_mode else "sample batch"
+    total   = len(sampled) + len(fresh) + len(nonapi) + len(failed)
+    print(f"[{banner}] finished: {total} target(s) processed")
+    print(f"           sampled ok      : {len(sampled)}")
+    print(f"           skipped (fresh) : {len(fresh)}")
+    print(f"           skipped (non-API): {len(nonapi)}")
+    print(f"           failed          : {len(failed)}")
+    if diffs:
+        n_ch = sum(len(v) for v in diffs.values())
+        print(f"           EDA drift       : {len(diffs)} product(s), "
+              f"{n_ch} material change(s) (see 'Since last regeneration' banner)")
+    if failed:
+        print("           failure details:")
+        for f in failed:
+            reason = f.get("reason", "unknown")
+            print(f"             - {f['path']}: {reason}")
+
 def sample_products(repo, fams, review, probes, only_product, size, refresh, git=None):
     """Run one or many samples. When only_product is set, sample just that one;
     otherwise batch through every product currently marked 'candidate' in the
@@ -1288,6 +1314,7 @@ def sample_products(repo, fams, review, probes, only_product, size, refresh, git
 
     # Persist cache once (single write, deterministic key order).
     save_data_cache(repo, cache)
+    _print_sample_summary(summary, only_product is not None)
     # #6: dump per-product diffs to a small file so the next HTML regen can
     # surface them - overwritten on every --sample run (empty when nothing
     # changed materially). Kept alongside the diff snapshot for symmetry.
