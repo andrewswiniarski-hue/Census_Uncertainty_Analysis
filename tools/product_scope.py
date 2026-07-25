@@ -1936,21 +1936,23 @@ footer{padding:22px 44px;color:var(--muted);font-size:11.5px;}
 .tier-chip.tier-catalog{background:#EDF0F7;color:#5A6072;border-color:#D6DBE8;}
 .tier-chip.tier-probe{background:#DCE7FA;color:#1F2A5C;border-color:#8FA8D8;}
 .tier-chip.tier-sample{background:#D6EDD9;color:#1F5A2E;border-color:#7ABF89;}
-.ql-head{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:5px;}
+.ql-head{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:4px;}
 .ql-sub{font-size:10.5px;color:var(--muted);font-style:italic;}
-.ql-facts{font-size:11.5px;color:var(--ink);line-height:1.5;margin:3px 0;}
-.ql-facts b{color:var(--navy);font-weight:600;}
-.ql-desc{font-size:11px;color:var(--muted);line-height:1.45;margin:4px 0;}
-.ql-endpoint{font-size:10.5px;color:var(--muted);font-family:ui-monospace,Consolas,monospace;
-     margin:3px 0;overflow:hidden;text-overflow:ellipsis;}
-.ql-endpoint b{font-family:"Segoe UI",sans-serif;color:var(--navy);}
-.ql-endpoint a{color:#3A4890;text-decoration:none;border-bottom:1px dotted #8FA8D8;}
+/* Phase 4b: three-line TL;DR. Each line is one glance's worth of information -
+   dense but scannable. Middle-dot separators keep the visual rhythm consistent
+   across tiers; small caps 'ql-k' labels distinguish keys from values without
+   bolding the whole line. Tint the line background at very low opacity in the
+   tier's own color family so eye can track catalog/probe/sample lineage. */
+.ql-line{font-size:11.5px;color:var(--ink);line-height:1.55;margin:3px 0;
+     padding:3px 8px;border-radius:4px;border-left:3px solid transparent;
+     overflow-wrap:anywhere;}
+.ql-t0{background:#F6F7FA;border-left-color:#D6DBE8;}
+.ql-t1{background:#F1F5FF;border-left-color:#8FA8D8;}
+.ql-t2{background:#EEF7EF;border-left-color:#7ABF89;}
+.ql-k{font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
+     font-weight:700;margin-right:2px;}
+.ql-sep{color:#B8BFCE;margin:0 2px;}
 .ql-nonapi{font-size:11px;color:#8a4d1c;font-style:italic;margin:4px 0;}
-.ql-tier1{font-size:11.5px;color:var(--ink);line-height:1.55;margin:5px 0;
-     background:#F1F5FF;border-left:3px solid #8FA8D8;padding:5px 8px;border-radius:4px;}
-.ql-tier1 b{color:var(--navy);font-weight:600;}
-.ql-empty{font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5;}
-.ql-empty-cmd{margin-top:4px;}
 /* Faceted browsing sidebar (only on the Products tabs). */
 .products-shell{display:flex;gap:22px;align-items:flex-start;}
 .products-main{flex:1;min-width:0;}
@@ -2954,25 +2956,119 @@ def _quick_look_tier(f, probe_entry, cache_entry):
         return (1, "Cached: probe", "tier-probe")
     return (0, "Cached: catalog", "tier-catalog")
 
-def _quick_look_tier0_bits(f):
-    """Tier-0 (always-available) facts for the Quick Look. Everything here
-    comes from the catalog record - zero API cost, no fetch required."""
+def _ql_tier0_line(f):
+    """Tier-0 TL;DR line: catalog-only facts, one compact line. Every card
+    shows this regardless of cache state. Zero API cost."""
     bits = []
-    fam_bit = f.get("group") or ""
-    if fam_bit:
-        bits.append(f'<b>Family:</b> {_esc(fam_bit)}')
-    bits.append('<b>Agency:</b> U.S. Census Bureau')
+    fam = f.get("group") or ""
+    if fam:
+        bits.append(f'<span class="ql-k">Family</span> {_esc(fam)}')
+    bits.append('<span class="ql-k">Agency</span> U.S. Census Bureau')
     kind = f.get("kind") or ""
     if kind:
-        bits.append(f'<b>Kind:</b> {_esc(kind)}')
+        bits.append(f'<span class="ql-k">Kind</span> {_esc(kind)}')
     v = f.get("vintages") or []
     if v:
-        bits.append(f'<b>Vintages:</b> {_esc(_vint(f))}')
-    return bits
+        bits.append(f'<span class="ql-k">Vintages</span> {_esc(_vint(f))}')
+    spatial = sorted(f.get("spatial") or [])
+    if spatial:
+        # First entry is enough - the catalog usually lists one spatial coverage
+        # per product (e.g., "United States"). Any list-y case is exposed in
+        # the More-details block.
+        bits.append(f'<span class="ql-k">Spatial</span> {_esc(spatial[0])}')
+    return ' <span class="ql-sep">&middot;</span> '.join(bits)
+
+def _ql_tier1_line(probe_entry, cache_entry):
+    """Tier-1 TL;DR line: probed metadata condensed to one glance.
+
+    If a sample is ALSO cached (tier 2), geography swings from 'declared
+    levels' to 'populated counts' - same axis, more informative number.
+    Returns "" if the probe didn't succeed (renderer skips the line)."""
+    if not (probe_entry and probe_entry.get("ok")):
+        return ""
+    bits = []
+    if probe_entry.get("moe_variables") is not None:
+        bits.append(f'{int(probe_entry["moe_variables"]):,} MOE variables')
+    if probe_entry.get("allocation_group_count") is not None:
+        bits.append(f'{int(probe_entry["allocation_group_count"])} allocation groups')
+
+    # Geography: prefer populated counts from the sample cache when available,
+    # otherwise fall back to the flat list of declared level names. Populated
+    # counts are strictly more informative (they answer "how many rows per
+    # level did we actually see?"), so upgrade whenever the sample exists.
+    geo = (cache_entry or {}).get("geography") or {}
+    if geo:
+        # Sort geographies by populated count descending; cap at 4 to keep
+        # the line scannable. The full breakdown lives in the drill-down.
+        entries = sorted(geo.items(),
+                         key=lambda kv: -int(kv[1].get("distinct_populated", 0)))
+        show = entries[:4]
+        parts = [f'{int(v.get("distinct_populated", 0)):,} {_esc(k)}'
+                 for k, v in show]
+        suffix = " ..." if len(entries) > len(show) else ""
+        bits.append("Populated geographies: " + ", ".join(parts) + suffix)
+    else:
+        levels = probe_entry.get("levels") or []
+        if levels:
+            preview = ", ".join(_esc(x) for x in levels[:6])
+            if len(levels) > 6:
+                preview += " ..."
+            bits.append("Declared levels: " + preview)
+    return ' <span class="ql-sep">&middot;</span> '.join(bits)
+
+def _ql_top_numeric_col(cache_entry):
+    """Return (name, numeric_dict) of the 'headline' numeric column for the
+    Tier-2 TL;DR line, or (None, None) if no numeric column is present.
+
+    Ranking - reuse what the EDA already computes cheaply:
+      1. First entry in `sparklines` (already ranked by looks-like-estimate
+         then descending variance in compute_eda; see _rank_numeric_for_spark).
+      2. Fallback: first column with a `numeric` block.
+    """
+    cols = (cache_entry or {}).get("columns", {}) or {}
+    sparks = (cache_entry or {}).get("sparklines", {}) or {}
+    for name in sparks:
+        num = (cols.get(name) or {}).get("numeric")
+        if num:
+            return name, num
+    for name, meta in cols.items():
+        num = meta.get("numeric")
+        if num:
+            return name, num
+    return None, None
+
+def _ql_tier2_line(cache_entry):
+    """Tier-2 TL;DR line: sample shape + missingness flag + one headline
+    numeric column's range. One glance, no tables. Full EDA lives in the
+    drill-down. Returns "" if no sample is cached."""
+    if not cache_entry:
+        return ""
+    shape = cache_entry.get("shape") or [0, 0]
+    rows, cols = int(shape[0]), int(shape[1])
+    bits = [f'{rows:,} rows &times; {cols:,} cols']
+    cols_dict = cache_entry.get("columns", {}) or {}
+    over30 = sum(1 for c in cols_dict.values() if c.get("flag_missing_over_30"))
+    if over30:
+        bits.append(f'{over30} col{"s" if over30 != 1 else ""} &gt; 30% missing')
+    top_name, top_num = _ql_top_numeric_col(cache_entry)
+    if top_name and top_num:
+        bits.append(f'<span class="ql-k">{_esc(top_name)}</span> '
+                    f'{_fmt_num(top_num.get("min"))} &ndash; '
+                    f'{_fmt_num(top_num.get("max"))}')
+    return ' <span class="ql-sep">&middot;</span> '.join(bits)
 
 def render_quick_look(f, probe_entry, cache_entry, warm_summary=None):
-    """One card's Quick Look branch. Picks the highest tier currently cached
-    and renders a summary. Sits above every other section on the card.
+    """One card's Quick Look branch. Always shows a compact 2-3 line TL;DR:
+
+      * Line 1 (always): tier chip + Tier-0 catalog facts.
+      * Line 2 (if probed): condensed probe metadata.
+      * Line 3 (if sampled): sample shape + missingness + headline numeric.
+
+    Full drill-down (dtype table, missingness list, numeric summaries,
+    categoricals, sparklines, full geography breakdown, probe variable list)
+    lives in the More-details toggle rendered by product_row() from this
+    same helper's output. Kept slim here on purpose (Phase 4b): the TL;DR is
+    what a scanning reader sees on the first pass.
 
     warm_summary: optional dict from .warm_cache_last_run.json (or None). Only
                   consulted to detect the 'non_api' tag persisted by --warm-cache
@@ -2986,69 +3082,35 @@ def render_quick_look(f, probe_entry, cache_entry, warm_summary=None):
             non_api = True
 
     chip = f'<span class="tier-chip {chip_class}">{_esc(chip_label)}</span>'
-
-    parts = [f'<div class="ql-head">{chip}']
-    # Small subtitle next to the chip: what tier tells us in plain English.
     tier_desc = {
         0: "catalog record only",
         1: "API probe results cached",
         2: "sample fetched and EDA cached",
     }[tier]
-    parts.append(f'<span class="ql-sub">{_esc(tier_desc)}</span></div>')
 
-    # ---- Tier 0: catalog basics (always shown) ----
-    t0_bits = _quick_look_tier0_bits(f)
-    parts.append('<div class="ql-facts">' + ' &middot; '.join(t0_bits) + '</div>')
+    parts = [
+        f'<div class="ql-head">{chip}'
+        f'<span class="ql-sub">{_esc(tier_desc)}</span></div>'
+    ]
 
-    desc = f.get("desc") or ""
-    if desc:
-        cut = desc[:280] + ("..." if len(desc) > 280 else "")
-        parts.append(f'<div class="ql-desc">{_esc(cut)}</div>')
+    # Line 1 - always visible.
+    parts.append('<div class="ql-line ql-t0">' + _ql_tier0_line(f) + '</div>')
 
-    endpoint = f.get("variables_url") or ""
-    if endpoint:
-        # Convert variables.json URL back to the base data endpoint for display.
-        base = endpoint.replace("/variables.json", "")
-        parts.append(f'<div class="ql-endpoint"><b>Endpoint:</b> '
-                     f'<a href="{_esc(endpoint)}" target="_blank" rel="noopener">'
-                     f'{_esc(base)}</a></div>')
-    elif non_api:
+    # Line 2 - only if we have real probe data.
+    t1 = _ql_tier1_line(probe_entry, cache_entry)
+    if t1:
+        parts.append('<div class="ql-line ql-t1">' + t1 + '</div>')
+
+    # Line 3 - only if a sample landed.
+    t2 = _ql_tier2_line(cache_entry)
+    if t2:
+        parts.append('<div class="ql-line ql-t2">' + t2 + '</div>')
+
+    # Non-API products get a one-line 'why there's no probe/sample' note in
+    # the TL;DR - stays compact but tells the reader why the tier is stuck at 0.
+    if tier == 0 and non_api:
         parts.append('<div class="ql-nonapi">Not sample-able via API '
                      '(bulk-download product - e.g. TIGER shapefiles, DAS demo).</div>')
-
-    # ---- Tier 1: probe adds real MOE / allocation / geography levels ----
-    if tier >= 1 and probe_entry and probe_entry.get("ok"):
-        p1 = []
-        if probe_entry.get("variables") is not None:
-            p1.append(f'<b>Variables:</b> {int(probe_entry["variables"]):,}')
-        if probe_entry.get("moe_variables") is not None:
-            p1.append(f'<b>MOE vars:</b> {int(probe_entry["moe_variables"]):,}')
-        if probe_entry.get("allocation_group_count") is not None:
-            p1.append(f'<b>Allocation groups:</b> {int(probe_entry["allocation_group_count"])}')
-        levels = probe_entry.get("levels") or []
-        if levels:
-            preview = ", ".join(levels[:8]) + (" ..." if len(levels) > 8 else "")
-            p1.append(f'<b>Geography levels:</b> {_esc(preview)}')
-        if p1:
-            parts.append('<div class="ql-tier1">' + ' &middot; '.join(p1) + '</div>')
-
-    # ---- Tier 2: sample + full EDA (uses the shared body helper so both
-    # Quick Look and the deeper "EDA snapshot" branch below render identically) ----
-    if tier >= 2 and cache_entry:
-        parts.append(_eda_header_html(cache_entry))
-        parts.append(_eda_body_html(cache_entry))
-
-    # ---- Tier 0 empty-state hint (only when a probe/sample is possible) ----
-    if tier == 0 and not non_api:
-        cmd_probe  = f'python tools/product_scope.py --repo . --probe {f["path"]}'
-        cmd_sample = f'python tools/product_scope.py --repo . --sample --product {f["path"]}'
-        parts.append(
-            '<div class="ql-empty">Catalog entry only - run a probe or sample for deeper data:'
-            f'<div class="ql-empty-cmd"><span class="copy-cmd light"><code>{_esc(cmd_probe)}</code>'
-            f'<button data-copy="{_esc(cmd_probe)}">Copy</button></span></div>'
-            f'<div class="ql-empty-cmd"><span class="copy-cmd light"><code>{_esc(cmd_sample)}</code>'
-            f'<button data-copy="{_esc(cmd_sample)}">Copy</button></span></div>'
-            '</div>')
 
     return ('<div class="branch"><div class="bcard"><div class="blabel">Quick Look</div>'
             + "".join(parts) + '</div></div>')
