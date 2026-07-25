@@ -34,7 +34,7 @@ Usage:
 Output: product_report.html (self-contained, no CDN, no storage APIs).
 """
 
-import argparse, ast, json, re, subprocess, sys, datetime, urllib.request
+import argparse, ast, json, os, re, subprocess, sys, datetime, urllib.request
 from pathlib import Path
 
 try:
@@ -679,38 +679,77 @@ def _append_insight(review, path, source, text, when=None, who=None):
     entry["insights"].append(ins)
     return ins
 
-def save_review_locked(repo: Path, review):
-    """Write review dict to product_review.json under BOTH:
-      * a module-level threading.Lock (guarantees in-process serialization)
-      * fcntl.flock() advisory lock on the open file (best-effort cross-process
-        protection - the --serve server and a --warm-cache subprocess writing
-        auto-insights concurrently)
+def with_review_locked(repo: Path, mutate_fn):
+    """Read product_review.json, call mutate_fn(review_dict), write it back -
+    all under BOTH the module threading.Lock AND the fcntl.flock advisory lock
+    on the companion lock file. This is the atomic read-modify-write helper
+    that every writer MUST use to avoid the classic RMW race: without the
+    load happening under the same lock as the save, two concurrent inserts
+    can read the same 'before' state and each clobber the other's append.
 
-    Deterministic key order. If fcntl is unavailable (Windows), degrade to
-    threading.Lock alone with a note printed once per session."""
+    mutate_fn should return whatever the caller wants to hand back to its
+    own caller (or None); its return value is passed through unchanged.
+    The current on-disk review dict is passed in mutable, and its post-mutate
+    state is what gets written out."""
     p = repo / "product_review.json"
-    ordered = dict(sorted(review.items()))
-    payload = json.dumps(ordered, indent=2)
+    lock_p = repo / ".product_review.json.lock"
+    tmp_p  = repo / f".product_review.json.tmp.{os.getpid()}"
     with _REVIEW_LOCK:
+        lock_fh = None
         if _HAVE_FCNTL:
-            # Open, lock, write, close. The lock is released on close.
-            with open(p, "w", encoding="utf-8") as fh:
+            try:
+                lock_fh = open(lock_p, "a+")
+                _fcntl.flock(lock_fh.fileno(), _fcntl.LOCK_EX)
+            except (OSError, AttributeError):
+                if lock_fh is not None:
+                    try: lock_fh.close()
+                    except Exception: pass
+                lock_fh = None
+        try:
+            # Read INSIDE the lock so nobody can write between our read and
+            # our write. This is the point of the whole helper.
+            if p.exists():
                 try:
-                    _fcntl.flock(fh.fileno(), _fcntl.LOCK_EX)
-                except (OSError, AttributeError):
-                    # Some filesystems (NFS, tmpfs on odd kernels) reject
-                    # flock. Fall through - threading.Lock still serializes
-                    # writers inside this process.
-                    pass
+                    review = json.loads(p.read_text(encoding="utf-8"))
+                except Exception:
+                    review = {}
+            else:
+                review = {}
+            result = mutate_fn(review)
+            ordered = dict(sorted(review.items()))
+            payload = json.dumps(ordered, indent=2)
+            with open(tmp_p, "w", encoding="utf-8") as fh:
                 fh.write(payload)
-        else:
-            # Windows path - threading.Lock is the only in-process serializer.
-            # A separate --warm-cache subprocess writing at the same time
-            # would race here; we accept that risk on Windows because the
-            # target machine runs `--serve` and `--warm-cache` in different
-            # sessions in practice. This matches the spec ("stdlib only, wrap
-            # fcntl in try/except for Windows compatibility - degrade to no-op").
-            p.write_text(payload, encoding="utf-8")
+                fh.flush()
+                try: os.fsync(fh.fileno())
+                except OSError: pass
+            os.replace(tmp_p, p)
+            return result
+        finally:
+            if lock_fh is not None:
+                try: _fcntl.flock(lock_fh.fileno(), _fcntl.LOCK_UN)
+                except Exception: pass
+                try: lock_fh.close()
+                except Exception: pass
+            try:
+                if tmp_p.exists(): tmp_p.unlink()
+            except OSError:
+                pass
+
+def save_review_locked(repo: Path, review):
+    """Overwrite product_review.json with the given dict, wholesale. Used by
+    the regen path (main()) which already has an in-memory review dict it
+    wants to persist as-is. WRITERS THAT NEED TO APPEND SHOULD USE
+    with_review_locked() INSTEAD - this helper does NOT re-read the on-disk
+    file, so a concurrent writer's appends can be clobbered if the caller's
+    in-memory `review` is stale.
+
+    Kept as a wrapper around with_review_locked() so the atomic-rename +
+    fcntl semantics are shared with the append path."""
+    def _replace(existing):
+        existing.clear()
+        existing.update(review)
+    with_review_locked(repo, _replace)
 
 # ---- Source A: auto:repo -----------------------------------------------------
 # Look at every commit since the last regen that touched an evidence-file path
@@ -850,22 +889,40 @@ def collect_auto_divergence_insights(fams, review, jl_refs, snapshot_prev):
 def emit_auto_insights(repo: Path, review, tuples, log_prefix="auto-insight"):
     """Apply a batch of (path, source, text, when, who) tuples, save once at
     the end under the review lock, and print a one-line summary. Returns the
-    count actually appended (i.e. after dedup)."""
+    count actually appended (i.e. after dedup).
+
+    Uses with_review_locked() so a concurrent --serve write to the same file
+    cannot clobber the batch: we read the on-disk state INSIDE the lock,
+    append onto it, and write out - so any human insight that landed between
+    the caller's read and this call still survives. The `review` argument is
+    also mutated in place with the merged post-write state so the caller's
+    in-memory view stays consistent with disk."""
     if not tuples:
         return 0
-    appended = 0
-    for (path, source, text, when, who) in tuples:
-        if _append_insight(review, path, source, text, when=when, who=who):
-            appended += 1
-    if appended:
-        save_review_locked(repo, review)
-        # Break down by source for the log line.
+    appended_count = [0]
+    def _mutate(disk_review):
+        # Merge caller's in-memory review dict onto the fresh disk read - any
+        # human edit from the server that landed between the caller's read
+        # and now sits in disk_review, and we want to keep it. Then apply
+        # the auto-insight appends onto the merged state.
+        for path, entry in review.items():
+            if path not in disk_review:
+                disk_review[path] = entry
+        for (path, source, text, when, who) in tuples:
+            if _append_insight(disk_review, path, source, text, when=when, who=who):
+                appended_count[0] += 1
+        # Write disk_review's post-mutate state back to the caller's dict so
+        # the rest of the run sees the auto-insights we just added.
+        review.clear()
+        review.update(disk_review)
+    with_review_locked(repo, _mutate)
+    if appended_count[0]:
         by_src = {}
         for (_, s, _, _, _) in tuples:
             by_src[s] = by_src.get(s, 0) + 1
         bits = ", ".join(f"{k}={v}" for k, v in sorted(by_src.items()))
-        print(f"  [{log_prefix}] appended {appended} new insight(s) ({bits})")
-    return appended
+        print(f"  [{log_prefix}] appended {appended_count[0]} new insight(s) ({bits})")
+    return appended_count[0]
 
 # ============================================================================
 # REPO EVIDENCE -> work depth per product
@@ -2083,6 +2140,431 @@ def load_warm_summary(repo: Path):
         return json.loads(p.read_text(encoding="utf-8"))
     except Exception:
         return None
+
+# ============================================================================
+# PHASE 5 #3 - HTTP SERVER (--serve)
+# ============================================================================
+# Stdlib-only threaded HTTP server that turns the static report into an editable
+# team workspace. Binds to 127.0.0.1 (never 0.0.0.0). Reads product_review.json
+# at startup and every SERVE_REFRESH_SECONDS; writes go through _append_insight
+# / save_review_locked so file writes serialize against warm-cache workers.
+#
+# Routes:
+#   GET  /                    -> product_report.html (regenerated on first hit
+#                                if missing)
+#   GET  /product_report.html -> same
+#   GET  /api/state           -> {review, cache_summary, warm_status}
+#   POST /api/review/<id>     -> update fields on that product's review entry
+#   POST /api/insight/<id>    -> append a new human insight
+#   GET  /healthz             -> plain '200 OK' for liveness
+
+SERVE_DEFAULT_PORT       = 8080
+SERVE_DEFAULT_REFRESH_S  = 30
+SERVE_HOST_ADDR          = "127.0.0.1"    # HARDCODED - never bind to 0.0.0.0
+
+# Allowed keys the review-edit route accepts. Anything else is silently dropped
+# (defense in depth: even if the UI evolves, we won't stamp arbitrary fields
+# into review entries).
+SERVE_REVIEW_ALLOWED = {"status", "composite_role", "composite_role_note",
+                        "sample_config", "notes"}
+
+def _serve_regenerate(repo: Path, out_path: Path):
+    """Blocking regen; run in the server's request thread when product_report.html
+    is missing. Reuses main()'s pipeline via a subprocess so any change to the
+    render path automatically flows here - no separate code duplication.
+    Silent on success. Returns the subprocess result."""
+    return subprocess.run(
+        [sys.executable, str(Path(__file__).resolve()), "--repo", str(repo)],
+        capture_output=True, text=True, timeout=120)
+
+def _serve_load_state(repo: Path):
+    """Snapshot of everything the client's UI needs, in one JSON blob.
+    Called by /api/state and by the background refresher. Kept slim - no
+    catalog / no evidence, just the fields the UI writes to plus enough
+    summary state that the reader can spot drift in another tab."""
+    review_p = repo / "product_review.json"
+    review = {}
+    if review_p.exists():
+        try:
+            review = json.loads(review_p.read_text(encoding="utf-8"))
+        except Exception:
+            review = {}
+    warm = load_warm_summary(repo) or {}
+    dc = load_data_cache(repo) or {}
+    probes = load_probes(repo) or {}
+    cache_summary = {
+        "sampled":       len(dc),
+        "probed":        sum(1 for v in probes.values() if v.get("ok")),
+        "last_regen":    _read_last_regen(repo),
+    }
+    return {"review": review, "cache_summary": cache_summary, "warm_status": warm}
+
+def _serve_normalise_review_body(body):
+    """Coerce a request body into a dict of {allowed_key: value, ...} plus
+    optional 'who'. Accepts JSON (Content-Type: application/json) already
+    parsed into a dict, or a dict from urllib.parse.parse_qs (form-encoded
+    fallback used by the no-JS submit path). Empty and None values pass
+    through so callers can distinguish 'clear the field' from 'not set'."""
+    if not isinstance(body, dict): return {}
+    out = {"__who__": ""}
+    for k, v in body.items():
+        # parse_qs returns lists; take the first element.
+        if isinstance(v, list): v = v[0] if v else ""
+        if k == "who":
+            out["__who__"] = str(v or "").strip()
+        elif k in SERVE_REVIEW_ALLOWED:
+            out[k] = "" if v is None else str(v)
+    return out
+
+def _serve_validate_review_patch(entry, patch):
+    """Business-logic checks that must pass before we persist. Returns "" on
+    success or a plain-English error string ready for the 4xx body.
+
+    Rules:
+      * status must be one of STAGES (case-insensitive; lowercase on store)
+      * composite_role, if present and non-empty, must be one of
+        COMPOSITE_ROLES AND must land with a non-empty composite_role_note.
+        This enforces the same note-required contract validate_review()
+        applies at load time.
+      * sample_config must be one of SAMPLE_CONFIG_VALUES if provided.
+      * Nothing else is validated - notes is free text, composite_role_note
+        is free text; both are trusted with only the JSON.dumps escaping.
+    """
+    if "status" in patch:
+        s = (patch["status"] or "").strip().lower()
+        if s and s not in STAGES:
+            return f"status must be one of {'/'.join(STAGES)} (got {s!r})"
+    # composite_role + note contract: check on the MERGED entry so a client
+    # can send the role and note in one POST, or clear the role by sending
+    # only role="" (in which case we blank the note too).
+    if "composite_role" in patch:
+        merged_role = (patch.get("composite_role") or "").strip()
+        if merged_role and merged_role not in COMPOSITE_ROLES:
+            return (f"composite_role must be one of "
+                    f"{'/'.join(COMPOSITE_ROLES)} (got {merged_role!r})")
+        if merged_role:
+            # Note may arrive in the same patch or already exist on the entry.
+            merged_note = (patch.get("composite_role_note",
+                                       entry.get("composite_role_note", "")) or "").strip()
+            if not merged_note:
+                return ("composite_role requires a matching composite_role_note "
+                        "(free text, non-empty)")
+    if "sample_config" in patch:
+        cfg = (patch.get("sample_config") or "").strip().lower()
+        if cfg and cfg not in SAMPLE_CONFIG_VALUES:
+            return (f"sample_config must be one of "
+                    f"{'/'.join(SAMPLE_CONFIG_VALUES)} (got {cfg!r})")
+    return ""
+
+def _serve_apply_review_patch(entry, patch, reviewer):
+    """Mutate entry with patch fields and stamp last_reviewed_by/date. Only
+    called after _serve_validate_review_patch returned "".
+
+    Handles the field rename between the UI ('status' / 'notes') and the
+    review schema ('stage' / 'note') - a deliberate mismatch: the UI labels
+    match what a reviewer sees (Status / Notes), the file keys match what
+    the earlier phases already committed to (stage / note)."""
+    _ensure_review_shape(entry)
+    if "status" in patch:
+        entry["stage"] = (patch["status"] or "cataloged").strip().lower()
+    if "composite_role" in patch:
+        role = (patch["composite_role"] or "").strip().lower()
+        entry["composite_role"] = role
+        if "composite_role_note" in patch:
+            entry["composite_role_note"] = str(patch["composite_role_note"] or "")
+        if not role:
+            # Blanking the role also blanks the note - keep the contract clean.
+            entry["composite_role_note"] = ""
+    elif "composite_role_note" in patch:
+        entry["composite_role_note"] = str(patch["composite_role_note"] or "")
+    if "sample_config" in patch:
+        cfg = (patch["sample_config"] or "default").strip().lower()
+        entry["sample_config"] = cfg
+    if "notes" in patch:
+        entry["note"] = str(patch["notes"] or "")
+    entry["last_reviewed_by"]   = reviewer or entry.get("last_reviewed_by", "") or ""
+    entry["last_reviewed_date"] = datetime.date.today().isoformat()
+    return entry
+
+def build_serve_handler(repo: Path, out_path: Path, state_ref, state_lock):
+    """Factory - returns a BaseHTTPRequestHandler subclass closed over the
+    per-server state. Kept as a factory so `python -m unittest` can drive the
+    handler directly without instantiating an ThreadingHTTPServer.
+
+    state_ref is a mutable list ([current_state_dict]) refreshed periodically
+    by the background thread. state_lock guards concurrent reads/writes of
+    state_ref inside the handler."""
+    import http.server
+    import urllib.parse
+
+    class _Handler(http.server.BaseHTTPRequestHandler):
+        server_version = "ProductScope/5"
+
+        # Quiet the default per-request stderr line - the server prints its
+        # own compact log on POSTs and keeps GETs silent.
+        def log_message(self, fmt, *args):
+            return
+
+        def _send_json(self, code, obj):
+            body = json.dumps(obj, indent=2).encode("utf-8")
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(body)
+
+        def _send_text(self, code, text, ctype="text/plain; charset=utf-8"):
+            body = text.encode("utf-8") if isinstance(text, str) else text
+            self.send_response(code)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(body)
+
+        def _send_redirect(self, url):
+            self.send_response(303)
+            self.send_header("Location", url)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        def _parse_body(self):
+            """Return (parsed_body_dict, is_form). Handles JSON and
+            application/x-www-form-urlencoded; unknown Content-Type ->
+            best-effort JSON parse; empty body -> ({}, False)."""
+            n = int(self.headers.get("Content-Length") or 0)
+            if n <= 0: return {}, False
+            raw = self.rfile.read(n)
+            ctype = (self.headers.get("Content-Type") or "").lower()
+            if "application/json" in ctype:
+                try:
+                    return json.loads(raw.decode("utf-8")), False
+                except Exception:
+                    return {}, False
+            if "application/x-www-form-urlencoded" in ctype:
+                try:
+                    return urllib.parse.parse_qs(raw.decode("utf-8"),
+                                                  keep_blank_values=True), True
+                except Exception:
+                    return {}, True
+            # Unknown type: try JSON first, then form.
+            try:
+                return json.loads(raw.decode("utf-8")), False
+            except Exception:
+                try:
+                    return urllib.parse.parse_qs(raw.decode("utf-8"),
+                                                  keep_blank_values=True), True
+                except Exception:
+                    return {}, False
+
+        # ---------- GET ---------------------------------------------------
+        def do_GET(self):
+            path = urllib.parse.urlparse(self.path).path
+            if path == "/healthz":
+                return self._send_text(200, "OK")
+            if path in ("/", "/product_report.html"):
+                return self._serve_report()
+            if path == "/api/state":
+                with state_lock:
+                    state = state_ref[0]
+                return self._send_json(200, state)
+            return self._send_text(404, "Not Found")
+
+        def _serve_report(self):
+            if not out_path.exists():
+                # Regen on first hit. Blocking; a real reviewer opens the tab
+                # once at start of session.
+                try:
+                    print(f"  [serve] regenerating {out_path.name} (first hit)")
+                    r = _serve_regenerate(repo, out_path)
+                    if r.returncode != 0:
+                        return self._send_text(500,
+                            "regen failed:\n" + (r.stderr or r.stdout))
+                except Exception as ex:
+                    return self._send_text(500, f"regen failed: {ex!r}")
+            try:
+                data = out_path.read_bytes()
+            except Exception as ex:
+                return self._send_text(500, f"could not read report: {ex!r}")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(data)
+
+        # ---------- POST --------------------------------------------------
+        def do_POST(self):
+            parsed = urllib.parse.urlparse(self.path)
+            path = parsed.path
+            if path.startswith("/api/review/"):
+                return self._api_review(path[len("/api/review/"):])
+            if path.startswith("/api/insight/"):
+                return self._api_insight(path[len("/api/insight/"):])
+            return self._send_text(404, "Not Found")
+
+        def _api_review(self, product_id):
+            product_id = urllib.parse.unquote(product_id)
+            body, is_form = self._parse_body()
+            if not isinstance(body, dict) or not product_id:
+                return self._send_json(400, {"error":
+                    "body must be a JSON object; product_id required in URL"})
+            patch = _serve_normalise_review_body(body)
+            reviewer = (self.headers.get("X-Reviewer") or
+                        patch.pop("__who__", "") or "").strip()
+
+            # Do the read-modify-write under the review lock so a concurrent
+            # writer (server thread OR --warm-cache subprocess) can't clobber
+            # our append. The mutator captures out params via closure.
+            outcome = {"err": None, "code": 200, "entry": None}
+            def _mutate(review):
+                if product_id not in review or not isinstance(review[product_id], dict):
+                    outcome["err"] = ("no review entry for "
+                                       f"{product_id!r} - is this a real catalog path?")
+                    outcome["code"] = 404
+                    return
+                _ensure_review_shape(review[product_id])
+                err = _serve_validate_review_patch(review[product_id], patch)
+                if err:
+                    outcome["err"] = err; outcome["code"] = 400
+                    return
+                _serve_apply_review_patch(review[product_id], patch, reviewer)
+                outcome["entry"] = review[product_id]
+            try:
+                with_review_locked(repo, _mutate)
+            except Exception as ex:
+                return self._send_json(500, {"error": f"write failed: {ex!r}"})
+            if outcome["err"]:
+                return self._send_json(outcome["code"], {"error": outcome["err"]})
+            # Refresh cached snapshot so a subsequent /api/state sees the
+            # write (background thread would catch it within 30s anyway).
+            with state_lock:
+                state_ref[0] = _serve_load_state(repo)
+            if is_form:
+                return self._send_redirect("/product_report.html")
+            print(f"  [serve] PATCH review/{product_id} by {reviewer or 'anonymous'}: "
+                  + ", ".join(sorted(k for k in patch if not k.startswith("__"))))
+            return self._send_json(200, {"ok": True,
+                                          "path": product_id,
+                                          "entry": outcome["entry"]})
+
+        def _api_insight(self, product_id):
+            product_id = urllib.parse.unquote(product_id)
+            body, is_form = self._parse_body()
+            if not isinstance(body, dict) or not product_id:
+                return self._send_json(400, {"error":
+                    "body must be a JSON object; product_id required in URL"})
+            if is_form:
+                def _one(k, default=""):
+                    v = body.get(k, default)
+                    if isinstance(v, list): v = v[0] if v else default
+                    return v
+                who = _one("who").strip()
+                text = _one("text").strip()
+                source = _one("source", "human").strip() or INSIGHT_HUMAN
+            else:
+                who = str(body.get("who") or "").strip()
+                text = str(body.get("text") or "").strip()
+                source = str(body.get("source") or INSIGHT_HUMAN).strip()
+            # Server-side rule: the insight endpoint only accepts human sources.
+            # Auto-sources are emitted internally by --warm-cache and --sample
+            # --refresh; letting a client stamp arbitrary source strings would
+            # break the dedup semantics and the source-icon legend.
+            if source != INSIGHT_HUMAN:
+                return self._send_json(400, {"error":
+                    "source must be 'human' on this route; auto-sources are "
+                    "emitted internally by --warm-cache and --sample --refresh"})
+            if not text:
+                return self._send_json(400, {"error": "text is required"})
+            if not who:
+                return self._send_json(400, {"error":
+                    "who is required (set a reviewer name)"})
+            outcome = {"err": None, "code": 200, "insight": None}
+            def _mutate(review):
+                if product_id not in review or not isinstance(review[product_id], dict):
+                    outcome["err"] = f"no review entry for {product_id!r}"
+                    outcome["code"] = 404
+                    return
+                ins = _append_insight(review, product_id, INSIGHT_HUMAN, text, who=who)
+                if ins is None:
+                    outcome["err"] = "insight rejected"
+                    outcome["code"] = 500
+                    return
+                outcome["insight"] = ins
+            try:
+                with_review_locked(repo, _mutate)
+            except Exception as ex:
+                return self._send_json(500, {"error": f"write failed: {ex!r}"})
+            if outcome["err"]:
+                return self._send_json(outcome["code"], {"error": outcome["err"]})
+            with state_lock:
+                state_ref[0] = _serve_load_state(repo)
+            if is_form:
+                return self._send_redirect("/product_report.html")
+            print(f"  [serve] APPEND insight for {product_id} by {who}: {text[:60]!r}")
+            return self._send_json(200, {"ok": True, "path": product_id,
+                                          "insight": outcome["insight"]})
+
+    return _Handler
+
+def serve_forever(repo: Path, out_path: Path, port, refresh_seconds):
+    """Bring up ThreadingHTTPServer on 127.0.0.1:<port>. Blocks until SIGINT
+    (Ctrl-C) or shutdown() is called. The background refresher re-reads
+    product_review.json every refresh_seconds so /api/state reflects out-of-
+    band writes (e.g. a parallel --warm-cache subprocess appending auto-
+    insights)."""
+    import http.server
+    import signal
+    import threading
+    import time as _t
+
+    # Cold state read; the handler falls back to a fresh disk read on every
+    # POST anyway, but /api/state and the initial UI paint want a value here.
+    state_ref  = [_serve_load_state(repo)]
+    state_lock = _threading.Lock()
+
+    handler_cls = build_serve_handler(repo, out_path, state_ref, state_lock)
+    server = http.server.ThreadingHTTPServer((SERVE_HOST_ADDR, port), handler_cls)
+    server.daemon_threads = True   # threads die on process exit
+
+    stop_evt = threading.Event()
+    def _refresher():
+        while not stop_evt.is_set():
+            if stop_evt.wait(refresh_seconds): return
+            try:
+                fresh = _serve_load_state(repo)
+                with state_lock:
+                    state_ref[0] = fresh
+            except Exception as ex:
+                print(f"  [serve] refresh failed: {ex!r}", file=sys.stderr)
+    refresher = threading.Thread(target=_refresher, daemon=True,
+                                  name="serve-refresher")
+    refresher.start()
+
+    print(f"serving product scope tracker on http://{SERVE_HOST_ADDR}:{port} "
+          f"- Ctrl+C to stop")
+    print(f"  (--port N to change; refreshing state every {refresh_seconds}s)")
+
+    def _shutdown(*_):
+        # Called from the signal thread. Use shutdown() (not server_close) so
+        # the serve_forever loop returns cleanly before we tear down sockets.
+        stop_evt.set()
+        threading.Thread(target=server.shutdown, daemon=True).start()
+
+    signal.signal(signal.SIGINT, _shutdown)
+    try:
+        signal.signal(signal.SIGTERM, _shutdown)   # not on Windows for some
+    except (AttributeError, ValueError):
+        pass
+
+    try:
+        server.serve_forever(poll_interval=0.5)
+    finally:
+        server.server_close()
+        stop_evt.set()
+        print("shut down")
+    return 0
 
 # ============================================================================
 # REPORT
@@ -4337,6 +4819,20 @@ def main():
     ap.add_argument("--concurrency", type=int, default=WARM_DEFAULT_WORKERS, metavar="N",
                     help=f"worker count for --warm-cache (default {WARM_DEFAULT_WORKERS}). "
                          "Set to 1 for a sequential run (easier to debug).")
+    # ---- Phase 5 #3: --serve HTTP server (see PHASE 5 #3 section) -----------
+    ap.add_argument("--serve", action="store_true",
+                    help="bring up a local HTTP server on 127.0.0.1:<port> that "
+                         "serves product_report.html and exposes JSON write "
+                         "endpoints so teammates can edit review fields + insights "
+                         "from the browser instead of hand-editing product_review.json. "
+                         "Non-negotiably 127.0.0.1 only (never 0.0.0.0).")
+    ap.add_argument("--port", type=int, default=SERVE_DEFAULT_PORT, metavar="N",
+                    help=f"port for --serve (default {SERVE_DEFAULT_PORT})")
+    ap.add_argument("--refresh-interval", type=int, default=SERVE_DEFAULT_REFRESH_S,
+                    metavar="N",
+                    help=f"seconds between background /api/state refreshes "
+                         f"(default {SERVE_DEFAULT_REFRESH_S}). Lower = fresher state "
+                         "in the UI but more disk reads.")
     args = ap.parse_args()
     repo = Path(args.repo).resolve()
     if not (repo / "ingestion").exists():
@@ -4346,6 +4842,13 @@ def main():
         out = Path(args.out).resolve() if args.out else repo / default_name
     else:
         out = Path(args.out).resolve() if args.out else repo / "product_report.html"
+
+    # Phase 5 #3 - --serve exits via serve_forever() and never falls through to
+    # the render pipeline. Runs the HTTP loop on 127.0.0.1:<port>. Regen on
+    # first hit (when product_report.html is missing) uses a subprocess so the
+    # server thread never blocks on the full main() pipeline.
+    if args.serve:
+        sys.exit(serve_forever(repo, out, args.port, args.refresh_interval))
 
     print(f"Scanning {repo} ...")
     evidence = deep_scan(repo) if DEEP else fallback_scan(repo)
