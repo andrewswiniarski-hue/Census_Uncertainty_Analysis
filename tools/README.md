@@ -228,6 +228,47 @@ To review a product, edit its entry in `product_review.json`:
 
 ---
 
+## Recording insights and reviews — the `--review` CLI helper
+
+Hand-editing `product_review.json` with a text editor works fine for one-off changes. When you're logging what you found on a card, moving a product through the funnel, or dictating a role, use the `--review` subcommand — it validates the input, stamps `last_reviewed_by` + `last_reviewed_date`, and appends insights with a UTC timestamp and author. Every write is atomic (single lock cycle, no half-applied entries) and produces a minimal git diff.
+
+```powershell
+# Append a human insight (source='human'); who = your git config user.name
+python tools\product_scope.py --repo . --review acs/acs5 --insight "Confirmed replicate weights ship with the microdata extract"
+
+# Set stage; case-insensitive input, canonical lowercase on disk
+python tools\product_scope.py --repo . --review acs/acs5 --status FOCUS
+
+# Declare a composite role — REQUIRES --note on the same command
+python tools\product_scope.py --repo . --review acs/acs5 --role cv_source --note "primary CV source across every geography"
+
+# Multiple actions atomically in one write
+python tools\product_scope.py --repo . --review dec/dhc --status Candidate --sample-config always --insight "Set as Candidate; will sample every warm-cache pass to catch DP noise drift"
+
+# Override the git-derived attribution (e.g. logging insight from a mentor)
+python tools\product_scope.py --repo . --review acs/acs5 --author "Andrew" --insight "Mentor confirmed the B98/B99 allocation tables ship separately from the estimate MOEs"
+```
+
+**Available action flags** (at least one required per invocation):
+
+| Flag | Effect | Validation |
+|---|---|---|
+| `--insight TEXT` | Append a human insight to the entry's `insights` list. `source="human"`, `when` = current UTC ISO, `who` = `--author` or `git config user.name`. | Text must be non-empty. |
+| `--status VALUE` | Set the entry's `stage`. | One of `cataloged / reviewed / candidate / focus / set-aside`; case-insensitive on input, stored lowercase. |
+| `--role VALUE` | Set the entry's `composite_role`. | One of `cv_source / allocation_source / privacy_noise / geometry / benchmark / unused`. Also requires `--note` on the same invocation UNLESS the entry already carries a non-empty `composite_role_note`. |
+| `--note TEXT` | Set the entry's `composite_role_note`. | Standalone `--note` (no `--role`) is only accepted if the entry already declares a role to justify. |
+| `--sample-config VALUE` | Set the entry's `sample_config`. | One of `default / always / skip`. |
+| `--notes TEXT` | Set the entry's free-text `note` field. | No validation. |
+| `--author NAME` | Override the git-derived attribution. Applies to both `last_reviewed_by` AND any `--insight`'s `who`. | Optional. |
+
+**How attribution works.** If you pass `--author "Name"`, that name lands on `last_reviewed_by` and on any insight's `who`. If you don't, the tool runs `git config user.name` in the repo and uses that. If git isn't configured either, the tool falls back to `"unknown"`. On a Windows machine with the standard project setup, this means: with `user.name` set to `Garrett Spangler` in `~/.gitconfig`, running `--review acs/acs5 --insight "..."` will attribute the insight to `Garrett Spangler` automatically — no need to type your name every time.
+
+**Exit codes.** `0` = success, `2` = usage / validation error (e.g. bad `--status` value, `--role` without `--note`), `1` = other error (unknown product id, JSON parse failure, file write failure). Failed writes make **no changes** — the tool validates every flag before touching disk, so a mid-invocation reject leaves the file exactly as it was.
+
+**How writes appear in git diffs.** The review file is serialized with `sort_keys=True`, so a single `--review` write shows up as just the added insight lines + the two `last_reviewed_*` fields. Every other entry stays byte-identical. The first `--review` (or regen) after upgrading to this version does a one-time key-order normalization — expect a big diff that pass, then clean diffs from then on.
+
+---
+
 ## Findings
 
 **From the work log** — the Home tab reads `WORKLOG.md` directly and shows every finding, newest first, quoted exactly as the teammate wrote it. Nothing is summarised or scored. Add a WORKLOG entry in the normal format and it appears on the next run; no registration needed.
