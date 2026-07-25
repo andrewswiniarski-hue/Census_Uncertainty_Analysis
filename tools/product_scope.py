@@ -983,6 +983,209 @@ def emit_auto_insights(repo: Path, review, tuples, log_prefix="auto-insight"):
     return appended_count[0]
 
 # ============================================================================
+# PHASE 5 (post-pivot) - CLI REVIEW HELPER (--review + action flags)
+# ============================================================================
+# Additive `python tools/product_scope.py --review <id>` subcommand: takes
+# one or more of --insight/--status/--role/--note/--sample-config/--notes
+# and applies them atomically to product_review.json under the shared review
+# lock. All value validation happens BEFORE the write, so a bad --status
+# input can't leave a half-applied entry behind. Every successful write also
+# stamps last_reviewed_by (from --author or `git config user.name`) and
+# last_reviewed_date (today's ISO).
+#
+# Exit codes: 0 success, 2 validation / usage error, 1 other (write failed,
+# JSON parse error, product not found).
+
+def _git_user_name(repo: Path):
+    """Return `git config user.name` for the repo, or "" on any failure.
+    Kept as its own helper so both the CLI helper's author-default and any
+    future auto-insight attribution use the same subprocess call."""
+    try:
+        r = subprocess.run(["git", "-C", str(repo), "config", "user.name"],
+                           capture_output=True, text=True, timeout=5)
+        if r.returncode == 0:
+            return r.stdout.strip()
+    except Exception:
+        pass
+    return ""
+
+def cli_review_action(repo: Path, args):
+    """Run one --review invocation. `args` is the argparse namespace from
+    main() with all --review-family flags attached.
+
+    Returns the process exit code. Side effect: at most one atomic write to
+    product_review.json under with_review_locked(). No writes happen unless
+    every validation step passes first (transactional)."""
+    product_id = (args.review or "").strip()
+    if not product_id:
+        print("error: --review requires a product id (e.g. --review acs/acs5)",
+              file=sys.stderr)
+        return 2
+
+    # ---- Author attribution -------------------------------------------------
+    author = (args.author or "").strip()
+    if not author:
+        author = _git_user_name(repo) or "unknown"
+
+    # ---- Which actions did the caller pass? ---------------------------------
+    action_flags = {
+        "insight":       args.insight,
+        "status":        args.status,
+        "role":          args.role,
+        "note":          args.note,
+        "sample_config": args.sample_config,
+        "notes":         args.notes,
+    }
+    passed = {k: v for k, v in action_flags.items() if v is not None}
+    if not passed:
+        print("error: --review requires at least one action flag "
+              "(--insight/--status/--role/--note/--sample-config/--notes)",
+              file=sys.stderr)
+        return 2
+
+    # ---- Pre-flight value validation (nothing on disk changes here) ---------
+    # Every value is normalised into `patch` up front so the mutator only has
+    # to apply verified inputs. Any failure returns 2 immediately - no write.
+    patch = {}
+
+    if "insight" in passed:
+        text = str(passed["insight"] or "").strip()
+        if not text:
+            print("error: --insight text is empty (nothing to append)",
+                  file=sys.stderr)
+            return 2
+        patch["insight"] = text
+
+    if "status" in passed:
+        raw = str(passed["status"] or "").strip()
+        canon = raw.lower()
+        if canon not in STAGES:
+            print(f"error: --status must be one of "
+                  f"{'/'.join(STAGE_LABELS[s] for s in STAGES)} "
+                  f"(got {raw!r})", file=sys.stderr)
+            return 2
+        patch["stage"] = canon
+
+    if "role" in passed:
+        raw = str(passed["role"] or "").strip()
+        canon = raw.lower()
+        # Empty string clears the role (also blanks the note).
+        if canon and canon not in COMPOSITE_ROLES:
+            print(f"error: --role must be one of {'/'.join(COMPOSITE_ROLES)} "
+                  f"(got {raw!r})", file=sys.stderr)
+            return 2
+        patch["composite_role"] = canon
+
+    if "note" in passed:
+        patch["composite_role_note"] = str(passed["note"] or "")
+
+    if "sample_config" in passed:
+        raw = str(passed["sample_config"] or "").strip()
+        canon = raw.lower()
+        if canon not in SAMPLE_CONFIG_VALUES:
+            print(f"error: --sample-config must be one of "
+                  f"{'/'.join(SAMPLE_CONFIG_VALUES)} (got {raw!r})",
+                  file=sys.stderr)
+            return 2
+        patch["sample_config"] = canon
+
+    if "notes" in passed:
+        patch["note"] = str(passed["notes"] or "")
+
+    # ---- Atomic read-modify-write under the review lock ---------------------
+    outcome = {"code": 0, "err": None, "summary": []}
+
+    def _mutate(review):
+        if product_id not in review or not isinstance(review.get(product_id), dict):
+            outcome["code"] = 1
+            outcome["err"] = (f"no review entry for {product_id!r} - "
+                              "run `python tools/product_scope.py --repo .` "
+                              "first so the catalog is loaded into "
+                              "product_review.json.")
+            return
+        entry = _ensure_review_shape(review[product_id])
+
+        # composite_role_note requirement (write-time enforcement) -----------
+        # --role X requires --note "..." OR an existing non-empty note on the
+        # entry. --note "..." alone (no --role) is only OK if the entry already
+        # has a declared role.
+        if "composite_role" in patch:
+            new_role = patch["composite_role"]
+            if new_role:
+                merged_note = (patch.get("composite_role_note",
+                                          entry.get("composite_role_note", ""))
+                                or "").strip()
+                if not merged_note:
+                    outcome["code"] = 2
+                    outcome["err"] = ("--role requires --note (composite "
+                                      "roles must include a written "
+                                      "justification)")
+                    return
+        elif "composite_role_note" in patch:
+            existing_role = (entry.get("composite_role") or "").strip()
+            if not existing_role:
+                outcome["code"] = 2
+                outcome["err"] = ("--note requires --role (there is no "
+                                  "declared composite_role on this entry "
+                                  "to justify)")
+                return
+
+        # All validation passed - apply the patch. Summary bits track what
+        # changed for the success line.
+        bits = []
+        if "stage" in patch:
+            entry["stage"] = patch["stage"]
+            bits.append(f"status -> {STAGE_LABELS[patch['stage']]}")
+        if "composite_role" in patch:
+            role = patch["composite_role"]
+            entry["composite_role"] = role
+            if "composite_role_note" in patch:
+                entry["composite_role_note"] = patch["composite_role_note"]
+            elif not role:
+                # Blanking role also blanks the note; keeps the contract clean.
+                entry["composite_role_note"] = ""
+            bits.append(f"role -> {role or '(cleared)'}")
+        elif "composite_role_note" in patch:
+            entry["composite_role_note"] = patch["composite_role_note"]
+            bits.append("note updated")
+        if "sample_config" in patch:
+            entry["sample_config"] = patch["sample_config"]
+            bits.append(f"sample_config -> {patch['sample_config']}")
+        if "note" in patch:
+            entry["note"] = patch["note"]
+            bits.append("notes updated")
+
+        if "insight" in patch:
+            ins = _append_insight(review, product_id, INSIGHT_HUMAN,
+                                   patch["insight"], who=author)
+            if ins:
+                bits.append("+1 insight")
+            else:
+                # Only auto-insight dedup would swallow an append silently.
+                # Human insights never dedup, so ins=None here means the
+                # append helper rejected the input; surface it.
+                bits.append("insight rejected (empty text?)")
+
+        # Always stamp the reviewer + date on any successful write.
+        entry["last_reviewed_by"]   = author
+        entry["last_reviewed_date"] = datetime.date.today().isoformat()
+
+        outcome["summary"] = bits
+
+    try:
+        with_review_locked(repo, _mutate)
+    except Exception as ex:
+        print(f"error: write failed: {ex!r}", file=sys.stderr)
+        return 1
+
+    if outcome["err"]:
+        print(f"error: {outcome['err']}", file=sys.stderr)
+        return outcome["code"]
+
+    print(f"updated {product_id}: " + ", ".join(outcome["summary"]))
+    return 0
+
+# ============================================================================
 # REPO EVIDENCE -> work depth per product
 # ============================================================================
 
@@ -4647,6 +4850,36 @@ def main():
     ap.add_argument("--concurrency", type=int, default=WARM_DEFAULT_WORKERS, metavar="N",
                     help=f"worker count for --warm-cache (default {WARM_DEFAULT_WORKERS}). "
                          "Set to 1 for a sequential run (easier to debug).")
+    # ---- Phase 5 (CLI helper): --review + action flags ----------------------
+    # Additive, atomic write to product_review.json. Preserves the schema +
+    # auto-insight pieces from earlier Phase 5 commits; replaces the (dropped)
+    # --serve HTTP path. See cli_review_action() for the full validation flow.
+    rvw = ap.add_argument_group("review helper (--review + action flags)")
+    rvw.add_argument("--review", metavar="PRODUCT_ID", default=None,
+                    help="target product id (e.g. acs/acs5). Requires at least "
+                         "one of --insight / --status / --role / --note / "
+                         "--sample-config / --notes. All actions apply atomically.")
+    rvw.add_argument("--insight", metavar="TEXT", default=None,
+                    help="append a human insight (source='human'). Non-empty "
+                         "text required; who defaults to git config user.name.")
+    rvw.add_argument("--status", metavar="VALUE", default=None,
+                    help="set stage; one of " + "/".join(STAGES) + " "
+                         "(case-insensitive on input).")
+    rvw.add_argument("--role", metavar="VALUE", default=None,
+                    help="set composite_role; one of "
+                         + "/".join(COMPOSITE_ROLES) + ". Requires --note "
+                         "on the same invocation unless the entry already "
+                         "carries a non-empty composite_role_note.")
+    rvw.add_argument("--note", metavar="TEXT", default=None,
+                    help="set composite_role_note (justification for --role).")
+    rvw.add_argument("--sample-config", metavar="VALUE", default=None,
+                    help="set sample_config; one of "
+                         + "/".join(SAMPLE_CONFIG_VALUES) + ".")
+    rvw.add_argument("--notes", metavar="TEXT", default=None,
+                    help="set free-text notes (the review file's `note` field).")
+    rvw.add_argument("--author", metavar="NAME", default=None,
+                    help="attribution for this write (last_reviewed_by AND "
+                         "insight `who`). Defaults to git config user.name.")
     args = ap.parse_args()
     repo = Path(args.repo).resolve()
     if not (repo / "ingestion").exists():
@@ -4656,6 +4889,12 @@ def main():
         out = Path(args.out).resolve() if args.out else repo / default_name
     else:
         out = Path(args.out).resolve() if args.out else repo / "product_report.html"
+
+    # Phase 5 pivot - --review exits via cli_review_action() and never falls
+    # through to the render pipeline. Single atomic write under the shared
+    # review lock; validation errors exit 2 with no state change.
+    if args.review is not None:
+        sys.exit(cli_review_action(repo, args))
 
     print(f"Scanning {repo} ...")
     evidence = deep_scan(repo) if DEEP else fallback_scan(repo)
