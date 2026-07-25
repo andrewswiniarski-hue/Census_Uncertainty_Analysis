@@ -1389,6 +1389,37 @@ footer{padding:22px 44px;color:var(--muted);font-size:11.5px;}
 .copy-cmd.light{background:#F6F7FA;border-color:var(--line);color:var(--ink);}
 .copy-cmd.light button{background:var(--line);color:var(--navy);}
 .copy-cmd.light button.done{background:#1F7A3A;color:#fff;}
+/* EDA snapshot card section (Phase 3). Reader-first table styling: light
+   background, monospace for numeric cells, unicode sparklines rendered inline
+   in a slightly larger font so the shape is legible. */
+.eda-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:5px;}
+.eda-shape{font-size:11.5px;color:var(--navy);font-weight:600;font-family:ui-monospace,Consolas,monospace;}
+.eda-src{font-size:10px;color:var(--muted);font-family:ui-monospace,Consolas,monospace;
+     overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;flex:1;min-width:0;}
+.eda-src a{color:#3A4890;text-decoration:none;border-bottom:1px dotted #8FA8D8;}
+.pill.sample-fresh{background:#1F7A3A;color:#E6F5EA;}
+.pill.sample-stale{background:#E9CD7A;color:#3A2F0A;}
+.pill.sample-unknown{background:#F6F7FA;color:#5A6072;border:1px solid var(--line);}
+.eda-tbl{border-collapse:collapse;width:100%;font-size:10.5px;margin:4px 0;}
+.eda-tbl th{text-align:left;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;
+     color:var(--muted);border-bottom:1px solid var(--ice);padding:3px 6px;font-weight:700;}
+.eda-tbl td{border-bottom:1px solid #F1F3F8;padding:3px 6px;vertical-align:top;}
+.eda-tbl td.mono{font-family:ui-monospace,Consolas,monospace;font-variant-numeric:tabular-nums;}
+.eda-tbl tr.miss-flag td.miss-cell{background:#FBF0D6;color:#6E4E11;font-weight:700;}
+.eda-tbl td.spark{font-family:ui-monospace,"DejaVu Sans Mono",Consolas,monospace;font-size:12px;
+     color:var(--navy);letter-spacing:0;line-height:1;padding-top:5px;padding-bottom:5px;}
+.eda-cap{font-size:10px;color:var(--muted);margin:5px 0 2px;font-weight:600;
+     letter-spacing:.05em;text-transform:uppercase;}
+.eda-tv{font-size:10.5px;line-height:1.5;color:var(--ink);}
+.eda-tv .val{font-family:ui-monospace,Consolas,monospace;color:var(--navy);}
+.eda-tv .cnt{color:var(--muted);font-size:10px;margin-left:4px;}
+.eda-geo{font-size:11px;color:var(--ink);font-family:ui-monospace,Consolas,monospace;line-height:1.5;}
+.eda-geo b{color:var(--navy);}
+.eda-empty{font-size:11px;color:var(--muted);font-style:italic;padding:6px 0;}
+/* Diff banner variant used on cards to flag EDA changes on --refresh. */
+.eda-diff{background:#FBF0D6;border-left:3px solid #C9A227;border-radius:4px;
+     padding:5px 8px;margin:4px 0;font-size:11px;color:#6E4E11;line-height:1.45;}
+.eda-diff b{color:#6E4E11;}
 /* Faceted browsing sidebar (only on the Products tabs). */
 .products-shell{display:flex;gap:22px;align-items:flex-start;}
 .products-main{flex:1;min-width:0;}
@@ -2096,6 +2127,148 @@ def _affordance_html(banners):
     return ('<div class="branch"><div class="bcard"><div class="blabel">Suggested next step</div>'
             + "".join(rows) + '</div></div>')
 
+def _fmt_num(v):
+    """Format a numeric summary value for the EDA table: floats compact,
+    ints without trailing .0, none/inf handled. Kept small on purpose so the
+    table stays scannable."""
+    try:
+        if v is None: return ""
+        fv = float(v)
+        if fv != fv: return ""       # NaN
+        if abs(fv) >= 1e12: return f"{fv:.2e}"
+        if fv == int(fv):  return f"{int(fv):,}"
+        if abs(fv) >= 1000: return f"{fv:,.1f}"
+        if abs(fv) >= 1:   return f"{fv:.3g}"
+        return f"{fv:.3g}"
+    except Exception:
+        return str(v)
+
+def render_eda_card_section(f, cache_entry, diff_note=None):
+    """HTML for the 'EDA snapshot' branch on one product card.
+
+    cache_entry: dict from scope_data_cache.json (may be None -> renders the
+                 'not sampled yet' state).
+    diff_note:   optional string describing changes since a previous sample
+                 (produced by #6 on --refresh). Rendered as a small amber
+                 banner above the table when present.
+
+    Consistent with the probe branch's structure: header + headline + tables.
+    Never editorialises: reports what the data looks like and lets the >30%
+    missing highlight speak for itself.
+    """
+    pill = sample_age_pill(cache_entry)
+    src_url = (cache_entry or {}).get("source_url", "")
+    if cache_entry:
+        shape = (cache_entry.get("shape") or [0, 0])
+        rows, cols = int(shape[0]), int(shape[1])
+        sha = (cache_entry.get("sha_at_sample") or "")[:7]
+        shape_str = f"{rows:,} rows &times; {cols:,} cols"
+    else:
+        shape_str = ""
+        sha = ""
+
+    head_bits = [f'<span class="pill sample-{_esc(pill["tone"])}">{_esc(pill["label"])}</span>']
+    if shape_str:
+        head_bits.append(f'<span class="eda-shape">{shape_str}</span>')
+    if sha:
+        head_bits.append(f'<span class="eda-shape" title="repo HEAD at sample time">'
+                         f'@ {_esc(sha)}</span>')
+    if src_url:
+        head_bits.append(f'<span class="eda-src"><a href="{_esc(src_url)}" target="_blank" '
+                         f'rel="noopener" title="{_esc(src_url)}">{_esc(src_url)}</a></span>')
+    header = '<div class="eda-head">' + "".join(head_bits) + '</div>'
+
+    if not cache_entry:
+        body = ('<div class="eda-empty">No sample cached yet. Run '
+                '<code>python tools/product_scope.py --repo . --sample --product '
+                + _esc(f["path"]) + '</code> to fetch one.</div>')
+        return ('<div class="branch"><div class="bcard"><div class="blabel">EDA snapshot</div>'
+                + header + body + '</div></div>')
+
+    parts = [header]
+    if diff_note:
+        parts.append(f'<div class="eda-diff">{_esc(diff_note)}</div>')
+
+    # ---- Column-level table (dtype + missingness) ----
+    cols_dict = cache_entry.get("columns", {}) or {}
+    if cols_dict:
+        parts.append('<div class="eda-cap">Columns</div>')
+        rows_html = []
+        for name, col in cols_dict.items():
+            flag = " miss-flag" if col.get("flag_missing_over_30") else ""
+            miss = f'{col.get("missing_pct", 0)}%'
+            rows_html.append(
+                f'<tr class="{flag.strip()}">'
+                f'<td class="mono">{_esc(name)}</td>'
+                f'<td class="mono">{_esc(col.get("dtype",""))}</td>'
+                f'<td class="mono miss-cell">{_esc(miss)}</td>'
+                f'<td class="mono">{col.get("cardinality","")}</td>'
+                f'</tr>')
+        parts.append(
+            '<table class="eda-tbl"><tr><th>column</th><th>dtype</th>'
+            '<th>missing</th><th>distinct</th></tr>'
+            + "".join(rows_html) + '</table>')
+
+    # ---- Numeric summaries ----
+    numeric_cols = [(n, c["numeric"]) for n, c in cols_dict.items() if c.get("numeric")]
+    if numeric_cols:
+        parts.append('<div class="eda-cap">Numeric summaries</div>')
+        rows_html = []
+        for name, num in numeric_cols:
+            rows_html.append(
+                f'<tr><td class="mono">{_esc(name)}</td>'
+                f'<td class="mono">{_fmt_num(num.get("min"))}</td>'
+                f'<td class="mono">{_fmt_num(num.get("max"))}</td>'
+                f'<td class="mono">{_fmt_num(num.get("mean"))}</td>'
+                f'<td class="mono">{_fmt_num(num.get("median"))}</td></tr>')
+        parts.append(
+            '<table class="eda-tbl"><tr><th>column</th><th>min</th><th>max</th>'
+            '<th>mean</th><th>median</th></tr>'
+            + "".join(rows_html) + '</table>')
+
+    # ---- Categorical top-5 (only for cols with >= EDA_MIN_CARD_TOP distinct values) ----
+    cat_cols = [(n, c["top_values"]) for n, c in cols_dict.items() if c.get("top_values")]
+    if cat_cols:
+        parts.append('<div class="eda-cap">Top values (top 5)</div>')
+        for name, tvs in cat_cols:
+            bits = " &middot; ".join(
+                f'<span class="val">{_esc(v)}</span>'
+                f'<span class="cnt">{c} ({pct}%)</span>'
+                for v, c, pct in tvs)
+            parts.append(f'<div class="eda-tv"><b>{_esc(name)}:</b> {bits}</div>')
+
+    # ---- Geography breakdown ----
+    geo = cache_entry.get("geography", {}) or {}
+    if geo:
+        parts.append('<div class="eda-cap">Geography</div>')
+        bits = []
+        for gc, info in geo.items():
+            bits.append(f'<b>{_esc(gc)}</b>: '
+                        f'{int(info.get("distinct_populated", 0)):,} distinct')
+        parts.append('<div class="eda-geo">' + " &middot; ".join(bits) + '</div>')
+
+    # ---- Sparklines ----
+    sparks = cache_entry.get("sparklines", {}) or {}
+    if sparks:
+        parts.append('<div class="eda-cap">Distribution shape (top numeric)</div>')
+        rows_html = []
+        for name, bars in sparks.items():
+            num = (cols_dict.get(name) or {}).get("numeric") or {}
+            rng = ""
+            if "min" in num and "max" in num:
+                rng = f"{_fmt_num(num['min'])} &ndash; {_fmt_num(num['max'])}"
+            rows_html.append(
+                f'<tr><td class="mono">{_esc(name)}</td>'
+                f'<td class="spark">{_esc(bars)}</td>'
+                f'<td class="mono">{rng}</td></tr>')
+        parts.append(
+            '<table class="eda-tbl"><tr><th>column</th><th>histogram</th>'
+            '<th>range</th></tr>'
+            + "".join(rows_html) + '</table>')
+
+    return ('<div class="branch"><div class="bcard"><div class="blabel">EDA snapshot</div>'
+            + "".join(parts) + '</div></div>')
+
 def product_row(f, review, work, probes, ctx=None):
     ctx = ctx or {}
     top_families = ctx.get("top_families", set())
@@ -2203,6 +2376,15 @@ def product_row(f, review, work, probes, ctx=None):
         branches.append('<div class="branch"><div class="bcard"><div class="blabel">Our progress</div>'
                         f'<span class="nowork">No repo work yet.{note}</span></div></div>')
 
+    # Phase 3 EDA snapshot - what the fetched data actually looks like. Only
+    # renders when a sample has been taken (Candidate products without cache
+    # get an affordance instead, see #8). Data cache is passed through ctx.
+    data_cache = ctx.get("data_cache") or {}
+    eda_entry = data_cache.get(f["path"])
+    eda_diffs = ctx.get("eda_diffs") or {}
+    if eda_entry:
+        branches.append(render_eda_card_section(f, eda_entry, eda_diffs.get(f["path"])))
+
     # Composite code references (feature #6) - AST-derived hits from JL_Work_Tree.
     card_refs = _card_jl_refs_for(f, jl_refs)
     if card_refs:
@@ -2291,14 +2473,16 @@ def build_facet_sidebar(prods, review, work, probes, top_families):
             '<h3>Filter</h3><a class="facet-clear" href="#" style="display:none">Clear filters</a>'
             '</div>' + "".join(blocks) + '</aside>')
 
-def build_kind_panel(kind, fams, review, work, probes, git=None, snapshot=None, jl_refs=None, jl_errors=None):
+def build_kind_panel(kind, fams, review, work, probes, git=None, snapshot=None,
+                     jl_refs=None, jl_errors=None, data_cache=None, eda_diffs=None):
     prods = [f for f in fams.values() if f["kind"] == kind]
     # Compute per-panel "top families" bucket for the Family facet.
     fam_counts = {}
     for f in prods: fam_counts[f["group"]] = fam_counts.get(f["group"], 0) + 1
     top_families = set(sorted(fam_counts, key=lambda g: -fam_counts[g])[:12])
     ctx = {"top_families": top_families, "git": git or {}, "snapshot": snapshot,
-           "jl_refs": jl_refs or {}, "jl_errors": jl_errors or {}}
+           "jl_refs": jl_refs or {}, "jl_errors": jl_errors or {},
+           "data_cache": data_cache or {}, "eda_diffs": eda_diffs or {}}
 
     groups = {}
     for f in prods: groups.setdefault(f["group"], []).append(f)
@@ -2581,7 +2765,8 @@ def export_xlsx(rows, out_path):
 
 
 def render(fams, review, work, worklog, notebooks, probes, repo_name, catnote, out_path, git,
-           snapshot=None, diff=None, jl_refs=None, jl_errors=None, divergences=None):
+           snapshot=None, diff=None, jl_refs=None, jl_errors=None, divergences=None,
+           data_cache=None, eda_diffs=None):
     counts = {s: 0 for s in STAGES}
     for path in fams:
         counts[review.get(path, {}).get("stage", "cataloged")] += 1
@@ -2594,7 +2779,8 @@ def render(fams, review, work, worklog, notebooks, probes, repo_name, catnote, o
         n = sum(1 for f in fams.values() if f["kind"] == k)
         tabs.append(f'<button class="tab" data-k="k{i}">{_esc(k)}<span class="n">{n}</span></button>')
         panels.append(f'<div class="panel" id="panel-k{i}">'
-                      + build_kind_panel(k, fams, review, work, probes, git, snapshot, jl_refs, jl_errors) + '</div>')
+                      + build_kind_panel(k, fams, review, work, probes, git, snapshot,
+                                          jl_refs, jl_errors, data_cache, eda_diffs) + '</div>')
 
     gen_iso = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     head_short = (git.get("head_sha") or "")[:7] or "no-git"
@@ -2734,8 +2920,11 @@ def main():
         newev = sum(t.get("new_evidence_by_family", {}).values())
         print(f"  snapshot: {newev:+d} evidence hits, {t['status_changes']} status change(s), "
               f"{t['new_probes']} new probe(s)")
+    # Phase 3: load the sample cache after sample_products() has (possibly)
+    # updated it, so the HTML render sees the latest EDA slice on every card.
+    data_cache = load_data_cache(repo)
     counts = render(fams, review, work, worklog, notebooks, probes, repo.name, catnote, out, git,
-                    snapshot_prev, diff, jl_refs, jl_errors, divergences)
+                    snapshot_prev, diff, jl_refs, jl_errors, divergences, data_cache)
     print("  funnel: " + " -> ".join(f"{STAGE_LABELS[s]} {counts.get(s, 0)}" for s in STAGES))
     print(f"Report written to {out}")
 
