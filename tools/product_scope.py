@@ -121,6 +121,42 @@ def effective_role(r):
     if role and not note: return ""
     return role
 
+# ---- Phase 5 #1: insights schema --------------------------------------------
+# Each entry in review[path]["insights"] is one of:
+#   {"when": ISO8601Z, "who": "Andrew", "source": "human"|"auto:*", "text": "..."}
+# Append-only: no writer mutates or deletes existing entries. Auto-insights
+# dedup on hash(source + text)[:16] against existing entries from the same
+# source for the same product; human insights are never deduped (a teammate
+# saying the same thing twice is intentional).
+INSIGHT_SOURCES  = ["human", "auto:repo", "auto:cache_diff", "auto:divergence"]
+INSIGHT_HUMAN    = "human"
+INSIGHT_AUTO_REPO       = "auto:repo"
+INSIGHT_AUTO_CACHE_DIFF = "auto:cache_diff"
+INSIGHT_AUTO_DIVERGENCE = "auto:divergence"
+
+# Icons shown next to each insight in both the TL;DR and drill-down feed.
+# Written with explicit \U escapes so the source file stays pure ASCII.
+INSIGHT_SOURCE_ICON = {
+    INSIGHT_HUMAN:            "\U0001F464",   # bust in silhouette
+    INSIGHT_AUTO_CACHE_DIFF:  "\U0001F527",   # wrench
+    INSIGHT_AUTO_REPO:        "\U0001F4DD",   # memo
+    INSIGHT_AUTO_DIVERGENCE:  "⚠",       # warning sign
+}
+
+INSIGHT_SOURCE_LABEL = {
+    INSIGHT_HUMAN:            "human",
+    INSIGHT_AUTO_REPO:        "repo",
+    INSIGHT_AUTO_CACHE_DIFF:  "cache diff",
+    INSIGHT_AUTO_DIVERGENCE:  "divergence",
+}
+
+def insight_hash(source, text):
+    """Content hash used for auto-insight dedup: hex-16 of sha256(source+text).
+    Human insights are NEVER hashed for dedup (the spec explicitly excludes
+    them so a repeated observation from two teammates lands as two entries)."""
+    import hashlib
+    return hashlib.sha256((str(source) + str(text)).encode("utf-8")).hexdigest()[:16]
+
 # Tabs, from the Bureau's own dataset flags. Not our categories.
 KINDS = ["Aggregate tables", "Microdata", "Time series", "Unflagged"]
 KIND_BLURB = {
@@ -484,6 +520,12 @@ def load_review(repo: Path, fams):
     Phase 4 #5: newly created entries get a `sample_config: "default"` field.
     Existing entries are NOT rewritten - the field is read via sample_config_of()
     with 'default' as the fallback, so old review files stay valid.
+
+    Phase 5 #1: newly created entries also get `insights: []` (append-only
+    list of {when, who, source, text} dicts) plus `last_reviewed_by` /
+    `last_reviewed_date` (auto-populated by the --serve edit path). Every
+    reader must use `entry.get("insights", [])` etc. so the 573 existing
+    entries (which lack these fields) continue to work without a migration.
     """
     p = repo / "product_review.json"
     existing, first = {}, not p.exists()
@@ -492,7 +534,9 @@ def load_review(repo: Path, fams):
     added = 0
     default = {"stage": "cataloged", "uncertainty_metrics": "", "note": "",
                "composite_role": "", "composite_role_note": "",
-               "sample_config": "default"}
+               "sample_config": "default",
+               "insights": [],
+               "last_reviewed_by": "", "last_reviewed_date": ""}
     for path in sorted(fams):
         if path not in existing:
             existing[path] = dict(default)
