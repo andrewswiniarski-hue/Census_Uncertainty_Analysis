@@ -708,6 +708,214 @@ def run_probe_queue(repo, fams, paths, today):
     print(f"Wrote {out.name} ({len(store)} probed products). Re-run without --probe-queue to rebuild the report.")
 
 # ============================================================================
+# SAMPLE / EDA MODE  (Phase 3)
+# ============================================================================
+# The probe (above) asks the API what a product PUBLISHES - counts and levels.
+# A sample fetches an ACTUAL data slice, runs a canonical EDA on it, and caches
+# the result so a teammate can triage a candidate product without opening a
+# notebook.
+#
+# Sample cache lives in scope_data_cache.json at the repo root (gitignored) so
+# a sample isn't accidentally shared as fact; if two teammates want the same
+# snapshot, they each run the sample locally. Same reasoning as probes being
+# committed (they're API descriptions, factual) and samples being local (they're
+# a moment-in-time slice against a possibly-rate-limited endpoint).
+#
+# NO AUTO-JUDGMENTS. This module reports what the data LOOKS like - shape,
+# dtypes, missingness, sparklines - and lets thresholds speak for themselves
+# (a column at 45% missing gets flagged as ">30% missing", not "problematic").
+
+SAMPLE_SIZE_DEFAULT       = 100
+SAMPLE_FRESH_DAYS         = 7          # cache older than this is considered stale
+SAMPLE_HTTP_TIMEOUT       = 30         # seconds per API call
+SAMPLE_INTER_REQUEST_MS   = 500        # be a polite neighbour to api.census.gov
+SAMPLE_VAR_CAP            = 20         # cap on variable count in one sample request
+
+def load_env(repo: Path):
+    """Minimal .env reader: no dependency, KEY=VAL lines, # comments, quotes ok.
+    Returns {} when the file doesn't exist. Silent on parse errors line-by-line."""
+    envp = repo / ".env"
+    if not envp.exists(): return {}
+    out = {}
+    for line in envp.read_text(encoding="utf-8", errors="ignore").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"): continue
+        if "=" not in line: continue
+        k, v = line.split("=", 1)
+        v = v.strip().strip('"').strip("'")
+        out[k.strip()] = v
+    return out
+
+def _data_url(fam):
+    """Data endpoint for a catalog family: 'api.census.gov/data/<vintage>/<path>'.
+
+    Prefers the latest vintage in fam['vintages']; falls back to stripping
+    /variables.json off the catalog's variables_url. Returns "" for non-API
+    products (no variables endpoint = not queryable through the data API)."""
+    if not fam.get("variables_url"):
+        return ""
+    vintages = fam.get("vintages") or []
+    if vintages:
+        return f"https://api.census.gov/data/{max(vintages)}/{fam['path']}"
+    # Fallback: derive from variables_url. Always HTTPS.
+    vu = fam["variables_url"]
+    if vu.startswith("http://"): vu = "https://" + vu[len("http://"):]
+    return vu.replace("/variables.json", "")
+
+def _pick_sample_vars(variables_url):
+    """Fetch variables.json once, return (NAME + up to SAMPLE_VAR_CAP estimate vars).
+    Raises on transport failure (caller wraps and reports).  Returns [] only when
+    the response has zero usable variable names. Estimate variables end in 'E'
+    and, on aggregate tables, have a matching '_M' MOE."""
+    payload = _api_get(variables_url, timeout=SAMPLE_HTTP_TIMEOUT)
+    v = payload.get("variables", payload)
+    all_names = [n for n in v if n not in ("for", "in", "ucgid")]
+    estimates = [n for n in all_names if n.endswith("E") and not n.endswith("NAME")]
+    # Prefer estimates whose '_M' counterpart exists (aggregate-table pattern),
+    # then fill from remaining estimates, then any other variable if nothing else.
+    with_moe = [n for n in estimates if (n[:-1] + "M") in v]
+    order = with_moe + [n for n in estimates if n not in set(with_moe)]
+    picked = order[:SAMPLE_VAR_CAP]
+    if not picked and all_names:
+        picked = all_names[:SAMPLE_VAR_CAP]
+    # Always request NAME first if the variable exists (it does on ~all datasets).
+    if "NAME" in v and "NAME" not in picked:
+        picked = ["NAME"] + picked[:SAMPLE_VAR_CAP - 1]
+    return picked
+
+def _pick_sample_geography(fam, probe):
+    """Return a 'for=<level>:*' value. Prefers a level the API says is
+    queryable-without-a-parent (state, us, region). Falls back to 'state:*'."""
+    if probe and probe.get("ok"):
+        wildcards = probe.get("queryable_without_parent") or []
+        for pref in ("state", "us", "region", "division"):
+            if pref in wildcards:
+                return pref
+        if wildcards:
+            return wildcards[0]
+        levels = probe.get("levels") or []
+        for pref in ("state", "us", "region"):
+            if pref in levels:
+                return pref
+    return "state"   # safe default for national aggregate tables
+
+def _http_get_json(url, timeout=SAMPLE_HTTP_TIMEOUT, retry=True):
+    """GET + JSON decode with one retry on transient errors (HTTPError >=500,
+    URLError, timeout). Returns parsed JSON, or raises the last exception.
+    Requests are silent on stdout - callers own the log line."""
+    last_exc = None
+    for attempt in (1, 2 if retry else 1):
+        try:
+            if url.startswith("http://"):
+                url = "https://" + url[len("http://"):]
+            req = urllib.request.Request(url, headers={"Accept": "application/json"})
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return json.load(r)
+        except urllib.error.HTTPError as ex:
+            last_exc = ex
+            if ex.code and ex.code < 500: raise   # 4xx: don't retry
+            if attempt == 2: raise
+        except (urllib.error.URLError, TimeoutError, OSError) as ex:
+            last_exc = ex
+            if attempt == 2: raise
+        # Small backoff between attempts.
+        import time as _t; _t.sleep(0.75)
+    raise last_exc if last_exc else RuntimeError("unreachable")
+
+def fetch_sample(fam, probe, size, api_key):
+    """Fetch a small data slice for one product. Returns (df, source_url, err).
+
+    On success: df is a pandas DataFrame with 'size' or fewer rows; err = "".
+    On non-API product: (None, "", "not sample-able via API").
+    On any other failure: (None, url, "<message>"). Never raises to the caller."""
+    if not fam.get("variables_url"):
+        return None, "", "not sample-able via API (bulk-download product)"
+    data_ep = _data_url(fam)
+    if not data_ep:
+        return None, "", "no data endpoint could be constructed"
+    variables_url = fam["variables_url"]
+    if variables_url.startswith("http://"):
+        variables_url = "https://" + variables_url[len("http://"):]
+    try:
+        picked = _pick_sample_vars(variables_url)
+    except Exception as ex:
+        return None, data_ep, f"variables.json fetch failed: {type(ex).__name__}: {ex}"
+    if not picked:
+        return None, data_ep, "no usable variables in variables.json"
+    geo = _pick_sample_geography(fam, probe)
+    getparam = ",".join(picked)
+    url = f"{data_ep}?get={getparam}&for={geo}:*"
+    if api_key:
+        url += f"&key={api_key}"
+    try:
+        payload = _http_get_json(url, timeout=SAMPLE_HTTP_TIMEOUT, retry=True)
+    except urllib.error.HTTPError as ex:
+        return None, url, f"HTTP {ex.code}: {ex.reason}"
+    except Exception as ex:
+        return None, url, f"{type(ex).__name__}: {ex}"
+    # The Census data API returns a 2D list: header row + data rows.
+    if not isinstance(payload, list) or len(payload) < 2:
+        return None, url, "response was not a data table (unexpected shape)"
+    try:
+        import pandas as pd
+    except ImportError:
+        return None, url, "pandas not installed (pip install pandas)"
+    header = payload[0]
+    rows = payload[1:]
+    df = pd.DataFrame(rows, columns=header)
+    if len(df) > size:
+        df = df.head(size)
+    return df, url, ""
+
+def sample_products(repo, fams, review, probes, only_product, size, refresh):
+    """Run one or many samples. When only_product is set, sample just that one;
+    otherwise batch through every product currently marked 'candidate' in the
+    review file. Skips fresh cache entries (age < SAMPLE_FRESH_DAYS days) unless
+    refresh is True; skips non-API products with a clear message. Returns a
+    summary dict with counts and per-product results for the caller to display."""
+    env = load_env(repo)
+    api_key = env.get("CENSUS_API_KEY", "")
+    if only_product:
+        targets = [only_product]
+    else:
+        targets = sorted(p for p, r in review.items()
+                         if (r.get("stage") or "").lower() == "candidate")
+    if not targets:
+        print("[sample] nothing to sample: no products marked 'candidate' in "
+              "product_review.json (or pass --product <ID> to sample one directly).")
+        return {"sampled": [], "skipped_fresh": [], "skipped_non_api": [], "failed": []}
+
+    print(f"[sample] {len(targets)} target(s); size={size}; "
+          f"api_key={'yes' if api_key else 'no (public rate limits apply)'}; "
+          f"refresh={'yes' if refresh else 'no'}")
+    summary = {"sampled": [], "skipped_fresh": [], "skipped_non_api": [], "failed": []}
+    for i, path in enumerate(targets):
+        fam = fams.get(path)
+        if not fam:
+            print(f"  [sample] {path}: not in the catalog - skipped")
+            summary["failed"].append({"path": path, "reason": "not in catalog"})
+            continue
+        if not fam.get("variables_url"):
+            print(f"  [sample] {path}: not sample-able via API (bulk-download "
+                  f"product); skipping")
+            summary["skipped_non_api"].append(path)
+            continue
+        probe = probes.get(path) or {}
+        df, url, err = fetch_sample(fam, probe, size, api_key)
+        if err:
+            print(f"  [sample] {path}: FAILED - {err}")
+            summary["failed"].append({"path": path, "reason": err, "url": url})
+        else:
+            print(f"  [sample] {path}: {len(df)} rows x {len(df.columns)} cols "
+                  f"from {url}")
+            summary["sampled"].append({"path": path, "url": url,
+                                        "rows": len(df), "cols": len(df.columns)})
+        # Be network-polite between requests.
+        if i < len(targets) - 1:
+            import time as _t; _t.sleep(SAMPLE_INTER_REQUEST_MS / 1000.0)
+    return summary
+
+# ============================================================================
 # REPORT
 # ============================================================================
 
@@ -2117,6 +2325,22 @@ def main():
                     help="write a per-product review table instead of the HTML report. "
                          "Default output file is product_review.csv or product_review.xlsx "
                          "at the repo root; override with --out.")
+    # ---- Phase 3: sample / EDA mode (see SAMPLE / EDA MODE section above) --
+    ap.add_argument("--sample", action="store_true",
+                    help="fetch actual data slices and run a canonical EDA. Combined "
+                         "with --product X, samples one product; alone, batch-samples "
+                         "every product currently marked 'candidate' in product_review.json. "
+                         "Skips fresh cache entries (< 7 days) unless --refresh is given.")
+    ap.add_argument("--sample-size", type=int, default=SAMPLE_SIZE_DEFAULT, metavar="N",
+                    help=f"row count per sample (default: {SAMPLE_SIZE_DEFAULT}). "
+                         "The Census data API truncates automatically; smaller = faster.")
+    ap.add_argument("--refresh", action="store_true",
+                    help="force re-sampling even if a fresh cache entry exists (used "
+                         "with --sample). Diff against the previous sample is surfaced "
+                         "in the report.")
+    ap.add_argument("--product", metavar="ID", default=None,
+                    help="target product for --sample (single-product mode). "
+                         "Ignored otherwise.")
     args = ap.parse_args()
     repo = Path(args.repo).resolve()
     if not (repo / "ingestion").exists():
@@ -2170,6 +2394,11 @@ def main():
     elif added:
         print(f"  review file: {added} new product(s) appended; existing entries untouched")
     validate_review(review)   # feature #7: composite_role requires composite_role_note
+
+    # Phase 3: --sample runs before HTML render; results feed back into the report.
+    if args.sample:
+        sample_products(repo, fams, review, probes, args.product,
+                        args.sample_size, args.refresh)
 
     if args.export:
         # Export mode skips HTML generation entirely - the export IS the deliverable.
