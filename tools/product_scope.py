@@ -79,6 +79,7 @@ def git_info(repo: Path):
         "branch":      _git(repo, ["rev-parse", "--abbrev-ref", "HEAD"]),
         "remote_url":  remote,
         "github_slug": slug,
+        "repo_abs":    str(repo),   # used by receipt_url() for file:// fallback
     }
 
 # ============================================================================
@@ -457,6 +458,58 @@ def fallback_scan(repo: Path):
 
 KIND_STAGE = {"docs": 1, "ingestion": 2, "analysis": 2, "notebook": 3}
 
+# Where in the repo tree each evidence-kind lives; used to build repo-relative
+# paths (and, from those, clickable jump-to-source URLs).
+KIND_DIR = {"ingestion": "ingestion", "analysis": "analysis",
+            "notebook":  "notebooks", "docs": "docs"}
+
+def locate_pos(e, patterns):
+    """First hit's structured position: {"line": N} or {"cell": N} or {}.
+    Same detection as locate() but returns fields the URL builder can use."""
+    pats = [re.compile(p, re.I) for p in patterns]
+    if e.get("cells"):
+        for i, src in enumerate(e["cells"], 1):
+            if any(p.search(src) for p in pats):
+                return {"cell": i}
+    if e.get("lines"):
+        for i, ln in enumerate(e["lines"], 1):
+            if ln.lstrip().startswith("#"): continue
+            if any(p.search(ln) for p in pats):
+                return {"line": i}
+    return {}
+
+def receipt_label(r):
+    """Text form of a structured receipt for the CSV export and plain-text callers."""
+    label = r.get("file", "")
+    if r.get("line"):  label += f" (line {r['line']})"
+    elif r.get("cell"): label += f" (cell {r['cell']})"
+    return label
+
+def receipt_url(r, git):
+    """Jump-to-source URL for a receipt.
+
+    Preference order (matches feature #3):
+      1. GitHub blob URL with #L<line> anchor - built from the git remote slug
+         and current branch. Notebooks don't get a cell anchor because GitHub's
+         .ipynb renderer doesn't expose stable cell IDs; the link still opens
+         the notebook at the correct file.
+      2. file:// absolute path - so the same links work in a local viewer
+         even when there's no GitHub remote (e.g. detached checkouts).
+      3. Empty string if we have no repo path at all (defensive fallback).
+    """
+    path = r.get("path")
+    if not path: return ""
+    slug = git.get("github_slug") if git else ""
+    branch = (git.get("branch") if git else "") or "main"
+    if slug:
+        frag = f"#L{r['line']}" if r.get("line") else ""
+        return f"https://github.com/{slug}/blob/{branch}/{path}{frag}"
+    repo_abs = (git.get("repo_abs") if git else "") or ""
+    if repo_abs:
+        # file:// URLs on Windows use forward slashes and a leading slash.
+        return "file:///" + (repo_abs + "/" + path).lstrip("/").replace("\\", "/")
+    return ""
+
 def geo_levels_in(low):
     """Keyword inference, NOT a verified record. "block-group" with a hyphen used to
     defeat the stripper and register as block-level work; the hyphen is handled now."""
@@ -469,6 +522,10 @@ def geo_levels_in(low):
     return found
 
 def build_product_status(evidence):
+    """Structured receipts. Each receipt is a dict:
+       {"file": basename, "path": repo-relative path, "kind": ingestion/analysis/notebook/docs,
+        "line": int|None, "cell": int|None}
+    Downstream renderers turn these into clickable file:line links (see receipt_url)."""
     out = {}
     for e in evidence:
         stage = KIND_STAGE.get(e["kind"], 1)
@@ -481,17 +538,27 @@ def build_product_status(evidence):
                 stage = 4
         geos = geo_levels_in(e["low"])
         doms = {d for d, pats in DOMAIN_PATTERNS.items() if any(re.search(p, e["text"], re.I) for p in pats)}
+        rel_dir = KIND_DIR.get(e["kind"], "")
+        rel_path = f"{rel_dir}/{e['file']}" if rel_dir else e["file"]
         for prod, pats in PRODUCT_MATCH.items():
             if not any(re.search(p, e["low"]) or re.search(p, e["file"].lower()) for p in pats):
                 continue
             rec = out.setdefault(prod, {"status": 0, "geos": {}, "domains": {}, "receipts": []})
             rec["status"] = max(rec["status"], stage)
-            loc = locate(e, sum(DOMAIN_PATTERNS.values(), [])) if DEEP else ""
-            rec["receipts"].append(e["file"] + loc)
+            pos = locate_pos(e, sum(DOMAIN_PATTERNS.values(), [])) if DEEP else {}
+            rec["receipts"].append({"file": e["file"], "path": rel_path, "kind": e["kind"],
+                                    "line": pos.get("line"), "cell": pos.get("cell")})
             for g in geos: rec["geos"][g] = max(rec["geos"].get(g, 0), stage)
             for d in doms: rec["domains"][d] = max(rec["domains"].get(d, 0), stage)
     for rec in out.values():
-        rec["receipts"] = sorted(set(rec["receipts"]))[:6]
+        # Dedup by (file, line, cell); stable sort by file then position.
+        seen, uniq = set(), []
+        for r in rec["receipts"]:
+            key = (r["file"], r.get("line"), r.get("cell"))
+            if key in seen: continue
+            seen.add(key); uniq.append(r)
+        uniq.sort(key=lambda r: (r["file"], r.get("line") or 0, r.get("cell") or 0))
+        rec["receipts"] = uniq[:6]
     return out
 
 
@@ -682,6 +749,8 @@ table.rep td{border-bottom:1px solid var(--ice);padding:7px 9px;vertical-align:t
 .s3{background:#50639B;color:#fff;} .s4{background:#1F2A5C;color:#F5D77A;}
 .inferred{font-size:10px;color:#8a4d1c;font-style:italic;margin-top:3px;}
 .receipts{font-size:10px;color:var(--muted);font-family:ui-monospace,Consolas,monospace;line-height:1.5;margin-top:5px;}
+.receipt-link{color:#3A4890;text-decoration:none;border-bottom:1px dotted #8FA8D8;}
+.receipt-link:hover{color:var(--navy);border-bottom-style:solid;}
 .meta{font-size:11px;color:var(--muted);margin-top:3px;}
 .tk{border-left:3px solid var(--line);padding:4px 8px;margin:5px 0;}
 .tk.odd{border-left-color:var(--gold);}
@@ -1017,6 +1086,7 @@ FACET_VALUE_LABELS = {
 def product_row(f, review, work, probes, ctx=None):
     ctx = ctx or {}
     top_families = ctx.get("top_families", set())
+    git = ctx.get("git") or {}
     facets = product_facet_values(f, review, work, probes, top_families)
     r = review.get(f["path"], {})
     st = r.get("stage", "cataloged")
@@ -1083,7 +1153,16 @@ def product_row(f, review, work, probes, ctx=None):
 
     if ws > 0:
         boxes = "".join(f'<div class="kbox s{w.get("geos", {}).get(gl, 0)}">{gl}</div>' for gl in GEO_LEVELS)
-        rc = "<br>".join(_esc(x) for x in w.get("receipts", []))
+        # Each receipt is a jump-to-source anchor; label is "file (line N)" or "file (cell N)".
+        rc_parts = []
+        for rc_item in w.get("receipts", []):
+            lbl = receipt_label(rc_item)
+            url = receipt_url(rc_item, git)
+            if url:
+                rc_parts.append(f'<a class="receipt-link" href="{_esc(url)}" target="_blank" rel="noopener">{_esc(lbl)}</a>')
+            else:
+                rc_parts.append(_esc(lbl))
+        rc = "<br>".join(rc_parts)
         note = ('<div class="meta">note: ' + _esc(r["note"]) + '</div>') if r.get("note") else ""
         branches.append(
             f'<div class="branch"><div class="bcard"><div class="blabel">Our progress</div>'
@@ -1160,13 +1239,13 @@ def build_facet_sidebar(prods, review, work, probes, top_families):
             '<h3>Filter</h3><a class="facet-clear" href="#" style="display:none">Clear filters</a>'
             '</div>' + "".join(blocks) + '</aside>')
 
-def build_kind_panel(kind, fams, review, work, probes):
+def build_kind_panel(kind, fams, review, work, probes, git=None):
     prods = [f for f in fams.values() if f["kind"] == kind]
     # Compute per-panel "top families" bucket for the Family facet.
     fam_counts = {}
     for f in prods: fam_counts[f["group"]] = fam_counts.get(f["group"], 0) + 1
     top_families = set(sorted(fam_counts, key=lambda g: -fam_counts[g])[:12])
-    ctx = {"top_families": top_families}
+    ctx = {"top_families": top_families, "git": git or {}}
 
     groups = {}
     for f in prods: groups.setdefault(f["group"], []).append(f)
@@ -1196,7 +1275,7 @@ def build_kind_panel(kind, fams, review, work, probes):
     return ('<div class="products-shell">' + sidebar
             + f'<div class="products-main">{body}</div></div>')
 
-def build_home(fams, review, work, counts, worklog, notebooks, probes):
+def build_home(fams, review, work, counts, worklog, notebooks, probes, git=None):
     h = []
     h.append('<div class="funnel">'
              f'<div class="fstep"><b>{counts["cataloged"]}</b><span>cataloged<br>(the wide start)</span></div><div class="farrow">&rarr;</div>'
@@ -1223,9 +1302,14 @@ def build_home(fams, review, work, counts, worklog, notebooks, probes):
         h.append("<table class='rep'><tr><th>Product</th><th>Work depth</th><th>Receipts</th></tr>")
         for prod in sorted(work, key=lambda p: (-work[p]["status"], p)):
             w = work[prod]
+            rc_parts = []
+            for r in w["receipts"]:
+                lbl = receipt_label(r); url = receipt_url(r, git or {})
+                if url: rc_parts.append(f'<a class="receipt-link" href="{_esc(url)}" target="_blank" rel="noopener">{_esc(lbl)}</a>')
+                else:   rc_parts.append(_esc(lbl))
             h.append(f'<tr><td><b>{_esc(prod)}</b></td>'
                      f'<td><span class="workchip w{w["status"]}">{STATUS_LABELS[w["status"]]}</span></td>'
-                     f'<td class="mono">{"<br>".join(_esc(x) for x in w["receipts"])}</td></tr>')
+                     f'<td class="mono">{"<br>".join(rc_parts)}</td></tr>')
         h.append("</table>")
     else:
         h.append('<div class="nowork">No repo evidence found.</div>')
@@ -1308,7 +1392,7 @@ def product_export_row(f, review, work, probes):
 
     # Repo evidence: semicolon-joined "file (cell N)" or "file (line N)" list.
     # These are the same receipts the HTML shows under "Our progress".
-    evidence = "; ".join(w.get("receipts", []))
+    evidence = "; ".join(receipt_label(r) for r in w.get("receipts", []))
 
     # Geography levels: prefer the probe's verified list (what the Bureau says
     # the product supports); fall back to the inferred set from repo scanning
@@ -1382,12 +1466,12 @@ def render(fams, review, work, worklog, notebooks, probes, repo_name, catnote, o
     kinds_present = [k for k in KINDS if any(f["kind"] == k for f in fams.values())]
     tabs = ['<button class="tab on" data-k="home">Home</button>']
     panels = ['<div class="panel on" id="panel-home">'
-              + build_home(fams, review, work, counts, worklog, notebooks, probes) + '</div>']
+              + build_home(fams, review, work, counts, worklog, notebooks, probes, git) + '</div>']
     for i, k in enumerate(kinds_present):
         n = sum(1 for f in fams.values() if f["kind"] == k)
         tabs.append(f'<button class="tab" data-k="k{i}">{_esc(k)}<span class="n">{n}</span></button>')
         panels.append(f'<div class="panel" id="panel-k{i}">'
-                      + build_kind_panel(k, fams, review, work, probes) + '</div>')
+                      + build_kind_panel(k, fams, review, work, probes, git) + '</div>')
 
     gen_iso = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     head_short = (git.get("head_sha") or "")[:7] or "no-git"
