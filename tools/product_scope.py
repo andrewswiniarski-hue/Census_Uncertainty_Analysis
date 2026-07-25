@@ -560,21 +560,19 @@ def validate_review(review):
 # ============================================================================
 # Auto-insights document what changed since the last regen so the team feed
 # on every card carries the paper trail of drift, not just the current state.
-# Three sources:
-#   auto:repo         - a commit touched an evidence file for this product
+# Two sources (auto:repo dropped in audit cut 2 - noisy commit-log paraphrase
+# that duplicated what git blame already shows; existing auto:repo entries in
+# product_review.json are still rendered on read for backward compat):
 #   auto:cache_diff   - a sample refresh changed shape / dtype / missingness
 #   auto:divergence   - composite_role declared or removed while composite code
 #                        refs also crossed the on/off boundary
 #
-# All three go through _append_insight() which handles:
+# Both go through _append_insight() which handles:
 #   (a) dedup - never store the same (source, text) twice per product
 #   (b) file locking - a threading.Lock() (in-process) + fcntl.flock() best-
 #       effort (cross-process, when the OS supports it) so the --review CLI
 #       helper and any other writer cannot corrupt each other's writes
 #   (c) writing the whole review file back deterministically
-
-LAST_REGEN_FILE   = ".product_scope_last_regen.json"
-LAST_REGEN_LOOKBACK_DAYS = 7   # first-ever regen has no baseline; look back a week
 
 # Module-level lock so any thread of this process (main regen, --review
 # helper) serializes review-file writes. Cross-process locking sits on top
@@ -595,31 +593,6 @@ def _now_iso_z():
     """Current UTC time as an ISO-8601 string with 'Z' suffix. Kept as its
     own helper so every code path that stamps a 'when' uses the same format."""
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-def _read_last_regen(repo: Path):
-    """Return ISO timestamp of the last regen, or None if unknown / unreadable.
-    Callers that need a lookback horizon fall back to LAST_REGEN_LOOKBACK_DAYS."""
-    p = repo / LAST_REGEN_FILE
-    if not p.exists(): return None
-    try:
-        payload = json.loads(p.read_text(encoding="utf-8"))
-        return payload.get("when") or None
-    except Exception:
-        return None
-
-def _write_last_regen(repo: Path):
-    """Overwrite .product_scope_last_regen.json with 'now'. Called at the end
-    of every regen so subsequent auto:repo detection scans the right window."""
-    p = repo / LAST_REGEN_FILE
-    p.write_text(json.dumps({"when": _now_iso_z()}, indent=2), encoding="utf-8")
-
-def _lookback_since_iso(last_iso):
-    """Timestamp to pass to `git log --since=`. If we've never regen'd, look
-    back LAST_REGEN_LOOKBACK_DAYS days (spec: 7). Format is ISO with 'Z' so
-    git parses it consistently across locales."""
-    if last_iso: return last_iso
-    now = datetime.datetime.now(datetime.timezone.utc)
-    return (now - datetime.timedelta(days=LAST_REGEN_LOOKBACK_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 def _ensure_review_shape(entry):
     """Return `entry` with the Phase 5 shape guaranteed - insights list present,
@@ -739,106 +712,6 @@ def save_review_locked(repo: Path, review):
         existing.clear()
         existing.update(review)
     with_review_locked(repo, _replace)
-
-# ---- Source A: auto:repo -----------------------------------------------------
-# Look at every commit since the last regen that touched an evidence-file path
-# associated with a tracked product. Emit "<author> added <file>:<line?>
-# referencing this product (commit <sha>)."
-#
-# Evidence files come from build_product_status() (Phase 2). We map each
-# product name back to the list of paths that scored evidence for it, and
-# feed those paths to `git log --since=<T> --pretty=format:%h|%an|%s -- <path>`.
-
-def _git_log_since(repo: Path, since_iso, paths, limit_per_path=6):
-    """Return a list of (path, sha, author, subject) for commits touching any
-    of `paths` since `since_iso`. Cap per-path to avoid an unbounded feed on
-    a heavily-touched file. All git errors are silent (returns []) - this
-    feature must not crash the regen if git is missing or the repo is shallow.
-
-    Uses ONE `git log --name-only` invocation for the full path set (vs. one
-    per path) - a 10x speedup on 11-path scans because subprocess launch is
-    the dominant cost per call."""
-    out = []
-    if not paths: return out
-    path_set = {str(p) for p in paths}
-    # Emit commits with a leading '__C__' marker + pipe-delimited fields on
-    # the header line, then --name-only puts the file paths on the following
-    # lines. We split on '\n__C__' to get commit blocks.
-    fmt = "__C__|%h|%an|%s"
-    try:
-        r = subprocess.run(
-            ["git", "-C", str(repo), "log",
-             f"--since={since_iso}", f"--pretty=format:{fmt}",
-             "--name-only", "--"] + list(path_set),
-            capture_output=True, text=True, timeout=15)
-    except Exception:
-        return out
-    if r.returncode != 0: return out
-    stdout = r.stdout or ""
-    # git log's first commit doesn't have a leading newline; prepend one so
-    # every commit's marker starts with '\n__C__' after splitting.
-    blocks = ("\n" + stdout).split("\n__C__")
-    per_path_counts = {p: 0 for p in path_set}
-    for block in blocks:
-        if not block.strip(): continue
-        lines = [ln for ln in block.split("\n") if ln.strip() != ""]
-        if not lines: continue
-        # Header line: '|<sha>|<author>|<subject>' (leading pipe because
-        # the __C__ was consumed by split; the format was '__C__|<sha>|...').
-        header = lines[0]
-        if header.startswith("|"):
-            parts = header[1:].split("|", 2)
-        else:
-            parts = header.split("|", 2)
-        if len(parts) < 3: continue
-        sha, author, subject = parts[0], parts[1], parts[2]
-        for fp in lines[1:]:
-            if fp in path_set:
-                if per_path_counts[fp] >= limit_per_path: continue
-                per_path_counts[fp] += 1
-                out.append({"path": fp, "sha": sha, "author": author, "subject": subject})
-    return out
-
-def collect_auto_repo_insights(repo: Path, fams, work, since_iso):
-    """Return a list of (path, source, text, when, who) tuples for every
-    catalog family whose tracked product's evidence files got touched by a
-    commit since `since_iso`. Text format matches the spec:
-       "<author> added <file> referencing this product (commit <sha>)"
-
-    Perf note: git log is a subprocess call (~50 ms each). Many products share
-    the same evidence path (analysis/dhc.py is evidence for both 2020 DHC and
-    2010 SF1, etc.). We cache per-path so the total work is O(unique paths)
-    rather than O(products x paths_per_product).
-    """
-    # Collect unique evidence paths across every product that maps here.
-    unique_paths = set()
-    prod_paths = {}    # tracked-product name -> list of paths
-    for _, f in fams.items():
-        prod = f.get("product")
-        if not prod: continue
-        w = work.get(prod, {})
-        ps = sorted({r.get("path") for r in w.get("receipts", []) if r.get("path")})
-        prod_paths[prod] = ps
-        unique_paths.update(ps)
-
-    # One combined git-log call over the full path set (the helper batches
-    # them into one subprocess and buckets the output by path); a 10x
-    # speedup on 10+ paths because subprocess launch dominates.
-    all_hits = _git_log_since(repo, since_iso, sorted(unique_paths))
-    commits_by_path = {}
-    for c in all_hits:
-        commits_by_path.setdefault(c["path"], []).append(c)
-
-    tuples = []
-    for path, f in fams.items():
-        prod = f.get("product")
-        if not prod: continue
-        for pth in prod_paths.get(prod, []):
-            for c in commits_by_path.get(pth, []):
-                text = (f"{c['author']} added {c['path']} referencing this product "
-                        f"(commit {c['sha']})")
-                tuples.append((path, INSIGHT_AUTO_REPO, text, None, c["author"]))
-    return tuples
 
 # ---- Source B: auto:cache_diff ----------------------------------------------
 # Piggyback on the existing diff_eda() output (Phase 3 #6). eda_diffs comes
@@ -4443,13 +4316,10 @@ def main():
     if any(dsum):
         print(f"  divergences: {dsum[0]} referenced-without-role, {dsum[1]} role-without-reference")
 
-    # Phase 5 #2 - auto-insight collection. Three sources (repo commits,
-    # cache-diff drift, divergence state changes) share _append_insight()
-    # which handles dedup + file locking. Runs BEFORE render so the freshly
-    # appended insights land on the cards in the same regen.
-    last_regen_iso = _read_last_regen(repo)
-    since_iso      = _lookback_since_iso(last_regen_iso)
-    ai_repo = collect_auto_repo_insights(repo, fams, work, since_iso)
+    # Phase 5 #2 - auto-insight collection. Two sources (cache-diff drift,
+    # divergence state changes) share _append_insight() which handles dedup
+    # + file locking. Runs BEFORE render so the freshly appended insights
+    # land on the cards in the same regen. (auto:repo dropped in audit cut 2.)
     ai_div  = collect_auto_divergence_insights(fams, review, jl_refs, snapshot_prev)
     if diff.get("is_baseline"):
         print(f"  snapshot: baseline recorded to {SNAPSHOT_FILE} (diff will appear on next run)")
@@ -4464,13 +4334,12 @@ def main():
     data_cache = load_data_cache(repo)
     eda_diffs  = load_eda_diffs(repo)
 
-    # Phase 5 #2 - emit auto:cache_diff insights alongside repo + divergence
-    # ones. Do a single batched save so the review file only takes one lock
-    # cycle per regen, no matter how many products drifted.
+    # Phase 5 #2 - emit auto:cache_diff insights alongside divergence ones.
+    # Do a single batched save so the review file only takes one lock cycle
+    # per regen, no matter how many products drifted.
     ai_cache_diff = collect_auto_cache_diff_insights(eda_diffs)
-    emit_auto_insights(repo, review, ai_repo + ai_div + ai_cache_diff,
+    emit_auto_insights(repo, review, ai_div + ai_cache_diff,
                        log_prefix="auto-insight/regen")
-    _write_last_regen(repo)
     counts = render(fams, review, work, worklog, notebooks, probes, repo.name, catnote, out, git,
                     snapshot_prev, diff, jl_refs, jl_errors, divergences, data_cache, eda_diffs)
     print("  funnel: " + " -> ".join(f"{STAGE_LABELS[s]} {counts.get(s, 0)}" for s in STAGES))
