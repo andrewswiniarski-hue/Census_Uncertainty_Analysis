@@ -3239,37 +3239,41 @@ def _ql_catalog_detail_html(f, non_api):
     return "".join(parts)
 
 def _ql_empty_state_html(f, tier, non_api):
-    """Drill-down affordance shown when the visible data ends before we've
-    exhausted the pipeline (Tier 0 catalog only, or Tier 1 probed but not
-    sampled). Same shape both times so the reader learns the pattern:
-    a copyable command spelling out the next --probe or --sample invocation.
+    """Drill-down affordance shown when the pipeline hasn't been fully run
+    for this product (Tier 0 catalog only; Tier 1 probed but not sampled;
+    or non-API). One command per state, always the natural next step,
+    always in the exact same visual container - so the toggle shape is
+    identical regardless of tier and the reader learns 'drill-down is
+    always here for a reason' (Phase 4b #6).
 
-    Non-API products get the same wording as the TL;DR - repeating it inside
-    the drill-down keeps the toggle shape identical to sample-able products,
-    which teaches the reader that the toggle is always there for consistency."""
+    Non-API products get an explanatory note instead of a command so the
+    reader doesn't think there's a working invocation they haven't run yet.
+    Tier 2 products return "" - the sample IS the deliverable, no next step
+    to prompt.
+    """
     if non_api:
         return ('<div class="ql-d-empty">Not sample-able via API - this is a '
-                'bulk-download product (e.g. TIGER shapefiles, DAS demo).</div>')
-    parts = []
+                'bulk-download product (e.g. TIGER shapefiles, DAS demo). '
+                'The catalog record above is all we have.</div>')
     if tier == 0:
-        cmd_probe = f'python tools/product_scope.py --repo . --probe {f["path"]}'
-        parts.append(
+        cmd = f'python tools/product_scope.py --repo . --probe {f["path"]}'
+        return (
             '<div class="ql-d-empty">Not yet probed - run this to populate '
-            'structural data:'
+            'structural data (variable counts, MOE flags, geography levels):'
             f'<div class="ql-d-cmd"><span class="copy-cmd light">'
-            f'<code>{_esc(cmd_probe)}</code>'
-            f'<button data-copy="{_esc(cmd_probe)}">Copy</button></span></div>'
+            f'<code>{_esc(cmd)}</code>'
+            f'<button data-copy="{_esc(cmd)}">Copy</button></span></div>'
             '</div>')
-    if tier <= 1:
-        cmd_sample = f'python tools/product_scope.py --repo . --sample --product {f["path"]}'
-        parts.append(
-            '<div class="ql-d-empty">Not yet sampled - run this to fetch a data '
-            'slice and cache canonical EDA:'
+    if tier == 1:
+        cmd = f'python tools/product_scope.py --repo . --sample --product {f["path"]}'
+        return (
+            '<div class="ql-d-empty">Not yet sampled - run this to fetch a '
+            'data slice and cache canonical EDA:'
             f'<div class="ql-d-cmd"><span class="copy-cmd light">'
-            f'<code>{_esc(cmd_sample)}</code>'
-            f'<button data-copy="{_esc(cmd_sample)}">Copy</button></span></div>'
+            f'<code>{_esc(cmd)}</code>'
+            f'<button data-copy="{_esc(cmd)}">Copy</button></span></div>'
             '</div>')
-    return "".join(parts)
+    return ""
 
 def _ql_details_html(f, probe_entry, cache_entry, tier, non_api):
     """Assemble the expanded (behind-the-toggle) content for one card. Order
