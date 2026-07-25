@@ -558,6 +558,7 @@ def build_product_status(evidence):
             if key in seen: continue
             seen.add(key); uniq.append(r)
         uniq.sort(key=lambda r: (r["file"], r.get("line") or 0, r.get("cell") or 0))
+        rec["hit_count"] = len(uniq)     # full count before display cap - fuels the diff
         rec["receipts"] = uniq[:6]
     return out
 
@@ -758,6 +759,19 @@ table.rep td{border-bottom:1px solid var(--ice);padding:7px 9px;vertical-align:t
 .aff-row.aff-amber{background:#FBF0D6;border-left:3px solid #C9A227;color:#6E4E11;}
 .aff-row.aff-nudge{background:#F6F7FA;border-left:3px solid var(--line);color:var(--muted);}
 .aff-text{flex:1;min-width:200px;}
+/* Diff banner (Home tab, top). Baseline mode is grey; active diff uses ice. */
+.diff-banner{background:var(--ice);border-left:4px solid var(--navy);border-radius:6px;
+     padding:11px 15px;margin:0 0 16px;max-width:1020px;}
+.diff-banner.baseline{background:#F6F7FA;border-left-color:var(--line);}
+.diff-headline{font-size:13.5px;color:var(--navy);line-height:1.4;}
+.diff-headline b{color:var(--navy);}
+.diff-when{font-size:10.5px;color:var(--muted);margin-top:3px;font-family:ui-monospace,Consolas,monospace;}
+.diff-banner details{margin-top:8px;font-size:12px;}
+.diff-banner summary{cursor:pointer;color:#3A4890;font-weight:600;}
+.diff-list{list-style:none;padding:8px 0 0;margin:0;max-height:280px;overflow-y:auto;}
+.diff-list li{padding:2px 0;color:var(--muted);font-size:11.5px;line-height:1.5;border-bottom:1px solid #E1E7F0;}
+.diff-list code{font-family:ui-monospace,Consolas,monospace;font-size:11px;background:#fff;
+     padding:1px 5px;border-radius:3px;color:var(--navy);}
 .meta{font-size:11px;color:var(--muted);margin-top:3px;}
 .tk{border-left:3px solid var(--line);padding:4px 8px;margin:5px 0;}
 .tk.odd{border-left-color:var(--gold);}
@@ -1106,6 +1120,162 @@ def load_snapshot(repo: Path):
     except Exception:
         return None
 
+def build_snapshot(fams, review, work, probes, git):
+    """Snapshot of the fields the diff tracks - one entry per catalog family.
+
+    Kept intentionally slim (stage / evidence hits / probe presence / composite
+    role) so the .product_scope_last_run.json file stays under 100 KB on the
+    ~570-family catalog. Full data lives in product_review.json / probes /
+    the evidence engine - the snapshot exists only so successive runs can diff.
+    """
+    prods = {}
+    for path, f in fams.items():
+        r = review.get(path, {}) or {}
+        w = work.get(f.get("product"), {}) if f.get("product") else {}
+        pr = probes.get(path, {}) or {}
+        prods[path] = {
+            "stage":           r.get("stage", "cataloged"),
+            "evidence_count":  int(w.get("hit_count", 0)),
+            "has_probe":       bool(pr.get("ok")),
+            "composite_role":  (r.get("composite_role") or "").strip(),
+            "head_sha":        git.get("head_sha", "") if git else "",
+        }
+    return {
+        "generated_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "head_sha":     git.get("head_sha", "") if git else "",
+        "products":     prods,
+    }
+
+def save_snapshot(repo: Path, snap):
+    """Write .product_scope_last_run.json in a stable, deterministic form."""
+    p = repo / SNAPSHOT_FILE
+    ordered = dict(snap); ordered["products"] = dict(sorted(snap.get("products", {}).items()))
+    p.write_text(json.dumps(ordered, indent=2), encoding="utf-8")
+
+def compute_diff(prev, curr):
+    """Product-level diff between two snapshots.
+
+    Returns:
+      {"is_baseline": bool, "generated_at_prev": str,
+       "totals": {"new_evidence_by_family": {family: N}, "status_changes": N,
+                  "new_probes": N, "role_changes": N,
+                  "added_products": N, "removed_products": N},
+       "changes": [{"path": p, "kind": "status"|"evidence"|"probe"|"role"|"added"|"removed",
+                    "old": ..., "new": ...}, ...]}
+    """
+    if not prev:
+        return {"is_baseline": True, "generated_at_prev": None,
+                "totals": {}, "changes": []}
+    pp = prev.get("products", {}) or {}
+    cp = curr.get("products", {}) or {}
+    changes = []
+    new_ev_by_family, status_changes, new_probes, role_changes = {}, 0, 0, 0
+    added, removed = 0, 0
+    all_paths = sorted(set(pp) | set(cp))
+    for path in all_paths:
+        p_row = pp.get(path)
+        c_row = cp.get(path)
+        if p_row is None and c_row is not None:
+            added += 1
+            changes.append({"path": path, "kind": "added", "old": None, "new": c_row.get("stage")})
+            continue
+        if p_row is not None and c_row is None:
+            removed += 1
+            changes.append({"path": path, "kind": "removed", "old": p_row.get("stage"), "new": None})
+            continue
+        if p_row.get("stage") != c_row.get("stage"):
+            status_changes += 1
+            changes.append({"path": path, "kind": "status", "old": p_row.get("stage"), "new": c_row.get("stage")})
+        d = int(c_row.get("evidence_count", 0)) - int(p_row.get("evidence_count", 0))
+        if d != 0:
+            # Bucket by family (the coarse label users recognise) for the headline.
+            fam = path.split("/")[0]
+            new_ev_by_family[fam] = new_ev_by_family.get(fam, 0) + d
+            changes.append({"path": path, "kind": "evidence",
+                            "old": p_row.get("evidence_count", 0), "new": c_row.get("evidence_count", 0)})
+        if bool(p_row.get("has_probe")) != bool(c_row.get("has_probe")):
+            if c_row.get("has_probe"): new_probes += 1
+            changes.append({"path": path, "kind": "probe",
+                            "old": p_row.get("has_probe"), "new": c_row.get("has_probe")})
+        if (p_row.get("composite_role") or "") != (c_row.get("composite_role") or ""):
+            role_changes += 1
+            changes.append({"path": path, "kind": "role",
+                            "old": p_row.get("composite_role", ""), "new": c_row.get("composite_role", "")})
+    return {
+        "is_baseline": False,
+        "generated_at_prev": prev.get("generated_at"),
+        "totals": {
+            "new_evidence_by_family": new_ev_by_family,
+            "status_changes":         status_changes,
+            "new_probes":             new_probes,
+            "role_changes":           role_changes,
+            "added_products":         added,
+            "removed_products":       removed,
+        },
+        "changes": changes,
+    }
+
+def build_diff_banner(diff):
+    """Home-tab 'Since last regeneration' banner. Baseline mode on first run."""
+    if diff.get("is_baseline"):
+        return ('<div class="diff-banner baseline">'
+                '<b>Baseline snapshot recorded.</b> Diff will appear on the next regeneration.'
+                '</div>')
+    t = diff.get("totals", {})
+    new_ev = sum(t.get("new_evidence_by_family", {}).values())
+    parts = []
+    if new_ev:
+        by_fam = t.get("new_evidence_by_family", {})
+        # Only surface positive family additions in the headline; drops go into details.
+        pos = [(fam, n) for fam, n in sorted(by_fam.items(), key=lambda kv: -kv[1]) if n > 0]
+        if pos:
+            bits = ", ".join(f"{fam} ×{n}" for fam, n in pos[:5])
+            parts.append(f"<b>+{sum(n for _, n in pos)} new evidence hits</b> ({bits})")
+    if t.get("status_changes"):
+        parts.append(f"<b>{t['status_changes']}</b> status change" + ("s" if t['status_changes'] != 1 else ""))
+    if t.get("new_probes"):
+        parts.append(f"<b>{t['new_probes']}</b> new probe" + ("s" if t['new_probes'] != 1 else ""))
+    if t.get("role_changes"):
+        parts.append(f"<b>{t['role_changes']}</b> composite-role change" + ("s" if t['role_changes'] != 1 else ""))
+    if t.get("added_products"):
+        parts.append(f"<b>+{t['added_products']}</b> newly catalogued")
+    if t.get("removed_products"):
+        parts.append(f"<b>-{t['removed_products']}</b> removed from catalog")
+    if not parts:
+        headline = "No changes since the last regeneration."
+    else:
+        headline = "Since last regeneration: " + ", ".join(parts) + "."
+    # Details list (collapsible) - product-level, in stable order.
+    detail_rows = []
+    for c in diff.get("changes", []):
+        kind = c["kind"]; old = c.get("old"); new = c.get("new")
+        if kind == "evidence":
+            lbl = f"evidence hits {old} → {new}"
+        elif kind == "status":
+            lbl = f"status {old} → {new}"
+        elif kind == "probe":
+            lbl = "probe added" if new else "probe removed"
+        elif kind == "role":
+            o = old or "(unset)"; n = new or "(unset)"
+            lbl = f"composite_role {o} → {n}"
+        elif kind == "added":
+            lbl = f"newly catalogued (initial stage: {new})"
+        elif kind == "removed":
+            lbl = f"removed from catalog (was: {old})"
+        else:
+            lbl = kind
+        detail_rows.append(f'<li><code>{_esc(c["path"])}</code> — {_esc(lbl)}</li>')
+    details = ""
+    if detail_rows:
+        details = ('<details><summary>Show '
+                   f'{len(detail_rows)} product-level change'
+                   + ("s" if len(detail_rows) != 1 else "")
+                   + '</summary><ul class="diff-list">'
+                   + "".join(detail_rows) + '</ul></details>')
+    prev_when = diff.get("generated_at_prev") or ""
+    when_bit = (f'<div class="diff-when">Previous snapshot: {_esc(prev_when)}</div>' if prev_when else "")
+    return f'<div class="diff-banner"><div class="diff-headline">{headline}</div>{when_bit}{details}</div>'
+
 # --- Contextual affordances ---------------------------------------------------
 # The design principle is behavior over description: every UI element either
 # shows state or offers an action. These helpers turn per-product state into
@@ -1364,8 +1534,10 @@ def build_kind_panel(kind, fams, review, work, probes, git=None, snapshot=None):
     return ('<div class="products-shell">' + sidebar
             + f'<div class="products-main">{body}</div></div>')
 
-def build_home(fams, review, work, counts, worklog, notebooks, probes, git=None):
+def build_home(fams, review, work, counts, worklog, notebooks, probes, git=None, diff=None):
     h = []
+    if diff is not None:
+        h.append(build_diff_banner(diff))
     h.append('<div class="funnel">'
              f'<div class="fstep"><b>{counts["cataloged"]}</b><span>cataloged<br>(the wide start)</span></div><div class="farrow">&rarr;</div>'
              f'<div class="fstep"><b>{counts["reviewed"]}</b><span>reviewed<br>(uncertainty documented)</span></div><div class="farrow">&rarr;</div>'
@@ -1547,7 +1719,7 @@ def export_xlsx(rows, out_path):
     wb.save(out_path)
 
 
-def render(fams, review, work, worklog, notebooks, probes, repo_name, catnote, out_path, git, snapshot=None):
+def render(fams, review, work, worklog, notebooks, probes, repo_name, catnote, out_path, git, snapshot=None, diff=None):
     counts = {s: 0 for s in STAGES}
     for path in fams:
         counts[review.get(path, {}).get("stage", "cataloged")] += 1
@@ -1555,7 +1727,7 @@ def render(fams, review, work, worklog, notebooks, probes, repo_name, catnote, o
     kinds_present = [k for k in KINDS if any(f["kind"] == k for f in fams.values())]
     tabs = ['<button class="tab on" data-k="home">Home</button>']
     panels = ['<div class="panel on" id="panel-home">'
-              + build_home(fams, review, work, counts, worklog, notebooks, probes, git) + '</div>']
+              + build_home(fams, review, work, counts, worklog, notebooks, probes, git, diff) + '</div>']
     for i, k in enumerate(kinds_present):
         n = sum(1 for f in fams.values() if f["kind"] == k)
         tabs.append(f'<button class="tab" data-k="k{i}">{_esc(k)}<span class="n">{n}</span></button>')
@@ -1659,8 +1831,18 @@ def main():
     if git.get("head_sha"):
         print(f"  git: HEAD {git['head_sha'][:7]} on '{git.get('branch') or 'detached'}'"
               + (f" | github: {git['github_slug']}" if git.get("github_slug") else ""))
-    snapshot = load_snapshot(repo)   # written by feature #5; None until then
-    counts = render(fams, review, work, worklog, notebooks, probes, repo.name, catnote, out, git, snapshot)
+    snapshot_prev = load_snapshot(repo)   # previous run - feeds diff + FOCUS-SHA affordance
+    current_snap  = build_snapshot(fams, review, work, probes, git)
+    diff          = compute_diff(snapshot_prev, current_snap)
+    save_snapshot(repo, current_snap)
+    if diff.get("is_baseline"):
+        print(f"  snapshot: baseline recorded to {SNAPSHOT_FILE} (diff will appear on next run)")
+    else:
+        t = diff["totals"]
+        newev = sum(t.get("new_evidence_by_family", {}).values())
+        print(f"  snapshot: {newev:+d} evidence hits, {t['status_changes']} status change(s), "
+              f"{t['new_probes']} new probe(s)")
+    counts = render(fams, review, work, worklog, notebooks, probes, repo.name, catnote, out, git, snapshot_prev, diff)
     print("  funnel: " + " -> ".join(f"{STAGE_LABELS[s]} {counts.get(s, 0)}" for s in STAGES))
     print(f"Report written to {out}")
 

@@ -30,3 +30,6 @@ product_report.html
 scope_field_cache.json
 product_review.csv
 product_review.xlsx
+# Diff snapshot - captures per-product state so successive runs can show
+# 'since last regeneration' deltas on the Home tab. Regenerable on every run.
+.product_scope_last_run.json
