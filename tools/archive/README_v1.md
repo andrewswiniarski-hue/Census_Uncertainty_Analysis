@@ -1,0 +1,158 @@
+# /tools — Product Scope Tracker
+
+Our inventory of every Census statistical product, what each one publishes, and how far our own work has gotten on it. Re-run it before each biweekly; the output is a single self-contained HTML page.
+
+**Two files, both required.** `product_scope.py` is the tool. `scope_evidence.py` is the evidence engine it uses to read the repo. They must sit in the same folder — if `scope_evidence.py` goes missing the tool still runs but downgrades to a shallow text scan and says so. Watch for `deep forensics` in the output; `regex fallback` means something is wrong.
+
+---
+
+## Running it
+
+From the **repo root**, with the venv active:
+
+```powershell
+.venv\Scripts\activate
+python tools\product_scope.py --repo .
+start product_report.html
+```
+
+That's the routine run — it uses the cached catalog, so it takes a couple of seconds.
+
+**To refresh the catalog** (new products get published; do this occasionally and before a milestone):
+
+```powershell
+python tools\product_scope.py --repo . --online
+```
+
+Crawls `api.census.gov/data.json` — about 1,800 dataset-vintages collapsing to roughly 570 product families — and rewrites `scope_field_cache.json`.
+
+If the crawl fails, the tool says so loudly and lists only the non-API products. **Don't commit a `product_review.json` written from that state** — delete it and re-run once you're online.
+
+**To export a per-product review table** (one row per product family, for spreadsheet review workflows outside the browser):
+
+```powershell
+python tools\product_scope.py --repo . --export csv    # writes product_review.csv
+python tools\product_scope.py --repo . --export xlsx   # writes product_review.xlsx
+```
+
+Skips the HTML report and writes only the export. Same catalog + review + evidence + probe sources the report uses, so the export cannot drift from what the tabs show. Columns: `Product ID, Name, Family, Agency, Status, Repo Evidence, MOE Var Count, Allocation Groups, Geography Levels, Notes, Last Reviewed By, Last Reviewed Date`. Override the default path with `--out`. Both files are gitignored — treat them as script output, not committed state.
+
+---
+
+## How the report is organised
+
+**Tabs** come from the Bureau's own dataset flags: **Aggregate tables** (published estimate tables — where margins of error live), **Microdata** (record-level files with replicate weights and no published per-estimate uncertainty), **Time series**, **Unflagged**. This split is not our opinion; it is `c_isAggregate` / `c_isMicrodata` / `c_isTimeseries` straight from the catalog, and it is the single most important distinction for this project.
+
+Inside a tab: **program → subject → products**. The subject level only appears where a program spans more than one topic — Decennial opens as a flat list, ACS splits four ways. The filter box searches path, title, subject and program, and reaches through every level.
+
+---
+
+## The two axes, and which one is ours
+
+**Stage** — `Cataloged → Reviewed → Candidate → FOCUS`, plus `Set aside`. **Our scope decision.** The tool never sets it. Every product is created as `cataloged` and stays there until a human moves it.
+
+**Work depth** — `Not started → Identified → Pulled → Analyzed → Validated`. **Computed from the repo** on every run, never hand-set. `Validated` means a notebook's execution counts run in order, it stored no error outputs, and its code contains at least three real `assert` statements (counted by parsing the syntax tree). Every claim carries receipts naming the file and cell or line.
+
+A product can be `Cataloged + Validated` — work done, not yet formally scoped. That's the two axes disagreeing, which is often the interesting case.
+
+---
+
+## Probing a product — asking the API what it publishes
+
+Every catalog record carries `variables.json` and `geography.json` endpoints. A **probe** fetches them and reports what the product actually publishes:
+
+```
+acs/acs5  36,144 variables; 12,048 carry an _M margin of error; 3 allocation groups;
+          24,096 annotation variables; geography: us, region, division, state,
+          county, tract, block group
+```
+
+**To probe:** tick the `probe` box on any number of product cards. A bar appears bottom-right with a count. Click **Download queue** — it saves `probe_queue.json` to your Downloads. Then:
+
+```powershell
+python tools\product_scope.py --repo . --probe-queue "$env:USERPROFILE\Downloads\probe_queue.json"
+python tools\product_scope.py --repo .        # rebuild the report to see the results
+```
+
+Or probe one directly, no clicking:
+
+```powershell
+python tools\product_scope.py --repo . --probe acs/acs5 --probe dec/dhc
+```
+
+Results land in **`product_probes.json` at the repo root, which IS committed** — probe once, the whole team sees it. Probed products show a gold `probe` chip so you can tell at a glance what's been checked.
+
+**A probe reports counts and levels. It never writes an uncertainty description.** Reading the probe and writing that sentence is the review, and only a person does it.
+
+---
+
+## Reviewing a product — the actual work
+
+Everything starts blank on purpose. **The tool has no built-in knowledge of what uncertainty any product publishes**, and that is deliberate: a catalog path identifies a *program*, not a *methodology*. `acs/acs5` and `acs/acs5/pums` share a prefix and have completely different uncertainty surfaces — one publishes a 90% margin of error on every estimate, the other hands you replicate weights and expects you to compute your own standard errors. Any rule that guesses from the path will be confidently wrong somewhere, so we don't guess.
+
+To review a product, edit its entry in `product_review.json`:
+
+```json
+"acs/acs5": {
+  "stage": "focus",
+  "uncertainty_metrics": "90% MOE on every estimate; B98/B99 allocation tables; variance replicate tables",
+  "note": "our primary product"
+}
+```
+
+- `uncertainty_metrics` — what this product *actually publishes*, verified. Probe it first, then write what you concluded and where you checked. Filling this in **is** the review.
+- `stage` — `cataloged`, `reviewed`, `candidate`, `focus`, or `set-aside`. If you set `set-aside`, say why in `note`.
+
+`product_review.json` **is committed** and is **append-only**: a fresh crawl adds newly published products as `cataloged` and never overwrites an entry you have edited.
+
+---
+
+## Findings
+
+**From the work log** — the Home tab reads `WORKLOG.md` directly and shows every finding, newest first, quoted exactly as the teammate wrote it. Nothing is summarised or scored. Add a WORKLOG entry in the normal format and it appears on the next run; no registration needed.
+
+**Curated insights** — the hand-written headline cards. Append a dict to `FINDINGS` near the top of `product_scope.py`, tagged with the product family:
+
+```python
+{"family": "acs/acs5", "stat": "22.8%", "headline": "The CV-only blind spot",
+ "detail": "481 of 2,109 tracts look fine by the error bar but carry heavily imputed income.",
+ "nb": "06", "kind": "finding"},
+```
+
+Use `"kind": "oddity"` for unexplained results — they render with a gold rule, matching how we flag open mentor questions elsewhere.
+
+---
+
+## Editable tables at the top of product_scope.py
+
+Four lookup tables are meant to be edited by us, and nothing else depends on them:
+
+| Table | Controls |
+|---|---|
+| `SUBJECTS` | which subject a product is filed under, matched on its title. First match wins, so specific rules sit above broad ones. |
+| `PROGRAM_NAMES` / `PROGRAM_PREFIXES` | plain-English program names, including for single-segment paths like `ecncashadv` → Economic Census. |
+| `TIMESERIES_PROGRAMS` | the real program behind a `timeseries/*` path. |
+| `PRODUCT_MATCH` | which repo code counts as evidence for which tracked product. |
+
+Subject and program affect **display order only**. They say nothing about a product's uncertainty, its priority, or how far our work has gone.
+
+---
+
+## What's committed and what isn't
+
+| File | Committed? | Why |
+|---|---|---|
+| `tools/product_scope.py`, `tools/scope_evidence.py` | **yes** | the tool |
+| `product_review.json` | **yes** | our scope decisions and review notes |
+| `product_probes.json` | **yes** | what the API told us; probe once, share with the team |
+| `product_report.html` | no | regenerated every run |
+| `scope_field_cache.json` | no | ~4 MB API catalog cache, regenerable with `--online` |
+
+---
+
+## Known limits — read before quoting this to a mentor
+
+- **The geography grid is inferred, not verified.** The five level boxes come from searching our files for the words "state", "county", "tract", "block". It is a rough indicator of where *we* have worked, not a record. **A probe is the verified version** — it reports the levels the Bureau says the product supports. Where the two disagree, trust the probe.
+- **`2020 DHC` can't register progress.** Its evidence matcher looks for the string `dec/dhc`, which appears nowhere in our code, so it reads `Not started` regardless. Fix the matcher in `PRODUCT_MATCH` when we start on DHC.
+- **Work depth can't see a missing import.** A notebook committed with clean outputs reads as `Validated` even if it won't run in a fresh clone.
+- **Requires Python 3.11+.** Developed on 3.12.
