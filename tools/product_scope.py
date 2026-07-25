@@ -770,6 +770,37 @@ def is_sample_fresh(entry, now=None):
     age_days = (now - when).total_seconds() / 86400.0
     return age_days < SAMPLE_FRESH_DAYS
 
+def sample_age_pill(entry, now=None):
+    """Freshness pill for a sample cache entry - mirrors the top-of-page
+    freshness bar but computed Python-side (one number per card, no JS).
+
+    Returns {"label": str, "tone": "fresh"|"stale"|"unknown"}:
+      tone == "fresh" -> green (age < SAMPLE_FRESH_DAYS days)
+      tone == "stale" -> amber (age >= SAMPLE_FRESH_DAYS days)
+      tone == "unknown" -> grey (no or malformed timestamp)
+    Label is 'Sampled Xd ago' / 'Xh ago' / 'Xm ago', matching the tone the
+    reader already knows from the header bar.
+    """
+    if not entry or not entry.get("sampled_at"):
+        return {"label": "not sampled", "tone": "unknown"}
+    ts = entry["sampled_at"]
+    try:
+        if ts.endswith("Z"): ts = ts[:-1] + "+00:00"
+        when = datetime.datetime.fromisoformat(ts)
+    except Exception:
+        return {"label": "sampled at unknown time", "tone": "unknown"}
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=datetime.timezone.utc)
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    age = (now - when).total_seconds()
+    if age < 0: age = 0
+    if   age < 90:        label_bit = f"{max(1, int(age))}s ago"
+    elif age < 3600:      label_bit = f"{int(round(age/60))}m ago"
+    elif age < 86400:     label_bit = f"{int(round(age/3600))}h ago"
+    else:                 label_bit = f"{int(round(age/86400))}d ago"
+    tone = "fresh" if age < SAMPLE_FRESH_DAYS * 86400 else "stale"
+    return {"label": f"Sampled {label_bit}", "tone": tone}
+
 def load_env(repo: Path):
     """Minimal .env reader: no dependency, KEY=VAL lines, # comments, quotes ok.
     Returns {} when the file doesn't exist. Silent on parse errors line-by-line."""
