@@ -2881,6 +2881,12 @@ footer{padding:22px 44px;color:var(--muted);font-size:11.5px;}
 .facet .fhint code{font-family:ui-monospace,Consolas,monospace;font-size:10.5px;
      background:var(--ice);color:var(--navy);padding:0 4px;border-radius:3px;font-style:normal;}
 @media(max-width:900px){.products-shell{flex-direction:column;} .facets{position:static;width:100%;flex:none;}}
+/* Phase 5 #5 - no-JS fallback. When scripts don't run at all we can still
+   read the report AND POST edits via native <form> submits. This block only
+   applies inside <noscript>, so it's a no-op for the 99.99% path. */
+.scope-nojs-banner{display:none;background:#FBF0D6;color:#6E4E11;
+     border-left:4px solid var(--gold);padding:9px 14px;font-size:12px;
+     margin:0 44px 12px;max-width:1020px;border-radius:5px;line-height:1.4;}
 /* Phase 5 #4 - inline edit UI + insight feed. Every card has a Review-
    controls bcard and an Insights bcard; the JS at the bottom hijacks change/
    blur events on the controls and POSTs to /api/review/<id>. When the
@@ -2921,6 +2927,10 @@ footer{padding:22px 44px;color:var(--muted);font-size:11.5px;}
 .scope-err.on{display:block;padding-top:2px;}
 .scope-lastreviewed{font-size:10px;color:var(--muted);margin-top:5px;
      font-style:italic;letter-spacing:.02em;}
+/* No-JS Save button: hidden by default; the <noscript> block below flips
+   display:inline-block via a CSS trick. Real reviewers with JS enabled never
+   see this; JS-disabled reviewers see it and use it to force a native form
+   POST (the form's action= + method="POST" attributes carry the round trip). */
 .scope-nojs-save{display:none;font:inherit;font-size:11px;padding:4px 12px;
      background:var(--line);border:0;border-radius:4px;color:var(--navy);
      font-weight:700;cursor:pointer;margin-top:4px;align-self:flex-start;}
@@ -3021,7 +3031,27 @@ body.scope-read-only .scope-ro-banner{display:flex !important;}
      background:none;border:0;padding:1px 0;letter-spacing:.02em;
      text-decoration:underline dotted;font-family:inherit;}
 .ql-ins-more:hover{color:var(--navy);}
-</style></head><body>
+</style>
+<noscript><style>
+/* When scripts are disabled: unhide the JS-fallback controls so a reviewer
+   can still edit via native form POSTs (which the server accepts as
+   Content-Type: application/x-www-form-urlencoded, per Phase 5 #5 spec). */
+.scope-nojs-save{display:inline-block !important;}
+.scope-nojs-banner{display:block !important;}
+/* Auto-save no longer works; the "edits save automatically" hint is a lie,
+   so hide it. */
+.scope-hint{display:none !important;}
+/* Add-insight form: unhide by default so the reviewer can post without
+   needing the JS "expand" toggle. */
+.scope-insight-form{display:flex !important;}
+.scope-add-toggle{display:none !important;}
+</style></noscript>
+</head><body>
+<noscript><div class="scope-nojs-banner">
+JavaScript is disabled. Edits still work via native form submits (each save
+triggers a full-page reload) but auto-save, keyboard shortcuts, and the
+per-card localStorage-remembered expanded state are unavailable.
+</div></noscript>
 <header>
   <div class="kicker">PRODUCT SCOPE &bull; GENERATED __DATE__ &bull; __CATNOTE__</div>
   <h1>What the Bureau publishes, and where our work has reached</h1>
