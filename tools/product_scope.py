@@ -1872,6 +1872,10 @@ footer{padding:22px 44px;color:var(--muted);font-size:11.5px;}
 .freshbar .pill.stale{background:#E9CD7A;color:#3A2F0A;}
 .freshbar .pill.old{background:#C0392B;color:#FFF;}
 .freshbar .sha{font-family:ui-monospace,Consolas,monospace;font-size:10.5px;opacity:.7;}
+.freshbar .kbd-hint{margin-left:auto;font-size:10.5px;opacity:.75;letter-spacing:.01em;}
+.freshbar .kbd-hint kbd{display:inline-block;padding:0 5px;margin:0 2px;font-family:ui-monospace,Consolas,monospace;
+     font-size:10px;background:#28356B;color:#F5D77A;border:1px solid #3A4890;border-radius:3px;
+     box-shadow:inset 0 -1px 0 #0F1738;font-weight:700;line-height:14px;}
 /* Cache coverage bar (Phase 4 #4). Sits directly below the freshness bar and
    summarises how much of the catalog has actually been sampled - green/amber/red
    pill on the sampled fraction, plus counts of non-API and unfetched products. */
@@ -2038,6 +2042,7 @@ footer{padding:22px 44px;color:var(--muted);font-size:11.5px;}
   <span class="copy-cmd"><code>python tools/product_scope.py --repo .</code>
     <button data-copy="python tools/product_scope.py --repo .">Copy</button></span>
   <span class="sha" title="HEAD SHA at generation time">__HEAD_SHORT__ &bull; __BRANCH__</span>
+  <span class="kbd-hint" title="Press E on any product card to open or close its drill-down">Press <kbd>E</kbd> on a card to toggle details</span>
 </div>
 <div class="cachebar" data-warm-finished-at="__WARM_FINISHED_ISO__">__CACHE_COVERAGE__</div>
 <div class="wrap">__PANELS__</div>
@@ -2269,6 +2274,52 @@ document.querySelectorAll('.filter input').forEach(function(inp){
       _lsSet(LS_PREFIX + el.dataset.productId, el.open ? 'true' : 'false');
     }
   }, true);
+})();
+/* --- Keyboard shortcut: E toggles the focused Quick Look drill-down ---
+   Behaviour (Phase 4b #5):
+     * Fires only for plain 'e' / 'E'. Modifiers (Ctrl/Alt/Meta/Shift) skip.
+     * Never fires while the user is typing in an input, textarea, contenteditable,
+       or select - so the sidebar text-search box (Phase 1 #2) and any facet
+       checkbox are unaffected.
+     * If the currently-focused element is inside a card, toggle that card's
+       <details>. Falls back to the topmost <details> visible in the viewport,
+       so the user can hit E without first tab-focusing anything.
+     * Uses .open = !.open which triggers the native 'toggle' event, which the
+       persistence handler above catches - so localStorage stays in sync. */
+(function(){
+  function _isTypingTarget(el){
+    if (!el) return false;
+    if (el.isContentEditable) return true;
+    var tag = (el.tagName || '').toUpperCase();
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+  }
+  function _topmostVisibleDetails(){
+    var vh = window.innerHeight || document.documentElement.clientHeight;
+    var all = document.querySelectorAll('details[data-product-id]');
+    var best = null, bestTop = Infinity;
+    for (var i = 0; i < all.length; i++){
+      var r = all[i].getBoundingClientRect();
+      // Any part of the card in the viewport counts as visible. Rank by how
+      // close the top edge is to the top of the viewport (positive = below
+      // the fold, negative = scrolled past); positive-and-smallest wins,
+      // otherwise the one closest to zero from below.
+      if (r.bottom < 0 || r.top > vh) continue;
+      var score = r.top >= 0 ? r.top : (vh + Math.abs(r.top));
+      if (score < bestTop){ bestTop = score; best = all[i]; }
+    }
+    return best;
+  }
+  document.addEventListener('keydown', function(e){
+    if (e.key !== 'e' && e.key !== 'E') return;
+    if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
+    if (_isTypingTarget(e.target)) return;
+    var focused = document.activeElement;
+    var target = focused && focused.closest ? focused.closest('details[data-product-id]') : null;
+    if (!target) target = _topmostVisibleDetails();
+    if (!target) return;
+    e.preventDefault();
+    target.open = !target.open;
+  });
 })();
 </script>
 <footer>product_scope.py &bull; re-run before each biweekly &bull; --online refreshes the catalog &bull;
