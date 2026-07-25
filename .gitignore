@@ -21,3 +21,12 @@ Thumbs.db
 
 # Office lock files (created while a .pptx/.docx is open — never data)
 ~$*
+
+# Product scope tool (tools/product_scope.py)
+# The report and the API catalog cache are regenerated on every run; the review
+# file is team-owned state and IS committed. The --export csv/xlsx outputs are
+# script output too — regenerate on demand, don't commit.
+product_report.html
+scope_field_cache.json
+product_review.csv
+product_review.xlsx

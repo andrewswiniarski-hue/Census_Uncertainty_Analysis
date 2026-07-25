@@ -946,6 +946,111 @@ def build_home(fams, review, work, counts, worklog, notebooks, probes):
         h.append('<div class="nowork">No parseable entries in WORKLOG.md.</div>')
     return "".join(h)
 
+# ============================================================================
+# TABULAR EXPORT - one row per product family, for external review workflows
+# ============================================================================
+# Reuses the same internal structures the HTML build reads from - fams (catalog),
+# review (product_review.json), work (repo evidence per tracked product), and
+# probes (product_probes.json) - so the export can never drift from the report.
+# Some columns are not part of the tool's data model today (Agency, Last
+# Reviewed By, Last Reviewed Date) and export as empty; product_scope has
+# always kept two orthogonal axes for status, so Status carries both:
+# "<stage> / <work depth>" (e.g. "Cataloged / Validated").
+
+EXPORT_COLUMNS = [
+    "Product ID", "Name", "Family", "Agency", "Status",
+    "Repo Evidence", "MOE Var Count", "Allocation Groups",
+    "Geography Levels", "Notes", "Last Reviewed By", "Last Reviewed Date",
+]
+
+def product_export_row(f, review, work, probes):
+    """Assemble one export row from the tool's existing data structures.
+
+    Sources per column:
+      Product ID, Name, Family    -> catalog family record (fams)
+      Status                       -> review.stage + work.status  (both axes)
+      Repo Evidence, Geography     -> work (repo evidence, per tracked product)
+      MOE Var Count, Alloc Groups  -> probes (variables.json summary)
+      Notes                        -> review.note (uncertainty_metrics if none)
+      Agency, Last Reviewed By/Date -> not tracked -> empty string
+    """
+    r = review.get(f["path"], {})
+    w = work.get(f["product"], {}) if f.get("product") else {}
+    pr = probes.get(f["path"], {}) or {}
+    ok = pr.get("ok")
+
+    stage_label = STAGE_LABELS.get(r.get("stage", "cataloged"), "Cataloged")
+    work_label = STATUS_LABELS[w.get("status", 0)]
+    status = f"{stage_label} / {work_label}"
+
+    # Repo evidence: semicolon-joined "file (cell N)" or "file (line N)" list.
+    # These are the same receipts the HTML shows under "Our progress".
+    evidence = "; ".join(w.get("receipts", []))
+
+    # Geography levels: prefer the probe's verified list (what the Bureau says
+    # the product supports); fall back to the inferred set from repo scanning
+    # (what our own code appears to have touched). Both are labelled below by
+    # the source so downstream reviewers can tell which is which.
+    if ok and pr.get("levels"):
+        geo = ", ".join(pr["levels"])
+    elif w.get("geos"):
+        geo = ", ".join(sorted(w["geos"])) + " (inferred from repo)"
+    else:
+        geo = ""
+
+    # Notes: prefer the free-text `note` (why a stage was set / caveats).
+    # If empty, fall through to the review's uncertainty_metrics description,
+    # since that IS the review deliverable per the tool's design.
+    note = r.get("note") or r.get("uncertainty_metrics") or ""
+
+    return {
+        "Product ID":         f["path"],
+        "Name":               f.get("title", ""),
+        "Family":             f.get("group", ""),
+        "Agency":             "",   # not modelled (all products are U.S. Census Bureau)
+        "Status":             status,
+        "Repo Evidence":      evidence,
+        "MOE Var Count":      pr.get("moe_variables", "") if ok else "",
+        "Allocation Groups":  pr.get("allocation_group_count", "") if ok else "",
+        "Geography Levels":   geo,
+        "Notes":              note,
+        "Last Reviewed By":   "",   # not tracked in product_review.json today
+        "Last Reviewed Date": "",   # not tracked in product_review.json today
+    }
+
+def build_export_rows(fams, review, work, probes):
+    """One row per catalog family, ordered by path (stable and diff-friendly)."""
+    return [product_export_row(fams[p], review, work, probes) for p in sorted(fams)]
+
+def export_csv(rows, out_path):
+    """Write rows as UTF-8 CSV using the stdlib csv module (zero-dep)."""
+    import csv
+    with open(out_path, "w", encoding="utf-8", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=EXPORT_COLUMNS)
+        w.writeheader()
+        for row in rows:
+            w.writerow({k: ("" if row.get(k) is None else row.get(k)) for k in EXPORT_COLUMNS})
+
+def export_xlsx(rows, out_path):
+    """Write rows as a single-sheet .xlsx workbook using openpyxl directly.
+
+    One sheet named 'Products'. First row is the header, columns match
+    EXPORT_COLUMNS. Kept intentionally plain - no styling, no formulas -
+    so downstream tools (Excel, LibreOffice, pandas) read it identically."""
+    try:
+        from openpyxl import Workbook
+    except ImportError:
+        sys.exit("error: --export xlsx needs openpyxl (pip install openpyxl); "
+                 "or export csv instead")
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Products"
+    ws.append(EXPORT_COLUMNS)
+    for row in rows:
+        ws.append(["" if row.get(k) is None else row.get(k) for k in EXPORT_COLUMNS])
+    wb.save(out_path)
+
+
 def render(fams, review, work, worklog, notebooks, probes, repo_name, catnote, out_path):
     counts = {s: 0 for s in STAGES}
     for path in fams:
@@ -973,17 +1078,25 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--repo", required=True)
     ap.add_argument("--out", default=None,
-                    help="default: <repo>/product_report.html")
+                    help="default: <repo>/product_report.html (or product_review.<ext> with --export)")
     ap.add_argument("--online", action="store_true")
     ap.add_argument("--probe-queue", metavar="FILE",
                     help="probe the products listed in a probe_queue.json downloaded from the report")
     ap.add_argument("--probe", metavar="PATH", action="append",
                     help="probe a single catalog path, e.g. --probe acs/acs5 (repeatable)")
+    ap.add_argument("--export", choices=("csv", "xlsx"), default=None,
+                    help="write a per-product review table instead of the HTML report. "
+                         "Default output file is product_review.csv or product_review.xlsx "
+                         "at the repo root; override with --out.")
     args = ap.parse_args()
     repo = Path(args.repo).resolve()
     if not (repo / "ingestion").exists():
         sys.exit(f"error: {repo} doesn't look like the project repo")
-    out = Path(args.out).resolve() if args.out else repo / "product_report.html"
+    if args.export:
+        default_name = f"product_review.{args.export}"
+        out = Path(args.out).resolve() if args.out else repo / default_name
+    else:
+        out = Path(args.out).resolve() if args.out else repo / "product_report.html"
 
     print(f"Scanning {repo} ...")
     evidence = deep_scan(repo) if DEEP else fallback_scan(repo)
@@ -1027,6 +1140,17 @@ def main():
         print("               stages and uncertainty notes are yours to fill in - the tool sets neither")
     elif added:
         print(f"  review file: {added} new product(s) appended; existing entries untouched")
+
+    if args.export:
+        # Export mode skips HTML generation entirely - the export IS the deliverable.
+        # This keeps the default `python tools/product_scope.py` HTML path unchanged.
+        rows = build_export_rows(fams, review, work, probes)
+        if args.export == "csv":
+            export_csv(rows, out)
+        else:
+            export_xlsx(rows, out)
+        print(f"Wrote {len(rows)} product row(s) to {out} ({args.export})")
+        return
 
     counts = render(fams, review, work, worklog, notebooks, probes, repo.name, catnote, out)
     print("  funnel: " + " -> ".join(f"{STAGE_LABELS[s]} {counts.get(s, 0)}" for s in STAGES))

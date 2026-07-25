@@ -13,3 +13,4 @@ censusdis         # Census API client: pulls estimates, MOEs, and boundaries in 
 python-dotenv     # loads CENSUS_API_KEY from the local .env file
 jupyter           # notebooks for exploratory analysis
 pyarrow           # fast, compact parquet file storage
+openpyxl          # .xlsx read/write (tools/product_scope.py --export xlsx)
