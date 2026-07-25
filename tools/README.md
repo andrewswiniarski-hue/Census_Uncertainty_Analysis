@@ -90,13 +90,17 @@ Results land in **`product_probes.json` at the repo root, which IS committed** �
 
 A **probe** tells you what a product publishes. A **sample** fetches an actual data slice and runs a canonical EDA on it — dtype, missingness, numeric summaries, categorical top-5, geography breakdown, unicode sparklines. Same principle as the probe: it reports what the data looks like, it never writes a verdict.
 
-**To sample one product directly:**
+There are two ways to sample: **on-demand** (one product, right now) and **bulk** (`--warm-cache`, whole catalog, thread-pooled). They are separate entry points and have deliberately different rules — pick the one that matches what you're doing.
+
+**On-demand: sample one product directly.**
 
 ```powershell
 python tools\product_scope.py --repo . --sample --product acs/acs5
 ```
 
-**To batch-sample every Candidate:**
+Always hits the API. **Freshness is NOT checked** — the reviewer asked for that product, so we fetch it, regardless of what's in the cache. This is the difference from `--warm-cache`.
+
+**On-demand: batch-sample every Candidate.**
 
 ```powershell
 python tools\product_scope.py --repo . --sample
@@ -118,7 +122,88 @@ python tools\product_scope.py --repo . --sample --refresh
 
 Results land in **`scope_data_cache.json` at the repo root, which is GITIGNORED** — a sample is a moment-in-time slice against a rate-limited endpoint, not shareable factual state (unlike probes, which describe what an endpoint publishes and ARE committed). If two teammates need the same slice, each runs their own sample.
 
-**Where the EDA appears in the report:** every product with a cached sample gets an "EDA snapshot" section on its card (below "Our progress"), showing the freshness pill, the source URL, the four EDA tables, and — if `--refresh` produced any drift — a per-card amber banner listing what changed. Products marked Candidate without a cached sample get a copyable `--sample` command in the "Suggested next step" panel instead.
+**Where the EDA appears in the report:** every product with a cached sample gets an "EDA snapshot" section on its card (below "Our progress"), showing the freshness pill, the source URL, the four EDA tables, and — if `--refresh` produced any drift — a per-card amber banner listing what changed. Products marked Candidate without a cached sample get a copyable `--sample` command in the "Suggested next step" panel instead. Every card also carries a **Quick Look** section near the top — see the next section.
+
+---
+
+## Warming the cache — bulk pass with `--warm-cache`
+
+`--warm-cache` walks the whole catalog and, for every product, runs a probe (into `product_probes.json`) then a sample (into `scope_data_cache.json`). It's the "everything at once" path — after one warm-cache run, every card in the report has the deepest tier of cached data the product supports, without a reviewer clicking through 573 products.
+
+```powershell
+python tools\product_scope.py --repo . --warm-cache
+```
+
+**What it skips** (and how the summary tags each case):
+
+- **Non-API products** (no `variables.json` endpoint — TIGER shapefiles, DAS demo, etc.) → `skipped_non_api`. These land in the Quick Look with a "not sample-able via API" note instead of the generic empty state.
+- **Fresh cache** — a probe cache < 7 days old AND a sample cache < 7 days old both count as fresh → `skipped_fresh`. `--refresh` overrides.
+- **`sample_config: "skip"`** in `product_review.json` (see below) → `skipped_config`. Never sampled by warm-cache, no matter how stale.
+
+Failures (HTTP timeouts, 4xx, bad JSON) are counted as `failed` and printed at the end with the reason; the run continues past every failure so one broken endpoint can't tank the whole batch.
+
+**Concurrency:** the batch runs in a `ThreadPoolExecutor` with 6 workers by default. Override with `--concurrency N`. Set `--concurrency 1` for a sequential run (no thread pool), which is much cleaner for debugging a specific failure.
+
+**Rate limiting:** outbound requests are held under **10 req/sec globally** via a sliding-window limiter shared across all workers. If any response returns a `Retry-After` header, the limiter honors it and every worker slows down accordingly. Rate limit responses (HTTP 429) are retried once.
+
+**Incremental persistence:** every successful probe/sample is written to its cache file immediately, under a `threading.Lock`. A mid-run crash — power loss, Ctrl-C, exception — keeps all completed work. Restart and it picks up where it left off (with `--refresh` if you want to re-do the freshly-cached ones).
+
+**Wall time is honest:** it depends on catalog size and Census API responsiveness. Rough guide on the current ~570-product catalog: a first pass without a `CENSUS_API_KEY` takes several minutes because the public rate limit throttles you; with a key it's typically under 2 minutes end-to-end. A steady-state re-run (`--warm-cache` with no `--refresh`) is a few seconds because most products are fresh-cache skipped.
+
+**Force a full re-warm:**
+
+```powershell
+python tools\product_scope.py --repo . --warm-cache --refresh
+```
+
+Ignores every freshness check and re-does the whole catalog. `--refresh` also triggers the EDA diff logic from `--sample`, so per-card drift banners appear.
+
+**Summary artifact:** `.warm_cache_last_run.json` at the repo root (gitignored) records counts, path lists, and the finish timestamp. The report reads it to fill in the "Last warm-cache: Xh ago" line under the freshness bar.
+
+### Per-product opt-outs and opt-ins: `sample_config`
+
+The review file supports an optional `sample_config` field per product:
+
+```json
+"dec/dhc": {
+  "stage": "focus",
+  "sample_config": "always"
+},
+"some/huge/product": {
+  "stage": "set-aside",
+  "sample_config": "skip"
+}
+```
+
+Values:
+
+- `"default"` (or missing) — respect `--warm-cache` freshness + non-API skip logic.
+- `"always"` — re-sample on every `--warm-cache` run even if the cache is fresh. Useful for FOCUS products where drift matters.
+- `"skip"` — never sample during warm-cache runs. Useful for Set-aside, huge, or API-problematic products.
+
+Unknown values (typos) fall back to `"default"` and log a warning to stderr so the reviewer notices.
+
+`--sample --product X` ignores `sample_config` entirely — an explicit ask from a reviewer always runs.
+
+---
+
+## The Quick Look card section
+
+Every product card carries a **Quick Look** section near the top. It renders the highest tier of data currently cached for that product and tags it with a colored chip so you can see the state at a glance without expanding the card:
+
+| Chip                    | Meaning                                                                 |
+|-------------------------|-------------------------------------------------------------------------|
+| **Cached: catalog** (grey)  | Tier 0 — only catalog metadata (family, agency, vintages, endpoint URL). |
+| **Cached: probe** (blue)    | Tier 1 — probe results cached: MOE variable count, allocation groups, geography levels. |
+| **Cached: sample** (green)  | Tier 2 — a data sample has been fetched: full EDA (dtypes, missingness, numeric summaries, top-5 categoricals, sparklines). |
+
+The Home tab's freshness bar carries a **cache coverage line** below it:
+
+```
+Cache coverage: 342/570 sampled (60%), 145/570 non-API, 83/570 unfetched · Last warm-cache: 4h ago
+```
+
+Green pill above 80% sampled, amber 40–80%, red below 40%. The denominator ignores non-API products (TIGER, DAS demo) because they can never contribute to that fraction. The Products tab's sidebar has a matching **Cache tier** facet (`sample / probe / catalog / not sample-able`) so you can filter to "candidates that haven't been sampled yet" in one click.
 
 ---
 
