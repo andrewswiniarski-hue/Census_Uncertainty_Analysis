@@ -33,3 +33,8 @@ product_review.xlsx
 # Diff snapshot - captures per-product state so successive runs can show
 # 'since last regeneration' deltas on the Home tab. Regenerable on every run.
 .product_scope_last_run.json
+# Phase 3 sample cache - actual data slices for candidate products (EDA on
+# API-fetched rows). Local-only because a sample is a moment-in-time slice
+# against a rate-limited endpoint; if two teammates need it, each runs their
+# own `python tools/product_scope.py --repo . --sample`.
+scope_data_cache.json

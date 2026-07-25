@@ -730,6 +730,45 @@ SAMPLE_FRESH_DAYS         = 7          # cache older than this is considered sta
 SAMPLE_HTTP_TIMEOUT       = 30         # seconds per API call
 SAMPLE_INTER_REQUEST_MS   = 500        # be a polite neighbour to api.census.gov
 SAMPLE_VAR_CAP            = 20         # cap on variable count in one sample request
+DATA_CACHE_FILE           = "scope_data_cache.json"   # gitignored - see .gitignore
+
+def load_data_cache(repo: Path):
+    """Read scope_data_cache.json (Phase 3 sample cache). Returns {} when the
+    file is missing or unreadable. Never raises - callers depend on this being
+    a safe read even on a fresh clone."""
+    p = repo / DATA_CACHE_FILE
+    if not p.exists(): return {}
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+def save_data_cache(repo: Path, cache):
+    """Write scope_data_cache.json deterministically (sorted by path). Kept
+    gitignored - a sample is a moment-in-time slice against a rate-limited
+    endpoint, not shareable factual state (unlike probes which describe what
+    an endpoint publishes and ARE committed)."""
+    p = repo / DATA_CACHE_FILE
+    ordered = dict(sorted(cache.items()))
+    p.write_text(json.dumps(ordered, indent=2), encoding="utf-8")
+
+def is_sample_fresh(entry, now=None):
+    """A cache entry is fresh when its 'sampled_at' timestamp is within
+    SAMPLE_FRESH_DAYS of now. Missing / malformed timestamps count as stale
+    (safe default: force a re-sample rather than trust an unknown-age slice)."""
+    if not entry or not entry.get("sampled_at"): return False
+    ts = entry["sampled_at"]
+    try:
+        # Accept both ...Z and +00:00 forms.
+        if ts.endswith("Z"): ts = ts[:-1] + "+00:00"
+        when = datetime.datetime.fromisoformat(ts)
+    except Exception:
+        return False
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=datetime.timezone.utc)
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    age_days = (now - when).total_seconds() / 86400.0
+    return age_days < SAMPLE_FRESH_DAYS
 
 def load_env(repo: Path):
     """Minimal .env reader: no dependency, KEY=VAL lines, # comments, quotes ok.
@@ -1058,14 +1097,18 @@ def fetch_sample(fam, probe, size, api_key):
         df = df.head(size)
     return df, url, ""
 
-def sample_products(repo, fams, review, probes, only_product, size, refresh):
+def sample_products(repo, fams, review, probes, only_product, size, refresh, git=None):
     """Run one or many samples. When only_product is set, sample just that one;
     otherwise batch through every product currently marked 'candidate' in the
     review file. Skips fresh cache entries (age < SAMPLE_FRESH_DAYS days) unless
-    refresh is True; skips non-API products with a clear message. Returns a
-    summary dict with counts and per-product results for the caller to display."""
+    refresh is True; skips non-API products with a clear message. Persists
+    successful samples to scope_data_cache.json. Returns a summary dict with
+    counts and per-product results for the caller to display."""
     env = load_env(repo)
     api_key = env.get("CENSUS_API_KEY", "")
+    cache = load_data_cache(repo)
+    head_sha = (git or {}).get("head_sha", "")
+
     if only_product:
         targets = [only_product]
     else:
@@ -1074,12 +1117,14 @@ def sample_products(repo, fams, review, probes, only_product, size, refresh):
     if not targets:
         print("[sample] nothing to sample: no products marked 'candidate' in "
               "product_review.json (or pass --product <ID> to sample one directly).")
-        return {"sampled": [], "skipped_fresh": [], "skipped_non_api": [], "failed": []}
+        return {"sampled": [], "skipped_fresh": [], "skipped_non_api": [],
+                "failed": [], "diffs": {}}
 
     print(f"[sample] {len(targets)} target(s); size={size}; "
           f"api_key={'yes' if api_key else 'no (public rate limits apply)'}; "
           f"refresh={'yes' if refresh else 'no'}")
-    summary = {"sampled": [], "skipped_fresh": [], "skipped_non_api": [], "failed": []}
+    summary = {"sampled": [], "skipped_fresh": [], "skipped_non_api": [],
+               "failed": [], "diffs": {}}
     for i, path in enumerate(targets):
         fam = fams.get(path)
         if not fam:
@@ -1091,6 +1136,16 @@ def sample_products(repo, fams, review, probes, only_product, size, refresh):
                   f"product); skipping")
             summary["skipped_non_api"].append(path)
             continue
+        # Fresh-cache short-circuit: skip HTTP entirely when a recent entry
+        # exists and the user didn't force --refresh.
+        cached = cache.get(path)
+        if not refresh and is_sample_fresh(cached):
+            print(f"  [sample] {path}: fresh cache from "
+                  f"{cached.get('sampled_at','?')} - skipping (use --refresh "
+                  f"to force)")
+            summary["skipped_fresh"].append(path)
+            continue
+
         probe = probes.get(path) or {}
         df, url, err = fetch_sample(fam, probe, size, api_key)
         if err:
@@ -1106,12 +1161,27 @@ def sample_products(repo, fams, review, probes, only_product, size, refresh):
                   f"from {url}")
             print(f"           EDA: {over30} col(s) >{EDA_MISSING_PCT:g}% missing, "
                   f"{n_geo} geo col(s), {n_spark} sparkline(s)")
+            new_entry = {
+                "sampled_at":    datetime.datetime.now(datetime.timezone.utc)
+                                     .strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "sample_size":   size,
+                "shape":         eda.get("shape", [len(df), len(df.columns)]),
+                "columns":       eda.get("columns", {}),
+                "geography":     eda.get("geography", {}),
+                "sparklines":    eda.get("sparklines", {}),
+                "source_url":    url,
+                "sha_at_sample": head_sha,
+            }
+            cache[path] = new_entry
             summary["sampled"].append({"path": path, "url": url,
                                         "rows": len(df), "cols": len(df.columns),
                                         "eda": eda})
         # Be network-polite between requests.
         if i < len(targets) - 1:
             import time as _t; _t.sleep(SAMPLE_INTER_REQUEST_MS / 1000.0)
+
+    # Persist cache once (single write, deterministic key order).
+    save_data_cache(repo, cache)
     return summary
 
 # ============================================================================
@@ -2594,10 +2664,18 @@ def main():
         print(f"  review file: {added} new product(s) appended; existing entries untouched")
     validate_review(review)   # feature #7: composite_role requires composite_role_note
 
+    # git info is captured once and reused: --sample stamps sha_at_sample on
+    # each cache entry (Phase 3), and the HTML render uses branch + slug for
+    # jump-to-source URLs.
+    git = git_info(repo)
+    if git.get("head_sha"):
+        print(f"  git: HEAD {git['head_sha'][:7]} on '{git.get('branch') or 'detached'}'"
+              + (f" | github: {git['github_slug']}" if git.get("github_slug") else ""))
+
     # Phase 3: --sample runs before HTML render; results feed back into the report.
     if args.sample:
         sample_products(repo, fams, review, probes, args.product,
-                        args.sample_size, args.refresh)
+                        args.sample_size, args.refresh, git)
 
     if args.export:
         # Export mode skips HTML generation entirely - the export IS the deliverable.
@@ -2609,11 +2687,6 @@ def main():
             export_xlsx(rows, out)
         print(f"Wrote {len(rows)} product row(s) to {out} ({args.export})")
         return
-
-    git = git_info(repo)
-    if git.get("head_sha"):
-        print(f"  git: HEAD {git['head_sha'][:7]} on '{git.get('branch') or 'detached'}'"
-              + (f" | github: {git['github_slug']}" if git.get("github_slug") else ""))
     snapshot_prev = load_snapshot(repo)   # previous run - feeds diff + FOCUS-SHA affordance
     current_snap  = build_snapshot(fams, review, work, probes, git)
     diff          = compute_diff(snapshot_prev, current_snap)
