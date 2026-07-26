@@ -6018,32 +6018,82 @@ def _coverage_tone(pct):
 # Mutually-exclusive per-product pipeline stage assignment: each catalog path
 # sits at exactly one of {cataloged, probed, sampled, reviewed}, chosen by
 # the deepest evidence attached to it. Feeds the segmented rail on Home.
+#
+# 2026-07-26 Phase A counter-consolidation pass:
+#   Renamed `_pipeline_counts()` -> `_tier_counts()` and made it the SINGLE
+#   SOURCE OF TRUTH for every counter on the Home tab (tier rail, Sankey,
+#   landscape treemap legend, landscape box coloring). Prior state had three
+#   disagreeing renderers - tier rail said 551/0/0/22, Sankey said
+#   573->22->22->22 (cumulative view of the same numbers), and the landscape
+#   legend said 567/6/0/0 under a totally different "repo evidence" tier
+#   definition. Fixed by:
+#     (1) canonical helper: `_tier_counts()` returns {cataloged, probed,
+#         sampled, reviewed, total} counted mutually-exclusively per path.
+#     (2) landscape legend + `_prog_tier4()` now read those same counts +
+#         those same stage priorities, so a program is coloured by the
+#         DEEPEST pipeline stage any of its families reached (not by whether
+#         a repo scan happened to match its name).
+#     (3) `_pipeline_counts()` kept as a thin alias so external callers +
+#         old snapshots don't break.
+# Reviewed definition matches the docs/spec:
+#   stage != "cataloged" OR uncertainty_metrics OR note OR any insights entry.
+# Under the current review file this counts 22 products (all backfilled
+# uncertainty_metrics entries; the 5 FOCUS entries + 7 insight-carrying paths
+# are all a subset of the 22).
 
 PIPELINE_STAGES = ["cataloged", "probed", "sampled", "reviewed"]
 
-def _pipeline_counts(fams, review, work, probes, data_cache):
-    """Mutually-exclusive per-product pipeline-stage counts.
+def _has_review_signal(r):
+    """Single-source predicate for whether a product counts as 'reviewed'.
+    Kept as a helper so the tier-counter, the per-program treemap tinting,
+    and any future renderer share one definition and can't drift.
 
-    Priority (deepest wins):
-      reviewed  - stage == "focus" OR non-empty uncertainty_metrics
-                  (i.e. the team has written down what they found)
+    True when the review entry has ANY of:
+      (a) stage != "cataloged"     (e.g. FOCUS - team explicitly promoted it)
+      (b) non-empty uncertainty_metrics (backfilled reliability sentence)
+      (c) non-empty note               (free-text caveat)
+      (d) at least one entry in insights (curated finding, WORKLOG line,
+          human note, or auto:cache_diff / auto:divergence signal)
+    """
+    if not isinstance(r, dict):
+        return False
+    if (r.get("stage") or "cataloged") != "cataloged":
+        return True
+    if (r.get("uncertainty_metrics") or "").strip():
+        return True
+    if (r.get("note") or "").strip():
+        return True
+    if r.get("insights"):
+        return True
+    return False
+
+def _tier_counts(fams, review, work, probes, data_cache):
+    """Canonical mutually-exclusive pipeline-stage counter (Phase A #1).
+
+    Every Home-tab counter reads from THIS helper - no duplicate math. The
+    priority order (deepest wins) mirrors the Sankey flow: a product that has
+    a review overrides a sampled-only entry, sampled overrides probed,
+    probed overrides bare cataloged.
+
+      reviewed  - `_has_review_signal(review[path])` fires
+                  (stage!=cataloged / uncertainty_metrics / note / insights)
       sampled   - path present in scope_data_cache
       probed    - path present in product_probes with ok=True
       cataloged - everything else (only the catalog listing exists)
 
-    Returns dict with the four stage counts + total. Sum of stages == total,
-    which is the invariant the named-tier progress rail rides on.
+    `work` is accepted for signature symmetry with other tier helpers but not
+    used here - repo evidence is a signal on the tracked-product side, not a
+    per-path pipeline stage. It's still surfaced separately in the recently-
+    touched list and the treemap tooltip.
+
+    Returns dict with the four stage counts + `total`. Sum of stages == total.
     """
     counts = {s: 0 for s in PIPELINE_STAGES}
     probes = probes or {}
     data_cache = data_cache or {}
     review = review or {}
     for path in fams:
-        r = review.get(path) or {}
-        has_review = (r.get("stage") == "focus"
-                      or bool((r.get("uncertainty_metrics") or "").strip())
-                      or bool((r.get("note") or "").strip()))
-        if has_review:
+        if _has_review_signal(review.get(path) or {}):
             counts["reviewed"] += 1; continue
         if path in data_cache:
             counts["sampled"] += 1; continue
@@ -6053,6 +6103,9 @@ def _pipeline_counts(fams, review, work, probes, data_cache):
         counts["cataloged"] += 1
     counts["total"] = sum(counts[s] for s in PIPELINE_STAGES)
     return counts
+
+# Back-compat alias so pre-consolidation callers still work.
+_pipeline_counts = _tier_counts
 
 def _iso_to_dt(ts):
     """Parse an ISO-8601 timestamp (optionally 'Z'-terminated) to a UTC-aware
@@ -6268,7 +6321,7 @@ def build_where_team_is(fams, review, work, probes, data_cache, git, repo):
     percentages are gone entirely; segment area IS the percentage, and the
     named counts below the rail carry the exact numbers.
     """
-    pc = _pipeline_counts(fams, review, work, probes, data_cache)
+    pc = _tier_counts(fams, review, work, probes, data_cache)
     total = pc["total"] or 1  # avoid div-by-zero if catalog is empty
 
     # Human-friendly labels for the pipeline vocabulary. Kept alongside the
@@ -6688,16 +6741,18 @@ LSCAPE_SIZE_EXP  = 0.65
 # Padding between adjacent program boxes so they read as distinct tiles.
 LSCAPE_PAD_PROG = 5
 
-# 4-tier color palette. Grey = untouched (still muted so the eye passes over
-# it), the three touched tiers were bumped in saturation from the prior
-# version so that when a program IS touched it actually pops off the row
-# instead of blending in. Fill + stroke chosen so a color-blind reader can
-# still separate tier-1 (blue) from tier-2 (teal) via lightness + stroke.
+# 4-tier color palette (Phase A #1 counter-consolidation: now maps 1:1 to
+# pipeline stages, sharing vocabulary with the tier rail + Sankey rather than
+# defining its own "repo evidence" concept). Grey = cataloged (untouched by
+# the pipeline), the three deeper stages were bumped in saturation from the
+# prior version so that when a program IS at a deeper stage it pops off the
+# row. Fill + stroke chosen so a color-blind reader can still separate tier-1
+# (blue) from tier-2 (teal) via lightness + stroke.
 LSCAPE_TIER_FILL = {
-    0: "#ECEEF5",   # grey - untouched (a hair cooler than before)
-    1: "#B7CDF6",   # blue - repo evidence only (bumped saturation)
-    2: "#8BD3CC",   # teal - metadata fetched (bumped)
-    3: "#8FCD97",   # green - data peeked (bumped)
+    0: "#ECEEF5",   # grey  - cataloged (default catalog-only state)
+    1: "#B7CDF6",   # blue  - probed (API metadata fetched)
+    2: "#8BD3CC",   # teal  - sampled (data slice pulled)
+    3: "#8FCD97",   # green - reviewed (uncertainty notes written)
 }
 LSCAPE_TIER_STROKE = {
     0: "#CBD1E0",
@@ -6706,12 +6761,14 @@ LSCAPE_TIER_STROKE = {
     3: "#3E9152",
 }
 LSCAPE_TIER_LABEL = {
-    0: "untouched",
-    1: "repo evidence",
-    # Beginner-UX pass: plain-English tier labels (was "probed" / "sampled").
-    2: "metadata fetched",
-    3: "data peeked",
+    0: "cataloged",
+    1: "probed",
+    2: "sampled",
+    3: "reviewed",
 }
+# Stage-name index -> pipeline-stage string, so the legend counts pull from
+# _tier_counts() with a fixed left-to-right order.
+LSCAPE_TIER_STAGE = {0: "cataloged", 1: "probed", 2: "sampled", 3: "reviewed"}
 
 # Subtle per-kind row tint. Each kind gets a distinct low-saturation hue for
 # the row background so the four rows read as four distinct bands even when
@@ -6724,15 +6781,18 @@ LSCAPE_KIND_TINT = {
     "Uncategorized":    {"bg": "#F5F5F7", "border": "#DCDEE6", "accent": "#5A6072"},
 }
 
-def _prog_tier(fams_in_prog, work, probes, data_cache):
+def _prog_tier(fams_in_prog, work, probes, data_cache, review=None):
     """Legacy 3-tier reach summary. Retained for callers that only need
        'has any signal?' semantics. See _prog_tier4() for the treemap-color
-       version that distinguishes repo-evidence from probe."""
+       version aligned to pipeline stages."""
     tier = 0
+    review = review or {}
     for f in fams_in_prog:
         path = f["path"]
+        if _has_review_signal(review.get(path) or {}):
+            return 2      # reviewed = deepest, short-circuit
         if (data_cache or {}).get(path):
-            return 2      # sampled trumps everything - short-circuit
+            tier = max(tier, 2); continue
         pe = (probes or {}).get(path)
         if isinstance(pe, dict) and pe.get("ok"):
             tier = max(tier, 1)
@@ -6742,25 +6802,38 @@ def _prog_tier(fams_in_prog, work, probes, data_cache):
             tier = max(tier, 1)
     return tier
 
-def _prog_tier4(fams_in_prog, work, probes, data_cache):
-    """4-tier reach summary for the SVG treemap color palette:
-       0 - untouched (no repo evidence, no probe, no sample)
-       1 - repo evidence only (someone worked here, but no API probe)
-       2 - probed (API variables/geography retrieved and cached)
-       3 - sampled (actual data rows fetched into scope_data_cache.json)
-       Sample trumps probe trumps evidence trumps nothing. Same short-circuit
-       optimisation as _prog_tier() since sample is the dominant tier."""
+# Priority index for _prog_tier4() - matches LSCAPE_TIER_LABEL indices so
+# fill/stroke lookups stay in sync. Deeper stage index = deeper pipeline
+# stage. Sampling and probing bypass "reviewed" ONLY if uncertainty_metrics
+# wasn't backfilled, but the priority order below prefers reviewed first
+# so a backfilled family in the program lights up as green regardless of
+# whether the API paths were probed/sampled.
+_PIPELINE_STAGE_INDEX = {"cataloged": 0, "probed": 1, "sampled": 2, "reviewed": 3}
+
+def _prog_tier4(fams_in_prog, work, probes, data_cache, review=None):
+    """4-tier reach summary for the SVG treemap color palette (Phase A #1:
+    now aligned to pipeline stages, so a program's color reflects the deepest
+    _tier_counts() stage any of its families reached):
+       0 - cataloged (all families are catalog-listed only)
+       1 - probed (at least one family present in product_probes with ok=True)
+       2 - sampled (at least one family present in scope_data_cache)
+       3 - reviewed (at least one family has _has_review_signal() = True)
+    Reviewed beats sampled beats probed beats cataloged. Repo evidence
+    (work) is no longer promoted to its own tier - it was a WEAK signal
+    (any grep hit anywhere) that conflicted with pipeline vocabulary.
+    Repo evidence is still surfaced in the treemap tooltip below."""
     tier = 0
+    review = review or {}
     for f in fams_in_prog:
         path = f["path"]
+        # Reviewed short-circuits: it's the deepest tier we track.
+        if _has_review_signal(review.get(path) or {}):
+            return 3
         if (data_cache or {}).get(path):
-            return 3      # sampled beats everything
-        pe = (probes or {}).get(path)
-        if isinstance(pe, dict) and pe.get("ok"):
             tier = max(tier, 2)
             continue
-        prod = f.get("product")
-        if prod and (work or {}).get(prod, {}).get("status", 0) > 0:
+        pe = (probes or {}).get(path)
+        if isinstance(pe, dict) and pe.get("ok"):
             tier = max(tier, 1)
     return tier
 
@@ -6990,7 +7063,7 @@ def _squarify_with_floor(sizes, x, y, w, h, min_w, min_h):
     return [], [], sorted(spilled + kept)
 
 def _lscape_prog_fallback_html(kind, progs, prog_names, work, probes,
-                                data_cache, warn=True):
+                                data_cache, warn=True, review=None):
     """Graceful degradation for a kind whose treemap layout failed (e.g.
     every program had zero product count) or whose bounding rect is too
     small to render proportional inner boxes. Renders a plain flex row of
@@ -7005,7 +7078,7 @@ def _lscape_prog_fallback_html(kind, progs, prog_names, work, probes,
     for pname in prog_names:
         items = progs[pname]
         n = len(items)
-        tier = _prog_tier4(items, work, probes, data_cache)
+        tier = _prog_tier4(items, work, probes, data_cache, review=review)
         chips.append(
             f'<div class="lscape-fallback-chip lscape-tier-{tier}" '
             f'data-landscape-prog="{_esc(pname)}" '
@@ -7016,23 +7089,29 @@ def _lscape_prog_fallback_html(kind, progs, prog_names, work, probes,
             + "".join(chips) + '</div></div>')
 
 def _lscape_prog_box_svg(pname, items, work, probes, data_cache, kind,
-                          total_in_kind, frx, fry, frw, frh):
+                          total_in_kind, frx, fry, frw, frh, review=None):
     """Render a single program box as an SVG <g>. Extracted so both the main
     treemap loop and any future reuse (e.g. spill mini-boxes) share one code
     path for tooltip + accessibility metadata."""
     n = len(items)
-    tier = _prog_tier4(items, work, probes, data_cache)
+    tier = _prog_tier4(items, work, probes, data_cache, review=review)
     reached = sum(1 for f in items
                    if (data_cache or {}).get(f["path"]) or
                       ((probes or {}).get(f["path"]) or {}).get("ok") or
+                      _has_review_signal((review or {}).get(f["path"]) or {}) or
                       (f.get("product") and
                        (work or {}).get(f.get("product"), {}).get("status", 0) > 0))
+    reviewed_n = sum(1 for f in items
+                     if _has_review_signal((review or {}).get(f["path"]) or {}))
     sampled = sum(1 for f in items
                   if (data_cache or {}).get(f["path"]))
     share_pct = (100.0 * n / total_in_kind) if total_in_kind else 0.0
+    # Tooltip now leads with the pipeline vocabulary matching the top-of-page
+    # counters, and calls out reviewed products alongside sampled so the
+    # program's deliverable-progress reads at a glance.
     tip = (f"{pname} — {n} product"
            f"{'s' if n != 1 else ''}, {share_pct:.1f}% of {kind}"
-           f" · {reached} touched · {sampled} sampled")
+           f" · {reviewed_n} reviewed · {sampled} sampled · {reached} touched")
     fill = LSCAPE_TIER_FILL.get(tier, LSCAPE_TIER_FILL[0])
     stroke = LSCAPE_TIER_STROKE.get(tier, LSCAPE_TIER_STROKE[0])
     # Slightly heavier stroke on non-grey tiers so touched programs pop off
@@ -7050,7 +7129,8 @@ def _lscape_prog_box_svg(pname, items, work, probes, data_cache, kind,
         + _lscape_prog_text_svg(pname, n, tier, frx, fry, frw, frh)
         + '</g>')
 
-def _lscape_spill_details_html(kind, spilled_progs, work, probes, data_cache):
+def _lscape_spill_details_html(kind, spilled_progs, work, probes, data_cache,
+                                review=None):
     """Render the "+ N more programs" disclosure that follows a kind row when
     squarify + min-floor spilled some programs. Uses <details>/<summary> for
     native accessibility - no JS required. Chips reuse the existing
@@ -7067,7 +7147,7 @@ def _lscape_spill_details_html(kind, spilled_progs, work, probes, data_cache):
     chips = []
     for pname, items in spilled_progs:
         n = len(items)
-        tier = _prog_tier4(items, work, probes, data_cache)
+        tier = _prog_tier4(items, work, probes, data_cache, review=review)
         chips.append(
             f'<div class="lscape-fallback-chip lscape-tier-{tier}" '
             f'data-landscape-prog="{_esc(pname)}" tabindex="0" role="button" '
@@ -7302,14 +7382,22 @@ def build_sankey_pipeline(pc):
         '</div>'
     )
 
-def build_landscape_viz(fams, work, probes, data_cache):
+def build_landscape_viz(fams, work, probes, data_cache, review=None):
     """Home-tab landscape: stacked full-width rows, one per dataset kind, each
     with its own squarified treemap of programs. Row height is proportional
     to product-count share (Aggregate biggest, Uncategorized slimmest). Every
     program box carries an always-on label - if squarify would produce a
     slot below the min-legibility floor we spill it into a compact
     "+ N more programs" disclosure at the end of the row. Pure SVG per row
-    with an HTML disclosure for spill; delegated JS click handler unchanged."""
+    with an HTML disclosure for spill; delegated JS click handler unchanged.
+
+    Phase A #1 counter-consolidation: `review` is now threaded in so program
+    box color reflects the deepest pipeline stage among a program's families,
+    matching the tier rail + Sankey vocabulary at the top of Home. The
+    per-tier legend counts below the treemap ALSO come from _tier_counts()
+    so all three counters agree.
+    """
+    review = review or {}
 
     # Group by kind, then by program group. Use catalog `group` (the human
     # program name) as the second level - matches the Products-tab section
@@ -7323,7 +7411,8 @@ def build_landscape_viz(fams, work, probes, data_cache):
     total_products = sum(sum(len(v) for v in by_kind[k].values())
                          for k in kind_order)
     if total_products <= 0:
-        return _all_flex_fallback(by_kind, kind_order, work, probes, data_cache)
+        return _all_flex_fallback(by_kind, kind_order, work, probes, data_cache,
+                                   review=review)
 
     prog_boxes_rendered = 0
     spilled_boxes = 0
@@ -7409,7 +7498,7 @@ def build_landscape_viz(fams, work, probes, data_cache):
                 + "".join(svg_parts)
                 + _lscape_prog_fallback_html(kind, progs, prog_names,
                                               work, probes, data_cache,
-                                              warn=True)
+                                              warn=True, review=review)
                 + '</div>')
             continue
 
@@ -7430,7 +7519,7 @@ def build_landscape_viz(fams, work, probes, data_cache):
             items = progs[pname]
             svg_parts.append(_lscape_prog_box_svg(
                 pname, items, work, probes, data_cache, kind,
-                total_in_kind, frx, fry, frw, frh))
+                total_in_kind, frx, fry, frw, frh, review=review))
             prog_boxes_rendered += 1
             box_area = frw * frh
             if smallest_box is None or box_area < smallest_box[1]:
@@ -7443,7 +7532,8 @@ def build_landscape_viz(fams, work, probes, data_cache):
                          for i in spilled_orig_i]
         spilled_boxes += len(spilled_pairs)
         spill_html = _lscape_spill_details_html(
-            kind, spilled_pairs, work, probes, data_cache) if spilled_pairs else ""
+            kind, spilled_pairs, work, probes, data_cache,
+            review=review) if spilled_pairs else ""
 
         # Assemble the row (SVG + optional spill disclosure) inside a
         # per-kind container so CSS can apply the tint border cleanly.
@@ -7454,23 +7544,18 @@ def build_landscape_viz(fams, work, probes, data_cache):
             + spill_html
             + '</div>')
 
-    # Legend + counts summary. Same tier tally as before; now the legend
-    # doubles as a color key for the newly-vivid touched-tier palette.
-    touched_total = 0
-    sampled_total = 0
-    tier_counts = {0: 0, 1: 0, 2: 0, 3: 0}
-    for f in fams.values():
-        path = f["path"]
-        if (data_cache or {}).get(path):
-            sampled_total += 1
-            tier_counts[3] += 1; touched_total += 1; continue
-        pe = (probes or {}).get(path)
-        if isinstance(pe, dict) and pe.get("ok"):
-            tier_counts[2] += 1; touched_total += 1; continue
-        prod = f.get("product")
-        if prod and (work or {}).get(prod, {}).get("status", 0) > 0:
-            tier_counts[1] += 1; touched_total += 1; continue
-        tier_counts[0] += 1
+    # Legend + counts summary. Phase A #1 consolidation: pulls from the same
+    # `_tier_counts()` helper the top-of-Home tier rail and Sankey use, so
+    # all three counters render identical numbers. Labels also align to the
+    # pipeline stage vocabulary now (was "untouched / repo evidence /
+    # metadata fetched / data peeked").
+    tc = _tier_counts(fams, review, work, probes, data_cache)
+    tier_counts = {0: tc["cataloged"], 1: tc["probed"],
+                   2: tc["sampled"],   3: tc["reviewed"]}
+    sampled_total = tc["sampled"]
+    reviewed_total = tc["reviewed"]
+    # "Advanced past cataloged" = anything beyond the default catalog listing.
+    advanced_total = tc["probed"] + tc["sampled"] + tc["reviewed"]
 
     legend_bits = []
     for tier in (0, 1, 2, 3):
@@ -7486,8 +7571,9 @@ def build_landscape_viz(fams, work, probes, data_cache):
                '(squarified treemap - Bruls et al. 2000), mildly compressed '
                'so small programs stay legible next to giants like SIPP; the '
                'true product count for each program shows both on its box and '
-               'in the hover tooltip. Color shows the deepest team-reach tier '
-               'anywhere in the slice. '
+               'in the hover tooltip. Color shows the deepest pipeline stage '
+               'reached by any product in the slice - same vocabulary as the '
+               'tier rail and Sankey at the top of Home. '
                '<b>Click any program to jump to the matching products.</b>')
 
     smallest_note = ""
@@ -7503,15 +7589,16 @@ def build_landscape_viz(fams, work, probes, data_cache):
             + '</div>'
             '<div class="lscape-legend">'
             + "".join(legend_bits)
-            + f'<span class="lscape-legend-summary">Team reach: {touched_total} '
-              f'of {len(fams)} products touched &middot; {sampled_total} '
-              f'with a data peek &middot; {prog_boxes_rendered} program '
+            + f'<span class="lscape-legend-summary">Pipeline reach: '
+              f'{reviewed_total} reviewed &middot; {sampled_total} sampled '
+              f'&middot; {advanced_total} advanced past cataloged '
+              f'({len(fams)} total) &middot; {prog_boxes_rendered} program '
               f'box{"es" if prog_boxes_rendered != 1 else ""} rendered'
               f'{" &middot; " + str(spilled_boxes) + " in spill drawers" if spilled_boxes else ""}'
               f' {smallest_note}</span>'
             '</div></div>')
 
-def _all_flex_fallback(by_kind, kind_order, work, probes, data_cache):
+def _all_flex_fallback(by_kind, kind_order, work, probes, data_cache, review=None):
     """Full-viz fallback for the (very unlikely) case where even the outer
     squarified layout blows up. Emits a plain flex row per kind so the reader
     still gets the vocabulary and reach coloring; loses only the areal comparison."""
@@ -7523,7 +7610,8 @@ def _all_flex_fallback(by_kind, kind_order, work, probes, data_cache):
         progs = by_kind[kind]
         prog_names = sorted(progs, key=lambda n: (-len(progs[n]), n))
         parts.append(_lscape_prog_fallback_html(kind, progs, prog_names,
-                                                  work, probes, data_cache))
+                                                  work, probes, data_cache,
+                                                  review=review))
     parts.append('</div>')
     return "".join(parts)
 
@@ -7569,11 +7657,14 @@ def build_home(fams, review, work, counts, worklog, notebooks, probes, git=None,
     # UX pass 2026-07-26 commit #3: Sankey research-pipeline flow.
     # Sits ABOVE the landscape treemap - different question (pipeline
     # progress vs. shape of the space). The treemap stays as the landscape
-    # awareness view.
-    pc = _pipeline_counts(fams, review, work, probes, data_cache or {})
+    # awareness view. Phase A #1 counter-consolidation: `_tier_counts()` is
+    # now the SINGLE source both the Sankey and the treemap legend read from,
+    # so all three counters (tier rail, Sankey, landscape legend) agree.
+    pc = _tier_counts(fams, review, work, probes, data_cache or {})
     h.append(build_sankey_pipeline(pc))
     # Landscape viz: hierarchical Kind -> Program treemap.
-    h.append(build_landscape_viz(fams, work, probes, data_cache or {}))
+    h.append(build_landscape_viz(fams, work, probes, data_cache or {},
+                                  review=review))
     return "".join(h)
 
 # ============================================================================
