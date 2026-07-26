@@ -2339,6 +2339,87 @@ header p{color:#CADCFC;font-size:var(--fs-2);max-width:940px;}
 .home-hero-p1 .hero-cta .arrow{margin-left:6px;}
 .home-hero-p1 .hero-meta{display:inline-block;margin-left:14px;color:#6B5518;
      font-size:var(--fs-2);font-style:italic;vertical-align:middle;}
+/* Home-tab "Find a product" search (2026-07-26). Sits directly under the
+   Phase-1 hero card, above the 5-item curriculum: after the "read the report
+   first" invitation, the next thing a reader sees is "or find something
+   specific." Curriculum is the "no idea where to start" path; search is the
+   "I have a question" path. Both are first-order discovery moves.
+   Neutral / no gold accent so the hero above stays the loudest thing on the
+   page; navy header + ice input surfaces match the rest of the report chrome. */
+.home-search{background:#F7F9FC;border:1px solid var(--line);border-radius:9px;
+     padding:16px 20px 18px;margin:0 0 26px;max-width:1020px;}
+.home-search h2{font-family:var(--f-display);font-size:var(--fs-5);color:var(--navy);
+     font-weight:var(--w-head);margin:0 0 4px;letter-spacing:var(--lsp-tight);}
+.home-search h2 .hs-emoji{margin-right:8px;}
+.home-search .hs-sub{font-size:var(--fs-2);color:var(--muted);line-height:var(--lh-2);
+     margin:0 0 12px;max-width:820px;}
+.home-search .hs-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;
+     margin:0 0 10px;}
+.home-search input[type=search]{flex:1 1 340px;min-width:220px;
+     padding:9px 12px;border:1px solid var(--line);border-radius:7px;
+     font:inherit;font-size:var(--fs-3);background:#fff;color:var(--ink);
+     transition:border-color .12s ease, box-shadow .12s ease;}
+.home-search input[type=search]:focus{outline:none;border-color:var(--navy);
+     box-shadow:0 0 0 3px rgba(31,42,92,0.12);}
+.home-search select{padding:8px 10px;border:1px solid var(--line);border-radius:7px;
+     font:inherit;font-size:var(--fs-2);background:#fff;color:var(--ink);
+     min-width:170px;cursor:pointer;}
+.home-search select:focus{outline:none;border-color:var(--navy);
+     box-shadow:0 0 0 3px rgba(31,42,92,0.12);}
+.home-search .hs-clear{background:transparent;color:var(--muted);
+     border:1px solid var(--line);border-radius:6px;padding:7px 12px;
+     font:inherit;font-size:var(--fs-2);cursor:pointer;
+     transition:background .12s ease, color .12s ease;}
+.home-search .hs-clear:hover{background:var(--ice);color:var(--navy);}
+.home-search .hs-clear:focus-visible{outline:2px solid var(--gold);outline-offset:2px;}
+.home-search .hs-kbd{font-size:var(--fs-1);color:var(--muted);margin-left:auto;
+     letter-spacing:.01em;flex:0 0 auto;}
+.home-search .hs-kbd kbd{display:inline-block;padding:0 5px;font-family:var(--f-mono);
+     font-size:var(--fs-1);background:var(--ice);color:var(--navy);
+     border:1px solid var(--line);border-radius:3px;
+     box-shadow:inset 0 -1px 0 #CADCFC;font-weight:var(--w-head);line-height:14px;
+     margin:0 1px;}
+.home-search .hs-results{margin-top:10px;}
+.home-search .hs-summary{font-size:var(--fs-2);color:var(--muted);margin:0 0 6px;
+     font-family:var(--f-mono);font-variant-numeric:tabular-nums;}
+.home-search .hs-list{list-style:none;padding:0;margin:0;
+     border-top:1px solid var(--line);}
+.home-search .hs-item{padding:9px 4px 9px 4px;border-bottom:1px solid var(--ice);
+     display:flex;gap:12px;align-items:flex-start;}
+.home-search .hs-emoji-col{flex:0 0 auto;font-size:var(--fs-4);line-height:1;
+     padding-top:2px;}
+.home-search .hs-body-col{flex:1;min-width:0;}
+.home-search .hs-title{font-family:var(--f-display);font-size:var(--fs-4);
+     color:var(--navy);font-weight:var(--w-head);letter-spacing:var(--lsp-tight);
+     margin:0 0 3px;line-height:1.3;}
+.home-search .hs-title code{font-family:var(--f-mono);font-size:var(--fs-2);
+     color:var(--muted);background:transparent;margin-left:8px;
+     font-weight:var(--w-body);letter-spacing:0;}
+.home-search .hs-desc{font-size:var(--fs-2);color:var(--ink);line-height:var(--lh-2);
+     margin:0 0 4px;max-width:760px;}
+.home-search .hs-meta{font-size:var(--fs-1);color:var(--muted);line-height:1.4;
+     font-family:var(--f-mono);}
+.home-search .hs-meta .hs-matched{color:var(--navy);font-weight:var(--w-emph);}
+.home-search .hs-meta mark{background:#FFF3B0;color:var(--navy);padding:0 2px;
+     border-radius:2px;font-weight:var(--w-emph);}
+.home-search .hs-open{background:var(--navy);color:#fff;text-decoration:none;
+     font-weight:var(--w-head);font-size:var(--fs-1);letter-spacing:.02em;
+     padding:5px 11px;border-radius:5px;flex:0 0 auto;align-self:flex-start;
+     margin-top:3px;transition:background .12s ease-out;}
+.home-search .hs-open:hover{background:#0F1740;}
+.home-search .hs-open:focus-visible{outline:2px solid var(--gold);outline-offset:2px;}
+.home-search .hs-open .arrow{margin-left:4px;font-weight:400;}
+.home-search .hs-showall{display:inline-block;margin-top:10px;color:var(--navy);
+     text-decoration:none;font-size:var(--fs-2);font-weight:var(--w-emph);
+     border-bottom:1px dotted var(--navy);}
+.home-search .hs-showall:hover{color:#0F1740;border-bottom-style:solid;}
+.home-search .hs-empty{padding:12px 4px;color:var(--muted);font-size:var(--fs-2);
+     line-height:var(--lh-2);}
+.home-search .hs-empty b{color:var(--navy);}
+.home-search .hs-empty .hs-sugg a{color:var(--navy);text-decoration:none;
+     border-bottom:1px dotted var(--navy);margin:0 4px;cursor:pointer;}
+.home-search .hs-empty .hs-sugg a:hover{color:#0F1740;border-bottom-style:solid;}
+.home-search .hs-hidden{display:none;}
 /* "Explore data" primary CTA (2026-07-26). Sits at the top of every card's
    Quick Look block so it's the first link a reviewer's eye goes to. Warmer
    than the neutral text around it and heavier than the secondary command
@@ -3984,6 +4065,17 @@ document.querySelectorAll('.filter input').forEach(function(inp){
       for (var f in facets) params.set('f_' + f, facets[f].join(','));
     }
     if (document.body.classList.contains('am-reviewer')) params.set('am', '1');
+    /* Home-tab search state (2026-07-26). Preserved across facet toggles so
+       a bookmark of the URL captures both goal-directed search + browse
+       state; the Home-search JS also fires _writeHash() on its own inputs. */
+    try {
+      var hsq = document.getElementById('hs-q');
+      var hst = document.getElementById('hs-topic');
+      var hsg = document.getElementById('hs-geo');
+      if (hsq && hsq.value) params.set('search', hsq.value);
+      if (hst && hst.value) params.set('topic', hst.value);
+      if (hsg && hsg.value) params.set('geo', hsg.value);
+    } catch(_) { /* Home-search may not be rendered - no-op */ }
     return params.toString();
   }
   function _writeHash(){
@@ -4019,6 +4111,24 @@ document.querySelectorAll('.filter input').forEach(function(inp){
       if (t){
         var tab = document.querySelector('.tab[data-k="' + CSS.escape(t) + '"]');
         if (tab && !tab.classList.contains('on')) tab.click();
+      }
+      /* Home-tab search inputs (2026-07-26). Restore search / topic / geo
+         from the hash and dispatch input+change events so the Home-search
+         JS re-renders the ranked results without a page reload. */
+      var hsq = document.getElementById('hs-q');
+      var hst = document.getElementById('hs-topic');
+      var hsg = document.getElementById('hs-geo');
+      if (hsq && params.has('search')){
+        hsq.value = params.get('search') || '';
+        hsq.dispatchEvent(new Event('input', {bubbles: true}));
+      }
+      if (hst && params.has('topic')){
+        hst.value = params.get('topic') || '';
+        hst.dispatchEvent(new Event('change', {bubbles: true}));
+      }
+      if (hsg && params.has('geo')){
+        hsg.value = params.get('geo') || '';
+        hsg.dispatchEvent(new Event('change', {bubbles: true}));
       }
       var panel = _activePanel();
       if (panel){
@@ -4059,10 +4169,14 @@ document.querySelectorAll('.filter input').forEach(function(inp){
     if (t.matches && (t.matches('.facet input') || t.matches('.am-cb'))){
       _writeHash();
     }
+    /* Home-search topic + geo dropdowns (2026-07-26). */
+    if (t.id === 'hs-topic' || t.id === 'hs-geo') _writeHash();
   });
   document.addEventListener('input', function(e){
     var t = e.target;
     if (t && t.matches && t.matches('.filter input')) _writeHash();
+    /* Home-search text input (2026-07-26). */
+    if (t && t.id === 'hs-q') _writeHash();
   });
   document.addEventListener('click', function(e){
     var t = e.target;
@@ -8044,6 +8158,608 @@ def _iso_to_ord(when):
     d = _iso_to_dt(when)
     return d.timestamp() if d else 0.0
 
+# ============================================================================
+# HOME-TAB "FIND A PRODUCT" SEARCH  (2026-07-26)
+# ============================================================================
+# Goal-directed lookup on the Home tab. Addresses the 4/10 gap from the last
+# head-to-head audit against census.gov (which scored 9/10 on the same
+# dimension). Sits directly below the Phase-1 hero card, above the 5-item
+# curriculum: after the "read the report first" invitation, the next thing a
+# reader sees is "or find something specific." Curriculum is the "no idea
+# where to start" path; search is the "I have a question" path.
+#
+# All logic lives client-side (pure vanilla JS, no dependencies). The Python
+# helper below emits three pieces: (1) a small JSON search index baked into
+# the panel HTML, (2) the UI (text input + topic dropdown + geography-level
+# dropdown + Clear button + results container), (3) an inline <script> block
+# that debounces the input, filters + ranks the index, and re-renders the
+# results list. Everything is scoped inside `#home-search` to avoid stepping
+# on any existing Products-tab selectors.
+
+# Geography-level keyword patterns, extracted from a product's title +
+# description at render time because probes are currently empty and the
+# catalog's dcat metadata does not carry per-product geography levels.
+# First match wins; each product can carry more than one level. Patterns
+# are matched case-insensitively via `.lower()` on the search text.
+# Order = display order in the dropdown; the "nation" catch-all sits last
+# so a description that mentions "national estimate for county totals"
+# still picks up county first.
+GEO_LEVEL_PATTERNS = [
+    ("state",              r"\bstate\b|\bstates\b|state[-\s]?level"),
+    ("county",             r"\bcount(y|ies)\b|county[-\s]?level"),
+    ("tract",              r"\bcensus tract\b|\btracts?\b|tract[-\s]?level"),
+    ("block group",        r"block[-\s]?groups?"),
+    ("place",              r"\bplaces?\b|incorporated place|census designated place"),
+    ("MSA",                r"metropolitan statistical|\bmsa\b|metropolitan area|"
+                           r"micropolitan|\bcbsa\b|core based statistical"),
+    ("ZCTA",               r"\bzcta\b|zip code tabulation|\bzip codes?\b"),
+    ("congressional district", r"congressional district"),
+    ("PUMA",               r"public use microdata area|\bpumas?\b"),
+    ("region",             r"census region|\bregions?\b(?!al)"),
+    ("division",           r"census division|\bdivisions?\b"),
+    ("school district",    r"school district"),
+    ("nation",             r"national|nationwide|united states|\bnation\b"),
+]
+
+# Plain-English topic tags, extracted from title + description at render
+# time. Deliberately NOT the same list as the SUBJECTS regex above: this
+# table uses topic names a non-specialist would type into a search box
+# (Garrett's example vocabulary from the feature spec), so the Home
+# search dropdown reads scannably instead of using Bureau-internal
+# category names. The SUBJECTS-based `subject` field remains available
+# to the free-text scorer (a user typing "Redistricting" still hits ACS)
+# but doesn't populate the dropdown as its own axis - single canonical
+# topic vocabulary keeps the UX simple.
+#
+# Each product can pick up MULTIPLE tags (first-match semantics per
+# pattern, not first-match-wins across patterns). A product with the
+# subject "Business & Economy" whose description also mentions
+# "employment" and "veterans" therefore surfaces under all three axes.
+#
+# Order = display order in the dropdown; count-based re-sort happens
+# client-side so the topic with the most matches floats to the top.
+TOPIC_TAG_PATTERNS = [
+    ("Housing",                r"\bhousing\b|\bhouseholds?\b|home ?ownership|"
+                               r"rent(al|ers?)?|mortgage|vacanc"),
+    ("Income & Poverty",       r"\bincome\b|earnings|poverty|\bwages?\b|"
+                               r"program participation|food security"),
+    ("Employment & Labor",     r"\bemploy|\bjobs?\b|labor force|unemployment|"
+                               r"workers?|workforce|occupation"),
+    ("Business & Economy",     r"\bbusiness(es)?\b|\becon|manufactur|wholesale|"
+                               r"retail|\bindustr|nonemployer|entrepreneur|"
+                               r"establishments?|payroll|receipts|\bfinanc"),
+    ("Education",              r"\beducation\b|school enrollment|degree|graduate|"
+                               r"library"),
+    ("Health & Insurance",     r"\bhealth\b|\binsurance\b|disabilit|fertility"),
+    ("Race & Ethnicity",       r"\brace\b|hispanic|ethnic|american indian|"
+                               r"alaska native|native hawaiian|\basian\b|"
+                               r"nativity|foreign born"),
+    ("Age & Sex",              r"\bage\b|\bsex\b|\bmale\b|\bfemale\b|gender"),
+    ("Migration & Mobility",   r"migration|mobility|residence one year|movers?"),
+    ("Veterans",               r"\bveterans?\b"),
+    ("Transportation",         r"transportation|commut|\bvehicles?\b|travel time"),
+    ("International Trade",    r"international trade|\bimports?\b|\bexports?\b|"
+                               r"commodity flow"),
+    ("Public Finance & Government", r"public sector|government finance|"
+                               r"tax collect|public pension|school system finance|"
+                               r"government|\bpublic pension"),
+    ("Population & Demographics", r"\bpopulation\b|demographic|redistricting|"
+                               r"apportionment|census tract|summary file"),
+]
+
+# Human-friendly emoji per topic - keeps result cards visually scannable
+# without pulling in an icon library. Neutral chart emoji for anything
+# not on the list.
+TOPIC_EMOJI = {
+    "Housing":                     "\U0001F3E0",   # house
+    "Income & Poverty":            "\U0001F4B5",   # dollar
+    "Employment & Labor":          "\U0001F477",   # worker
+    "Business & Economy":          "\U0001F3E2",   # office building
+    "Education":                   "\U0001F393",   # graduation cap
+    "Health & Insurance":          "\U0001FA7A",   # stethoscope
+    "Race & Ethnicity":            "\U0001F30D",   # earth
+    "Age & Sex":                   "\U0001F465",   # people silhouette
+    "Migration & Mobility":        "\U0001F6EB",   # airplane
+    "Veterans":                    "\U0001F396",   # military medal
+    "Transportation":              "\U0001F697",   # car
+    "International Trade":         "\U0001F4E6",   # package
+    "Public Finance & Government": "\U0001F3DB",   # classical building
+    "Population & Demographics":   "\U0001F465",
+}
+
+# Path-based topic overrides. The ACS / Decennial / PEP flagship
+# descriptions are extremely generic (they say things like "characteristics
+# of the U.S. population" rather than naming specific subjects), so
+# pattern-matching against the description misses topics these products
+# very obviously cover. These overrides ONLY apply to products the Bureau
+# itself documents as multi-topic omnibus datasets. Each entry cites the
+# authoritative source so we stay inside CLAUDE.md's "never bluff" rule -
+# no invented topics, just topics the Bureau explicitly publishes.
+#
+# Source: https://www.census.gov/programs-surveys/acs/about/subjects.html
+# (ACS subject list) + Decennial DHC + SF1 published subject lists +
+# PEP + PDB documentation. Reviewed 2026-07-26 for the search-feature
+# ship; extend if the mentors flag a missing coverage area.
+PATH_TOPIC_OVERRIDES = {
+    r"^acs/(acs1|acs5)$":            ["Housing", "Income & Poverty",
+                                       "Employment & Labor", "Education",
+                                       "Health & Insurance", "Race & Ethnicity",
+                                       "Age & Sex", "Migration & Mobility",
+                                       "Veterans", "Transportation",
+                                       "Population & Demographics"],
+    r"^acs/(acs1|acs5)/(subject|profile|cprofile)$":
+                                     ["Housing", "Income & Poverty",
+                                       "Employment & Labor", "Education",
+                                       "Health & Insurance", "Race & Ethnicity",
+                                       "Age & Sex", "Migration & Mobility",
+                                       "Veterans", "Transportation",
+                                       "Population & Demographics"],
+    r"^acs/(acs1|acs5)/pums$":       ["Housing", "Income & Poverty",
+                                       "Employment & Labor", "Education",
+                                       "Race & Ethnicity", "Age & Sex",
+                                       "Migration & Mobility", "Veterans",
+                                       "Population & Demographics"],
+    r"^dec/(dhc|sf1|sf2|pl|dp)$":    ["Housing", "Race & Ethnicity",
+                                       "Age & Sex", "Population & Demographics"],
+    r"^dec/das-demo$":               ["Housing", "Race & Ethnicity",
+                                       "Age & Sex", "Population & Demographics"],
+    r"^pep/(population|housing|charage|charagegroups|components)":
+                                     ["Housing", "Age & Sex",
+                                       "Race & Ethnicity", "Migration & Mobility",
+                                       "Population & Demographics"],
+    r"^pdb/(tract|blockgroup|state|county)$":
+                                     ["Housing", "Income & Poverty",
+                                       "Employment & Labor", "Race & Ethnicity",
+                                       "Age & Sex", "Population & Demographics"],
+    r"^cbp$":                        ["Business & Economy", "Employment & Labor"],
+    r"^ecn":                         ["Business & Economy"],
+    r"^abs":                         ["Business & Economy", "Race & Ethnicity",
+                                       "Veterans"],
+    r"^cps":                         ["Employment & Labor", "Income & Poverty",
+                                       "Age & Sex", "Population & Demographics"],
+    r"^sipp":                        ["Income & Poverty", "Employment & Labor",
+                                       "Health & Insurance",
+                                       "Population & Demographics"],
+    r"^geo/tiger":                   [],   # boundary files, no topic axis
+}
+_PATH_TOPIC_RE = [(re.compile(p), tags) for p, tags in PATH_TOPIC_OVERRIDES.items()]
+
+def _extract_topic_tags(title, desc, subject, path=""):
+    """Return an ordered de-duplicated list of topic tags for a product.
+    Combines two signals:
+      (1) description-based pattern matching against TOPIC_TAG_PATTERNS
+      (2) path-based overrides in PATH_TOPIC_OVERRIDES for flagship
+          multi-topic products whose descriptions are too generic for (1)
+
+    The SUBJECTS-derived `subject` field is deliberately excluded from
+    the tag list so the Home-search topic dropdown stays a single
+    canonical plain-English vocabulary rather than merging two
+    overlapping taxonomies. `subject` is still passed as an argument for
+    symmetry (and stored separately on the search-index entry so free-
+    text scoring can still match it) but doesn't propagate into the tag
+    list. Products with no matched pattern AND no path override get an
+    empty tag list - text search on the title/description still surfaces
+    them via free-text scoring."""
+    hay = ((title or "") + " " + (desc or "")).lower()
+    tags = []
+    for name, pat in TOPIC_TAG_PATTERNS:
+        if re.search(pat, hay): tags.append(name)
+    # Merge path overrides. Only the FIRST matching regex applies (paths
+    # are structured hierarchically so the more specific pattern usually
+    # sorts first in the dict), and each override tag is only added if
+    # not already present from the description scan.
+    for rx, extras in _PATH_TOPIC_RE:
+        if rx.search(path or ""):
+            for t in extras:
+                if t not in tags: tags.append(t)
+            break
+    return tags
+
+def _extract_geo_levels(title, desc):
+    """Return an ordered de-duplicated list of geography levels a product
+    mentions in its title + description. Order preserved from
+    GEO_LEVEL_PATTERNS so the display list is stable. Empty when the
+    description says nothing about geography (many microdata products
+    describe only their subject matter, not their granularity)."""
+    hay = ((title or "") + " " + (desc or "")).lower()
+    levels = []
+    for name, pat in GEO_LEVEL_PATTERNS:
+        if re.search(pat, hay): levels.append(name)
+    return levels
+
+def _search_index_entry(f, review, focus_paths):
+    """One dict per product family, JSON-serialized into the page. Kept
+    small on purpose - just enough for text search + ranking + a scannable
+    result card - so 573 entries add ~120 KB rather than a megabyte."""
+    path = f["path"]
+    title = f.get("title", "") or path
+    desc = (f.get("desc") or "").strip()
+    # Truncate desc to a scannable one-liner; the full description lives on
+    # the card itself (which the reader jumps to via 'Open card').
+    if len(desc) > 220: desc = desc[:217].rstrip() + "…"
+    subject = f.get("subject", "") or ""
+    program = f.get("group", "") or ""
+    topics = _extract_topic_tags(f.get("title", ""), f.get("desc", ""),
+                                    subject, path=path)
+    geo_levels = _extract_geo_levels(f.get("title", ""), f.get("desc", ""))
+    r = review.get(path, {}) or {}
+    stage = r.get("stage", "cataloged")
+    touched = bool(r.get("uncertainty_metrics") or r.get("note") or r.get("insights"))
+    return {
+        "p":  path,
+        "t":  title,
+        "d":  desc,
+        "s":  subject,
+        "pg": program,
+        "k":  f.get("kind", "") or "",
+        "tp": topics,
+        "gl": geo_levels,
+        # Ranking tie-breakers. Kept as short keys so the JSON payload
+        # stays compact when serialized into the HTML.
+        "fc": 1 if path in focus_paths else 0,
+        "tc": 1 if touched else 0,
+        "st": stage,
+    }
+
+def build_home_search(fams, review):
+    """Home-tab "Find a product" search. Ships a client-side text + topic +
+    geography-level filter over the full 573-product catalog, ranked by
+    match weight + team-touch signal. Directly closes the 4/10 goal-
+    directed-lookup gap from the head-to-head audit against census.gov.
+
+    Renders four things:
+      1. Section header + one-line explainer.
+      2. Row with the text input, two dropdowns, Clear button, keyboard hint.
+      3. Results container (populated by the inline JS on first input).
+      4. Inline <script> that carries the search index + wiring.
+
+    Design decisions:
+      - Placement below the Phase-1 hero, above the curriculum: this is the
+        "I have a question" path complementing the "no idea where to start"
+        curriculum. Both are first-order discovery moves.
+      - No new deps; pure vanilla JS.
+      - Text search matches title, description, program, subject, topic tags.
+      - Ranking = title-word match (10) > title substring (6) > program
+        substring (4) > desc-word match (3) > desc substring (2). Ties
+        break by focus-list -> team-touch -> alphabetical.
+      - Top 5 rendered inline; if more matches exist, a "Show all N ->" link
+        pre-fills the Products-tab sidebar filter via URL hash.
+      - Ctrl+K (or Cmd+K on macOS) focuses the search from anywhere on the
+        page; the existing "/" shortcut still owns Products-tab filter focus.
+      - URL hash keys `search`, `topic`, `geo` are read on load and re-emitted
+        on every input change (integrated with the existing _writeHash so a
+        bookmark captures both search + browse state).
+    """
+    # Focus / curriculum path set - used as a soft ranking tie-breaker so
+    # the 5 first-touched products float to the top on ambiguous queries.
+    focus_paths = set()
+    for entry in CURRICULUM:
+        focus_paths.add(entry["path"])
+    for path, r in (review or {}).items():
+        if (r or {}).get("stage") in ("focus", "candidate"):
+            focus_paths.add(path)
+
+    # Build the index. Ordered by path so the JSON payload is diff-friendly.
+    idx = [_search_index_entry(fams[p], review, focus_paths)
+           for p in sorted(fams)]
+
+    # Topic dropdown: union of (a) the SUBJECTS ordering (Bureau's own topic
+    # vocabulary, matched from titles) and (b) the additional plain-English
+    # topics extracted from descriptions. De-duplicated, ordered by count.
+    topic_counts = {}
+    for e in idx:
+        for tp in e["tp"]: topic_counts[tp] = topic_counts.get(tp, 0) + 1
+    topic_options = sorted(topic_counts.items(),
+                            key=lambda kv: (-kv[1], kv[0]))
+    topic_options_html = ['<option value="">Topic — any</option>']
+    for name, n in topic_options:
+        topic_options_html.append(
+            f'<option value="{_esc(name)}">{_esc(name)} ({n:,})</option>')
+
+    # Geography dropdown: only levels actually mentioned somewhere in the
+    # catalog. Ordered by GEO_LEVEL_PATTERNS (i.e. rough granularity).
+    geo_counts = {}
+    for e in idx:
+        for g in e["gl"]: geo_counts[g] = geo_counts.get(g, 0) + 1
+    geo_order = [n for n, _ in GEO_LEVEL_PATTERNS]
+    geo_options_html = ['<option value="">Geography level — any</option>']
+    for name in geo_order:
+        n = geo_counts.get(name, 0)
+        if not n: continue
+        geo_options_html.append(
+            f'<option value="{_esc(name)}">{_esc(name)} ({n:,})</option>')
+
+    # Emoji-per-topic table for the results renderer. JSON-serialize once so
+    # the JS side just does emojiOf[topic] || defaultEmoji.
+    emoji_json = json.dumps(TOPIC_EMOJI, ensure_ascii=False)
+    idx_json = json.dumps(idx, ensure_ascii=False, separators=(",", ":"))
+
+    # Inline the section HTML + JS. The <script> runs synchronously as the
+    # browser parses this fragment, so the input / select / results elements
+    # (declared above it) are guaranteed to exist by the time the handler
+    # binds. Everything is scoped to `#home-search` selectors to avoid
+    # colliding with the Products-tab sidebar filter (which owns `.filter`).
+    html = [
+        '<div class="home-search" id="home-search" role="region" ',
+        'aria-label="Find a Census product by keyword, topic, or geography">',
+        '<h2><span class="hs-emoji" aria-hidden="true">\U0001F50D</span>'
+        'Find a product</h2>',
+        '<div class="hs-sub">Search the full ',
+        f'{len(idx):,}-product catalog by keyword, topic, or geography level. '
+        'Results jump straight to the card in the Products tab. '
+        'Try <b>housing</b>, <b>income</b>, or <b>veterans</b>.',
+        '</div>',
+        '<div class="hs-row">',
+        '<input type="search" id="hs-q" autocomplete="off" spellcheck="false" ',
+        'placeholder="e.g. housing values, median income, employment" ',
+        'aria-label="Search text">',
+        f'<select id="hs-topic" aria-label="Filter by topic">{"".join(topic_options_html)}</select>',
+        f'<select id="hs-geo" aria-label="Filter by geography level">{"".join(geo_options_html)}</select>',
+        '<button type="button" class="hs-clear" id="hs-clear" '
+        'title="Reset text, topic, and geography">Clear</button>',
+        '<span class="hs-kbd" title="Press Ctrl+K (or Cmd+K on macOS) '
+        'anywhere on the page to focus this search">',
+        'Press <kbd>Ctrl</kbd>+<kbd>K</kbd> to search',
+        '</span>',
+        '</div>',
+        '<div class="hs-results" id="hs-results" aria-live="polite">',
+        # Empty on first render; JS populates on input change or on hash restore.
+        '</div>',
+        '</div>',
+        # -- Inline JS: search index + filter/rank + event bindings ----------
+        '<script>',
+        '(function(){',
+        f'  var IDX = {idx_json};',
+        f'  var EMOJI = {emoji_json};',
+        '  var DEFAULT_EMOJI = "\U0001F4CA";',
+        '  var TOP_N = 5;',
+        '  var qEl = document.getElementById("hs-q");',
+        '  var tEl = document.getElementById("hs-topic");',
+        '  var gEl = document.getElementById("hs-geo");',
+        '  var clr = document.getElementById("hs-clear");',
+        '  var out = document.getElementById("hs-results");',
+        '  if (!qEl || !out) return;',
+        # ---- HTML escaping (never trust index text - it comes from catalog) ---
+        '  function esc(s){ return String(s || "")',
+        '    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")',
+        '    .replace(/"/g,"&quot;").replace(/\'/g,"&#39;"); }',
+        # ---- Term parsing: split on whitespace, drop tokens < 2 chars ---------
+        # Each term expands to an alternates list [term, stem]. Simple English
+        # stemming: strip trailing "s" / "es" / "ies" (length >= 4). This turns
+        # "financials" -> [financials, financial], "veterans" -> [veterans,
+        # veteran], "policies" -> [policies, policy]. Both alternates are
+        # tested; any hit counts as a match for scoring purposes.
+        '  function stemAlts(t){',
+        '    var alts = [t];',
+        '    if (t.length >= 5 && t.slice(-3) === "ies") alts.push(t.slice(0, -3) + "y");',
+        '    if (t.length >= 4 && t.slice(-2) === "es") alts.push(t.slice(0, -2));',
+        '    if (t.length >= 4 && t.slice(-1) === "s")  alts.push(t.slice(0, -1));',
+        '    return alts;',
+        '  }',
+        '  function terms(q){',
+        '    return (q || "").toLowerCase().trim().split(/\\s+/)',
+        '      .filter(function(t){ return t.length >= 2; })',
+        '      .map(function(t){ return {raw: t, alts: stemAlts(t)}; });',
+        '  }',
+        # ---- Scoring: title-word > title-sub > program > desc-word > desc-sub ---
+        '  function reWord(t){',
+        '    var esc = t.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&");',
+        '    return new RegExp("\\\\b" + esc + "\\\\b", "i");',
+        '  }',
+        '  function score(e, ts){',
+        '    if (!ts.length) return 0;',
+        '    var titleLC = e.t.toLowerCase();',
+        '    var descLC  = e.d.toLowerCase();',
+        '    var progLC  = (e.pg || "").toLowerCase();',
+        '    var subjLC  = (e.s  || "").toLowerCase();',
+        '    var tagsLC  = (e.tp || []).join(" ").toLowerCase();',
+        '    var s = 0, matched = 0;',
+        '    for (var i = 0; i < ts.length; i++){',
+        '      var alts = ts[i].alts;',
+        '      var best = 0;',
+        # Score each alternate; take the highest (so an exact "veterans" beats
+        # its stem "veteran" and doesn't double-count when both match).
+        '      for (var j = 0; j < alts.length; j++){',
+        '        var term = alts[j]; var rw = reWord(term); var sc = 0;',
+        '        if (rw.test(e.t))                  sc = Math.max(sc, 10);',
+        '        else if (titleLC.indexOf(term) >= 0) sc = Math.max(sc, 6);',
+        '        if (progLC.indexOf(term) >= 0)     sc = Math.max(sc, sc + 4);',
+        '        if (subjLC.indexOf(term) >= 0)     sc = Math.max(sc, sc + 4);',
+        '        if (tagsLC.indexOf(term) >= 0)     sc = Math.max(sc, sc + 3);',
+        '        if (rw.test(e.d))                  sc = Math.max(sc, sc + 3);',
+        '        else if (descLC.indexOf(term) >= 0) sc = Math.max(sc, sc + 2);',
+        '        if (sc > best) best = sc;',
+        '      }',
+        '      if (best > 0){ s += best; matched++; }',
+        '    }',
+        # More distinct query terms matched = higher bonus; a product that
+        # matches all N terms beats one that matches only 1 of N.
+        '    if (matched > 1) s += (matched - 1) * 2;',
+        # Every query term must appear somewhere for the product to survive.
+        '    if (matched < ts.length) return 0;',
+        # Soft tie-breakers.
+        '    if (e.fc) s += 0.6;',
+        '    if (e.tc) s += 0.25;',
+        '    return s;',
+        '  }',
+        # ---- Matched-keyword snippet for the result card meta line -----------
+        # Reports the RAW query term (what the user typed) rather than its
+        # stem, so the "matched: financials" chip echoes the user's word.
+        '  function matchedList(e, ts){',
+        '    var out = [];',
+        '    var hay = (e.t + " " + e.d + " " + e.pg + " " + e.s + " " + ',
+        '               (e.tp || []).join(" ")).toLowerCase();',
+        '    for (var i = 0; i < ts.length; i++){',
+        '      var alts = ts[i].alts;',
+        '      for (var j = 0; j < alts.length; j++){',
+        '        if (hay.indexOf(alts[j]) >= 0){ out.push(ts[i].raw); break; }',
+        '      }',
+        '    }',
+        '    return out;',
+        '  }',
+        # ---- One result card ------------------------------------------------
+        '  function emojiFor(e){',
+        '    if (e.tp && e.tp.length){',
+        '      for (var i = 0; i < e.tp.length; i++){',
+        '        if (EMOJI[e.tp[i]]) return EMOJI[e.tp[i]];',
+        '      }',
+        '    }',
+        '    return EMOJI[e.s] || DEFAULT_EMOJI;',
+        '  }',
+        '  function renderItem(e, ts){',
+        '    var em = emojiFor(e);',
+        '    var geoBits = (e.gl && e.gl.length)',
+        '      ? " at " + e.gl.slice(0, 3).map(esc).join(", ") ',
+        '      : "";',
+        '    var topicLine = (e.tp && e.tp.length)',
+        '      ? e.tp.slice(0, 3).map(esc).join(" · ")',
+        '      : "";',
+        '    var matched = matchedList(e, ts);',
+        '    var matchedHTML = matched.length',
+        '      ? \'<span class="hs-matched">matched:</span> \' + ',
+        '        matched.map(function(m){ return "<mark>" + esc(m) + "</mark>"; }).join(" · ")',
+        '      : "";',
+        '    return \'<li class="hs-item">\' + ',
+        '      \'<div class="hs-emoji-col" aria-hidden="true">\' + em + \'</div>\' + ',
+        '      \'<div class="hs-body-col">\' + ',
+        '        \'<div class="hs-title">\' + esc(e.t) + ',
+        '          \' <code>\' + esc(e.p) + \'</code></div>\' + ',
+        '        \'<div class="hs-desc">\' + esc(topicLine) + esc(geoBits) + ',
+        '          (topicLine || geoBits ? " — " : "") + esc(e.d) + \'</div>\' + ',
+        '        (matchedHTML ? \'<div class="hs-meta">\' + matchedHTML + \'</div>\' : "") + ',
+        '      \'</div>\' + ',
+        '      \'<a class="hs-open" href="#prod-\' + esc(e.p) + ',
+        '        \'" data-jump-path="\' + esc(e.p) + \'">Open card ',
+        '        <span class="arrow" aria-hidden="true">→</span></a>\' + ',
+        '    \'</li>\';',
+        '  }',
+        # ---- Empty state helpers --------------------------------------------
+        '  function emptyState(hasQuery){',
+        '    if (!hasQuery){',
+        '      return \'<div class="hs-empty">Type a topic, program name, or ',
+        '        variable of interest to start. Try ',
+        '        <span class="hs-sugg">',
+        '          <a data-hs-sugg="housing">housing</a>·',
+        '          <a data-hs-sugg="income">income</a>·',
+        '          <a data-hs-sugg="veterans">veterans</a>',
+        '        </span>.</div>\';',
+        '    }',
+        '    return \'<div class="hs-empty"><b>No products match.</b> Try a ',
+        '      broader keyword, or clear a filter. Popular topics: ',
+        '      <span class="hs-sugg">',
+        '        <a data-hs-sugg="housing">housing</a>·',
+        '        <a data-hs-sugg="income">income</a>·',
+        '        <a data-hs-sugg="population">population</a>',
+        '      </span></div>\';',
+        '  }',
+        # ---- The main render pass -------------------------------------------
+        '  function render(){',
+        '    var q = qEl.value || "";',
+        '    var topic = tEl.value || "";',
+        '    var geo = gEl.value || "";',
+        '    var ts = terms(q);',
+        '    var hasQuery = !!(ts.length || topic || geo);',
+        '    if (!hasQuery){ out.innerHTML = emptyState(false); return; }',
+        '    var hits = [];',
+        '    for (var i = 0; i < IDX.length; i++){',
+        '      var e = IDX[i];',
+        '      if (topic){',
+        '        var okTopic = (e.s === topic) || ',
+        '                      ((e.tp || []).indexOf(topic) >= 0);',
+        '        if (!okTopic) continue;',
+        '      }',
+        '      if (geo){',
+        '        if ((e.gl || []).indexOf(geo) < 0) continue;',
+        '      }',
+        '      var sc = ts.length ? score(e, ts) : 1;',
+        '      if (sc <= 0) continue;',
+        '      hits.push({e: e, s: sc});',
+        '    }',
+        '    hits.sort(function(a, b){',
+        '      if (b.s !== a.s) return b.s - a.s;',
+        '      if (b.e.fc !== a.e.fc) return b.e.fc - a.e.fc;',
+        '      if (b.e.tc !== a.e.tc) return b.e.tc - a.e.tc;',
+        '      return a.e.t.localeCompare(b.e.t);',
+        '    });',
+        '    if (!hits.length){ out.innerHTML = emptyState(true); return; }',
+        '    var top = hits.slice(0, TOP_N);',
+        '    var summary = \'<div class="hs-summary">\' + hits.length + ',
+        '      " match" + (hits.length !== 1 ? "es" : "") + ',
+        '      " — showing top " + top.length + "</div>";',
+        '    var list = \'<ul class="hs-list">\' + ',
+        '      top.map(function(h){ return renderItem(h.e, ts); }).join("") + ',
+        '      "</ul>";',
+        '    var showAll = "";',
+        '    if (hits.length > TOP_N){',
+        # Show-all deep-link: pre-fills the Products-tab filter via existing hash keys.
+        '      var params = new URLSearchParams();',
+        # Pick a Products tab that actually exists. tab-am if present, else first kind tab.
+        '      var tabEl = document.querySelector(".tab.tab-am") || ',
+        '                  document.querySelector(".tab.tab-kind");',
+        '      var tabKey = tabEl ? tabEl.dataset.k : "";',
+        '      if (tabKey) params.set("tab", tabKey);',
+        '      if (q) params.set("q", q);',
+        # Preserve topic + geo so a bookmark of the show-all URL reads back to
+        # the same Home-search state if the reader flips back to Home.
+        '      if (topic) params.set("topic", topic);',
+        '      if (geo) params.set("geo", geo);',
+        '      showAll = \'<a class="hs-showall" href="#\' + params.toString() + ',
+        '        \'">Show all \' + hits.length + \' matches →</a>\';',
+        '    }',
+        '    out.innerHTML = summary + list + showAll;',
+        '  }',
+        # ---- Debounce --------------------------------------------------------
+        '  var _rt = null;',
+        '  function schedule(){ if (_rt) clearTimeout(_rt); _rt = setTimeout(render, 150); }',
+        '  qEl.addEventListener("input", schedule);',
+        '  tEl.addEventListener("change", render);',
+        '  gEl.addEventListener("change", render);',
+        # Enter jumps to the first result (mirrors GitHub / VS Code search).
+        '  qEl.addEventListener("keydown", function(e){',
+        '    if (e.key !== "Enter") return;',
+        '    var first = out.querySelector(".hs-open");',
+        '    if (first){ e.preventDefault(); first.click(); }',
+        '  });',
+        # Clear resets all three inputs + re-renders.
+        '  if (clr) clr.addEventListener("click", function(){',
+        '    qEl.value = ""; tEl.value = ""; gEl.value = "";',
+        '    render();',
+        # Fire input so the shared _writeHash strips search/topic/geo from the URL.
+        '    qEl.dispatchEvent(new Event("input", {bubbles: true}));',
+        '    qEl.focus();',
+        '  });',
+        # Clicking a suggestion chip inside the empty state pre-fills the box.
+        '  out.addEventListener("click", function(e){',
+        '    var a = e.target && e.target.closest && e.target.closest("[data-hs-sugg]");',
+        '    if (!a) return;',
+        '    e.preventDefault();',
+        '    qEl.value = a.getAttribute("data-hs-sugg") || "";',
+        '    qEl.focus();',
+        '    render();',
+        '    qEl.dispatchEvent(new Event("input", {bubbles: true}));',
+        '  });',
+        # Ctrl+K / Cmd+K focuses the box from anywhere on the page.
+        # Deliberately DOESN\'T conflict with existing "/" (Products-tab filter)
+        # or "j"/"k" (card cycling).
+        '  document.addEventListener("keydown", function(e){',
+        '    if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "K")){',
+        '      e.preventDefault();',
+        # If a non-Home tab is active, switch to Home first so the input is visible.
+        '      var homeTab = document.querySelector(\'.tab[data-k="home"]\');',
+        '      if (homeTab && !homeTab.classList.contains("on")) homeTab.click();',
+        '      qEl.focus(); qEl.select();',
+        '      qEl.scrollIntoView({behavior:"smooth", block:"center"});',
+        '    }',
+        '  });',
+        # Initial render: shows the empty-state prompt with 3 suggestion chips.
+        # The shared hash-restore code fires an input event once the hash is
+        # parsed, which triggers a second render with the restored state.
+        '  render();',
+        '})();',
+        '</script>',
+    ]
+    return "".join(html)
+
 def build_home(fams, review, work, counts, worklog, notebooks, probes, git=None,
                diff=None, eda_diffs=None, data_cache=None, repo=None):
     """Home tab. Post-reframe structure: diff banner (session-scoped) -> Where
@@ -8066,6 +8782,14 @@ def build_home(fams, review, work, counts, worklog, notebooks, probes, git=None,
     # regardless of Start-here banner dismissal (banner lives outside the
     # panel and hides itself via localStorage).
     h.append(build_phase1_hero_card())
+    # 2026-07-26: Home-tab "Find a product" search. Closes the goal-directed
+    # lookup gap from the head-to-head audit against census.gov (tool scored
+    # 4/10 vs census.gov's 9/10 on that dimension). Sits directly under the
+    # Phase-1 hero and above the curriculum: report = "read first" path,
+    # search = "I have a question" path, curriculum = "no idea where to
+    # start" path. All three are first-order discovery moves; the reader
+    # picks whichever fits their intent on this visit.
+    h.append(build_home_search(fams, review))
     # UX pass 2026-07-26 commit #4: Start-here 5-product curriculum. Renders
     # right below the phase-1 hero as the "if you want to explore in the tool"
     # path (the report is the "if you want to read first" path). Both feed
