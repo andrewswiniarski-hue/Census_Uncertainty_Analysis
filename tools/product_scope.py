@@ -2127,6 +2127,19 @@ footer{padding:22px 44px;color:var(--muted);font-size:11.5px;}
 .facet li.empty{opacity:.4;}
 .facet li.empty label{cursor:default;}
 .facet .fhint{font-size:10.5px;color:var(--muted);font-style:italic;padding:2px 4px 0;}
+/* Actively-managed toggle (post-audit UX pass #3). Sits above the facets so
+   the reviewer sees the default filter first. Default-on hides ~560 of 573
+   cards on page load; unchecking reveals all products in the tab. Persists
+   via localStorage under 'product_scope:show_all_products' (see the JS). */
+.am-toggle{padding:8px 6px 10px;margin:0 0 10px;border-bottom:1px solid var(--line);}
+.am-toggle label{display:flex;align-items:center;gap:5px;font-size:12px;
+     color:var(--navy);font-weight:600;cursor:pointer;line-height:1.3;}
+.am-toggle input[type=checkbox]{margin:0;transform:scale(1.05);cursor:pointer;}
+.am-toggle .lbl{flex:0 1 auto;}
+.am-toggle .cnt{color:var(--muted);font-weight:400;font-variant-numeric:tabular-nums;}
+.am-hint{font-size:10.5px;color:var(--muted);font-style:italic;margin-top:4px;line-height:1.4;}
+/* Default-hidden cards: only visible when the panel carries the show-all class. */
+.panel:not(.am-showall) .prod:not([data-actively-managed]){display:none;}
 .facet .fhint code{font-family:ui-monospace,Consolas,monospace;font-size:10.5px;
      background:var(--ice);color:var(--navy);padding:0 4px;border-radius:3px;font-style:normal;}
 @media(max-width:900px){.products-shell{flex-direction:column;} .facets{position:static;width:100%;flex:none;}}
@@ -2283,7 +2296,8 @@ document.getElementById('qcl').addEventListener('click', function(){
    counts recompute against the intersection of the OTHER active facets, so the
    sidebar always shows "how many products would you have if you clicked this
    next". Falls back to the text filter above; both stack. */
-function _prodPasses(p, filters, textQuery){
+function _prodPasses(p, filters, textQuery, amOnly){
+  if (amOnly && p.dataset.activelyManaged !== 'true') return false;
   if (textQuery && (p.dataset.s || '').indexOf(textQuery) === -1) return false;
   for (var f in filters){
     var set = filters[f];
@@ -2302,10 +2316,15 @@ function _applyFacets(panel){
   });
   var textInput = panel.querySelector('.filter input');
   var q = textInput ? textInput.value.toLowerCase().trim() : '';
+  // Actively-managed toggle: default is "hide non-actively-managed". The
+  // panel carries .am-showall when the user has ticked the toggle to see
+  // everything. Facet counts still recompute against the same visibility
+  // rule so the sidebar numbers match what the reader actually sees.
+  var amOnly = !panel.classList.contains('am-showall');
   var shown = 0;
   var prods = panel.querySelectorAll('.prod');
   prods.forEach(function(p){
-    var ok = _prodPasses(p, filters, q);
+    var ok = _prodPasses(p, filters, q, amOnly);
     p.style.display = ok ? '' : 'none';
     if (ok) shown++;
   });
@@ -2315,6 +2334,7 @@ function _applyFacets(panel){
       var v = li.dataset.v;
       var n = 0;
       prods.forEach(function(p){
+        if (amOnly && p.dataset.activelyManaged !== 'true') return;
         var passes = true;
         for (var ff in filters){
           if (ff === f) continue;
@@ -2347,6 +2367,44 @@ function _applyFacets(panel){
 document.querySelectorAll('.facet input').forEach(function(cb){
   cb.addEventListener('change', function(){ _applyFacets(cb.closest('.panel')); });
 });
+/* --- Actively-managed toggle (post-audit UX pass #3) ---
+   Default: only cards with data-actively-managed="true" (Candidate/FOCUS OR
+   an auto:divergence insight) are visible - the reader opens each Products
+   tab looking at ~5-10 cards to review, not 573. Ticking the box reveals
+   everything in the tab. State persists across page loads via localStorage
+   under the same 'product_scope:*' prefix the drill-down code uses. Fails
+   silently on hostile storage envs (in-private mode, quota, disabled). */
+(function(){
+  var LS_KEY = 'product_scope:show_all_products';
+  function _lsGet(k){ try { return localStorage.getItem(k); } catch(_){ return null; } }
+  function _lsSet(k, v){ try { localStorage.setItem(k, v); } catch(_){} }
+  var showAll = _lsGet(LS_KEY) === 'true';
+  document.querySelectorAll('.panel').forEach(function(panel){
+    if (!panel.querySelector('.am-cb')) return;   /* Home tab has no toggle */
+    if (showAll) panel.classList.add('am-showall');
+    panel.querySelectorAll('.am-cb').forEach(function(cb){ cb.checked = showAll; });
+  });
+  document.querySelectorAll('.am-cb').forEach(function(cb){
+    cb.addEventListener('change', function(){
+      var on = cb.checked;
+      _lsSet(LS_KEY, on ? 'true' : 'false');
+      /* Update every products panel in sync so switching tabs keeps the
+         same view. The toggle lives inside each panel's sidebar, but the
+         visibility rule is panel-scoped via a CSS class (.am-showall). */
+      document.querySelectorAll('.panel').forEach(function(panel){
+        if (!panel.querySelector('.am-cb')) return;
+        panel.classList.toggle('am-showall', on);
+        panel.querySelectorAll('.am-cb').forEach(function(x){ x.checked = on; });
+        _applyFacets(panel);
+      });
+    });
+  });
+  /* Initial pass: recompute facet counts against the toggle's current state
+     so the sidebar numbers match what the reader actually sees on load. */
+  document.querySelectorAll('.panel').forEach(function(panel){
+    if (panel.querySelector('.am-cb')) _applyFacets(panel);
+  });
+})();
 document.querySelectorAll('.facet-clear').forEach(function(a){
   a.addEventListener('click', function(e){
     e.preventDefault();
@@ -2361,6 +2419,9 @@ document.querySelectorAll('.filter input').forEach(function(inp){
     var panel = inp.closest('.panel'), shown = 0;
     /* If any facet checkboxes are active, defer to the facet applier so text+facets combine. */
     if (panel.querySelector('.facet input:checked')) { _applyFacets(panel); return; }
+    /* Same story if the actively-managed toggle is on (default) - defer to
+       the facet applier so its combined visibility rule fires. */
+    if (!panel.classList.contains('am-showall')) { _applyFacets(panel); return; }
     panel.querySelectorAll('.prod').forEach(function(p){
       var hit = !q || p.dataset.s.indexOf(q) !== -1;
       p.style.display = hit ? '' : 'none';
@@ -3408,6 +3469,21 @@ def render_quick_look(f, probe_entry, cache_entry, insights=None,
     return ('<div class="branch"><div class="bcard"><div class="blabel">Quick Look</div>'
             + "".join(parts) + '</div></div>')
 
+def _is_actively_managed(f, review_entry):
+    """Post-audit UX pass #3. A product is "actively managed" if it's in the
+    funnel beyond Reviewed (candidate or focus) OR it has at least one
+    auto:divergence insight (something changed and someone should look). The
+    default sidebar toggle hides everything else, so the reviewer opens the
+    tab looking at the handful of products that matter today, not all 573."""
+    entry = review_entry or {}
+    st = entry.get("stage", "cataloged")
+    if st in ("candidate", "focus"):
+        return True
+    for ins in (entry.get("insights") or []):
+        if ins.get("source") == INSIGHT_AUTO_DIVERGENCE:
+            return True
+    return False
+
 def product_row(f, review, work, probes, ctx=None):
     ctx = ctx or {}
     top_families = ctx.get("top_families", set())
@@ -3536,8 +3612,15 @@ def product_row(f, review, work, probes, ctx=None):
     search = (f["path"] + " " + f["title"] + " " + f["group"] + " " + f["subject"]).lower()
     folded = "" if st == "focus" else " folded"
     facet_attrs = " ".join(f'data-{k}="{_esc(v)}"' for k, v in facets.items())
+    # "Actively managed" = a product a reviewer is currently working on: it's
+    # either been promoted into the funnel (candidate/focus) OR it has at
+    # least one auto:divergence insight (something changed and someone should
+    # look). Rendered as a data-* attr so the sidebar toggle (default-on) can
+    # hide the ~560 cataloged-but-untouched cards on page load without losing
+    # them - the box unchecks to reveal all 573. Post-audit UX pass #3.
+    am_attr = ' data-actively-managed="true"' if _is_actively_managed(f, r) else ""
     return (f'<div class="prod{folded}" data-s="{_esc(search)}" data-path="{_esc(f["path"])}" '
-            f'{facet_attrs}><div class="pnode">{node}</div>'
+            f'{facet_attrs}{am_attr}><div class="pnode">{node}</div>'
             f'<div class="branches">{"".join(branches)}</div></div>')
 
 def build_facet_sidebar(prods, review, work, probes, top_families, data_cache=None):
@@ -3547,6 +3630,25 @@ def build_facet_sidebar(prods, review, work, probes, top_families, data_cache=No
     its (current, unfiltered) count. When the user clicks a value the JS filters
     the cards AND rewrites every other facet's counts to reflect the intersection.
     """
+    # ---- Actively-managed toggle (post-audit UX pass #3) --------------------
+    # Default on = hide cards that are neither Candidate/Focus nor carry an
+    # active auto:divergence insight, so the reviewer opens the tab looking at
+    # the ~5-10 products they should actually be doing something about. Toggle
+    # off = show all 573. State is persisted in localStorage so a page reload
+    # keeps the reviewer's choice; the JS wires the checkbox to _applyFacets()
+    # so the facet-count recomputation on the sidebar respects this too.
+    n_all = len(prods)
+    n_am  = sum(1 for f in prods
+                 if _is_actively_managed(f, review.get(f["path"], {})))
+    am_toggle = (
+        '<div class="am-toggle">'
+        '<label><input type="checkbox" class="am-cb"> '
+        '<span class="lbl">Show all products</span> '
+        f'<span class="cnt">({n_all})</span></label>'
+        f'<div class="am-hint">Default: only Candidate / FOCUS / newly-changed '
+        f'products ({n_am} of {n_all} on this tab). Tick to reveal '
+        f'the rest.</div>'
+        '</div>')
     # Collect all facet values across the tab's products.
     rows = [product_facet_values(f, review, work, probes, top_families, data_cache)
             for f in prods]
@@ -3587,7 +3689,7 @@ def build_facet_sidebar(prods, review, work, probes, top_families, data_cache=No
             f'<ul>{"".join(items)}</ul>{note}</div>')
     return ('<aside class="facets"><div class="facets-head">'
             '<h3>Filter</h3><a class="facet-clear" href="#" style="display:none">Clear filters</a>'
-            '</div>' + "".join(blocks) + '</aside>')
+            '</div>' + am_toggle + "".join(blocks) + '</aside>')
 
 def build_kind_panel(kind, fams, review, work, probes, git=None, snapshot=None,
                      data_cache=None, eda_diffs=None):
