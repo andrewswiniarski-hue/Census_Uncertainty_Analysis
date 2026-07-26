@@ -2517,12 +2517,9 @@ header p{color:#CADCFC;font-size:var(--fs-2);max-width:940px;}
 .ql-lm-btn.done{background:#5FA76F;color:#fff;}
 .ql-lm-note{font-size:var(--fs-1);color:#8a4d1c;font-style:italic;flex:1;min-width:0;}
 .ql-lm-more{margin-top:8px;font-size:var(--fs-1);color:var(--muted);}
-.ql-lm-more > summary{cursor:pointer;font-weight:var(--w-emph);color:var(--navy);
-     padding:2px 0;list-style:none;letter-spacing:.02em;}
-.ql-lm-more > summary::-webkit-details-marker{display:none;}
-.ql-lm-more > summary::marker{content:"";}
-.ql-lm-more > summary::before{content:"\25B8  ";color:var(--muted);}
-.ql-lm-more[open] > summary::before{content:"\25BE  ";color:var(--navy);}
+/* Caret + marker handling now comes from the unified `details.disc` grammar
+   (condense pass 2026-07-26); only the type-scale tweak stays local. */
+.ql-lm-more > summary{letter-spacing:.02em;}
 .ql-lm-more-body{padding:5px 4px 2px;}
 .ql-lm-sub{font-size:var(--fs-1);color:var(--muted);font-weight:var(--w-head);letter-spacing:.05em;
      text-transform:uppercase;margin-bottom:2px;}
@@ -2635,6 +2632,41 @@ table.rep td{border-bottom:1px solid var(--ice);padding:7px 9px;vertical-align:t
 .diff-list li{padding:2px 0;color:var(--muted);font-size:var(--fs-2);line-height:1.5;border-bottom:1px solid #E1E7F0;}
 .diff-list code{font-family:var(--f-mono);font-size:var(--fs-1);background:#fff;
      padding:1px 5px;border-radius:3px;color:var(--navy);}
+/* --- Unified disclosure grammar (condense pass 2026-07-26) -----------------
+   Every collapsible on the page now speaks ONE visual language so a reader
+   can always tell what is expandable and which sections are currently open:
+     * same caret - a small \25B8 that rotates 90 deg when open
+     * same header affordance - pointer cursor, ice hover, gold focus ring
+     * same open signal - a 3px gold left-edge accent while expanded
+   <details class="disc"> opts a native disclosure in. The Quick Look
+   drill-down (.ql-details, which already had this caret grammar via its
+   .ql-chevron span) and the button-based section collapses (landscape
+   treemap, Bureau feed - via the .is-open class the persistence JS toggles)
+   implement the same grammar with their own machinery. */
+details.disc > summary{list-style:none;cursor:pointer;display:flex;align-items:center;
+     gap:8px;padding:3px 8px 3px 6px;margin-left:-6px;border-radius:6px;
+     font-weight:var(--w-emph);color:#3A4890;user-select:none;}
+details.disc > summary::-webkit-details-marker{display:none;}
+details.disc > summary::marker{content:"";}
+details.disc > summary::before{content:"\25B8";display:inline-block;flex:0 0 auto;
+     color:var(--muted);font-size:var(--fs-1);line-height:1;
+     transition:transform .15s ease;}
+details.disc[open] > summary::before{transform:rotate(90deg);color:var(--navy);}
+details.disc > summary:hover{background:var(--ice);color:var(--navy);}
+details.disc > summary:focus-visible{outline:2px solid var(--gold);outline-offset:2px;}
+details.disc[open]{border-left:3px solid var(--gold);padding-left:8px;}
+/* Button-based section collapses share the open-state signal. */
+.lscape-section.is-open,.cpress-section.is-open{border-left:3px solid var(--gold);
+     padding-left:12px;}
+/* Quick Look drill-down joins the open-state grammar (its caret already
+   rotates via .ql-chevron). */
+.ql-details[open]{border-left:3px solid var(--gold);}
+/* One-line preview inside a closed disclosure's summary - tells the reader
+   what they'd get by opening it. Hidden while open (the content is there). */
+details.disc > summary .disc-preview{font-weight:var(--w-body);color:var(--muted);
+     font-size:var(--fs-1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+     min-width:0;flex:1;}
+details.disc[open] > summary .disc-preview{display:none;}
 /* Home chapter structure (condense-home pass 2026-07-26). Groups the
    ~9 Home sections into 3 labeled chapters ("Get oriented" / "The landscape"
    / "Team pulse") so a first-time reader sees structure instead of a wall of
@@ -2833,7 +2865,11 @@ table.rep td{border-bottom:1px solid var(--ice);padding:7px 9px;vertical-align:t
     padding:14px 18px;}
 .cpress-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;
     margin-bottom:6px;}
-.cpress-head h3{font-family:var(--f-display);font-size:var(--fs-3);
+/* Section-scale header (condense pass 2026-07-26): one heading style per
+   level across Home - chapters use the small-caps kicker, sections use the
+   fs-5 display face, cards/subsections use fs-3. The press feed's expanded
+   panel is a section, so its header matches the other section h2s. */
+.cpress-head h2{font-family:var(--f-display);font-size:var(--fs-5);
     color:var(--navy);margin:0;font-weight:var(--w-head);
     letter-spacing:var(--lsp-tight);}
 .cpress-source{font-family:var(--f-mono);font-size:var(--fs-1);
@@ -2975,13 +3011,9 @@ table.rep td{border-bottom:1px solid var(--ice);padding:7px 9px;vertical-align:t
    programs out of the treemap. Native <details> so it works with JS off. */
 .lscape-spill{border-top:1px solid var(--ice);padding:8px 14px 10px;
        background:rgba(255,255,255,0.55);}
-.lscape-spill > summary{list-style:none;cursor:pointer;font-size:var(--fs-2);
-       color:var(--muted);display:flex;align-items:center;gap:8px;
-       flex-wrap:wrap;padding:2px 0;}
-.lscape-spill > summary::-webkit-details-marker{display:none;}
-.lscape-spill > summary::before{content:"\25B8";display:inline-block;
-       color:var(--muted);font-size:var(--fs-1);transition:transform .15s ease;}
-.lscape-spill[open] > summary::before{transform:rotate(90deg);}
+/* Caret + marker + hover handling now comes from the unified `details.disc`
+   grammar (condense pass 2026-07-26); local rules keep only sizing/wrap. */
+.lscape-spill > summary{font-size:var(--fs-2);color:var(--muted);flex-wrap:wrap;}
 .lscape-spill .lscape-spill-count{font-weight:var(--w-head);color:var(--navy);
        font-size:var(--fs-2);}
 .lscape-spill .lscape-spill-preview{color:var(--ink);opacity:.75;
@@ -3367,14 +3399,11 @@ body:not(.am-reviewer) .panel.panel-am{display:none;}
    the summary expands to reveal the Status / Composite role / Has evidence /
    Has probe / Notebook validated facets used by the review workflow. */
 .facet-reviewer-group{margin-top:12px;padding-top:8px;border-top:1px solid var(--ice);}
-.facet-reviewer-group > summary{cursor:pointer;font-size:var(--fs-1);color:var(--muted);
-     font-weight:var(--w-head);letter-spacing:.09em;text-transform:uppercase;padding:4px 0;
-     list-style:none;}
-.facet-reviewer-group > summary::-webkit-details-marker{display:none;}
-.facet-reviewer-group > summary::marker{content:"";}
-.facet-reviewer-group > summary:before{content:"\25B8  ";color:var(--muted);}
-.facet-reviewer-group[open] > summary:before{content:"\25BE  ";color:var(--navy);}
-.facet-reviewer-group > summary:hover{color:var(--navy);}
+/* Caret + marker + hover handling now comes from the unified `details.disc`
+   grammar (condense pass 2026-07-26); local rules keep only the small-caps
+   facet-header typography. */
+.facet-reviewer-group > summary{font-size:var(--fs-1);color:var(--muted);
+     font-weight:var(--w-head);letter-spacing:.09em;text-transform:uppercase;}
 .facet-reviewer-group[open] > summary{color:var(--navy);}
 .facet-reviewer-body .facet{border-top-color:var(--ice);}
 @media(max-width:900px){.products-shell{flex-direction:column;} .facets{position:static;width:100%;flex:none;}}
@@ -3915,6 +3944,8 @@ document.querySelectorAll('.filter input').forEach(function(inp){
     var setLandscapeState = function(open){
       if (compact) compact.hidden = !!open;
       if (expanded) expanded.hidden = !open;
+      /* Unified open-state signal (gold left-edge accent via CSS). */
+      lscape.classList.toggle('is-open', !!open);
       lscape.querySelectorAll('[data-landscape-toggle]').forEach(function(b){
         b.setAttribute('aria-expanded', open ? 'true' : 'false');
       });
@@ -3966,6 +3997,8 @@ document.querySelectorAll('.filter input').forEach(function(inp){
     var setBureauState = function(open){
       if (preview) preview.hidden = !!open;
       if (full) full.hidden = !open;
+      /* Unified open-state signal (gold left-edge accent via CSS). */
+      bureau.classList.toggle('is-open', !!open);
       bureau.querySelectorAll('[data-bureau-toggle]').forEach(function(b){
         b.setAttribute('aria-expanded', open ? 'true' : 'false');
       });
@@ -5208,7 +5241,7 @@ def build_diff_banner(diff, eda_diffs=None):
                 detail_rows.append(f'<li><code>{_esc(path)}</code> EDA — {_esc(ch)}</li>')
     details = ""
     if detail_rows:
-        details = ('<details><summary>Show '
+        details = ('<details class="disc"><summary>Show '
                    f'{len(detail_rows)} product-level change'
                    + ("s" if len(detail_rows) != 1 else "")
                    + '</summary><ul class="diff-list">'
@@ -5830,7 +5863,7 @@ def _ql_learn_more_html(f, non_api):
             '</button>'
             f'{non_api_note}'
             '</div>'
-            '<details class="ql-lm-more">'
+            '<details class="ql-lm-more disc">'
             '<summary>More options for advanced users</summary>'
             '<div class="ql-lm-more-body">'
             '<div class="ql-lm-sub">Fetch metadata only:</div>'
@@ -6522,7 +6555,7 @@ def build_facet_sidebar(prods, review, work, probes, top_families, data_cache=No
         # to plain-English "More filters" (the internal group name is
         # still 'reviewer' - see FACET_DEFS).
         reviewer_section = (
-            '<details class="facet-reviewer-group">'
+            '<details class="facet-reviewer-group disc">'
             '<summary>More filters</summary>'
             '<div class="facet-reviewer-body">' + "".join(reviewer_blocks) + '</div>'
             '</details>')
@@ -7296,7 +7329,7 @@ def build_census_press_feed(cache_path):
         '<div class="cpress-full" id="cpress-full-panel" '
         'data-bureau-view="expanded" hidden>'
         '<div class="cpress-head">'
-        '<h3>This week from Census</h3>'
+        '<h2>This week from Census</h2>'
         + (f'<span class="cpress-tag {tag_class}">{_esc(tag_text)}</span>'
            if tag_text else "")
         + '<a class="cpress-source" '
@@ -7546,12 +7579,35 @@ def build_what_learned(fams, review, worklog, git):
     if hidden_render or dropped_non_curated:
         summary = (f'Show all {total_rendered} findings '
                    f'({len(hidden_render)} more)')
-        # Condense-home pass 2026-07-26 commit #2: `data-persist-key` opts this
-        # <details> into the localStorage persistence layer for section state
-        # (see the collapsible-persistence inline JS). Key opens/closes across
-        # reloads under `product_scope:wwl_show_all`.
-        parts.append(f'<details class="wwl-more" data-persist-key="wwl_show_all">'
-                     f'<summary>{summary}</summary>'
+        # Closed-state preview (condense pass 2026-07-26): tell the reader
+        # what's inside before they open it - the composition of the hidden
+        # entries plus the first hidden headline. Rendered in a .disc-preview
+        # span the unified disclosure CSS hides once the drawer is open.
+        comp_bits = []
+        n_cur = sum(1 for e in hidden_render if e["kind"] == "curated")
+        n_wl = sum(1 for e in hidden_render if e["kind"] == "worklog")
+        n_notes = len(hidden_render) - n_cur - n_wl
+        if n_cur:
+            comp_bits.append(f'{n_cur} curated')
+        if n_notes:
+            comp_bits.append(f'{n_notes} product note{"s" if n_notes != 1 else ""}')
+        if n_wl:
+            comp_bits.append(f'{n_wl} worklog note{"s" if n_wl != 1 else ""}')
+        preview = " &middot; ".join(comp_bits)
+        if hidden_render:
+            nxt = hidden_render[0]["headline"]
+            nxt = nxt if len(nxt) <= 70 else nxt[:67].rstrip() + "..."
+            preview += (f' &middot; next: &ldquo;{_esc(nxt)}&rdquo;'
+                        if preview else
+                        f'next: &ldquo;{_esc(nxt)}&rdquo;')
+        preview_html = (f'<span class="disc-preview">{preview}</span>'
+                        if preview else "")
+        # `data-persist-key` opts this <details> into the localStorage
+        # persistence layer for section state (see the collapsible-persistence
+        # inline JS). Key opens/closes across reloads under
+        # `product_scope:wwl_show_all`.
+        parts.append(f'<details class="wwl-more disc" data-persist-key="wwl_show_all">'
+                     f'<summary>{summary}{preview_html}</summary>'
                      '<ul class="wwl-list" style="border-top:1px solid var(--ice)">')
         parts.extend(_row(e) for e in hidden_render)
         parts.append('</ul>')
@@ -8052,7 +8108,7 @@ def _lscape_spill_details_html(kind, spilled_progs, work, probes, data_cache,
             f'title="{_esc(pname)} - {n} product{"s" if n != 1 else ""}">'
             f'{_esc(pname)} <em>{n}</em></div>')
     return (
-        f'<details class="lscape-spill">'
+        f'<details class="lscape-spill disc">'
         f'<summary><span class="lscape-spill-count">+{n_prog} more '
         f'program{"s" if n_prog != 1 else ""}</span> '
         f'<span class="lscape-spill-preview">{_esc(preview)}</span> '
