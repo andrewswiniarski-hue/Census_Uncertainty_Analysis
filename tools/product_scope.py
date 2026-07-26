@@ -2048,6 +2048,37 @@ table.rep td{border-bottom:1px solid var(--ice);padding:7px 9px;vertical-align:t
 .wti-empty{font-size:12px;color:var(--muted);font-style:italic;padding:8px 0;}
 .wti-empty code{font-family:ui-monospace,Consolas,monospace;background:var(--ice);
        color:var(--navy);padding:1px 5px;border-radius:3px;font-style:normal;}
+/* "What we've learned" section (reframe pass commit #2). Aggregates every
+   insight source in one place: curated findings, WORKLOG mining, human
+   review notes, auto:cache_diff, auto:divergence. First synthesis of the
+   feed - previously these lived scattered across cards + Home tab. */
+.wwl-section{margin:0 0 24px;max-width:1020px;}
+.wwl-list{list-style:none;padding:0;margin:8px 0 0;border-top:1px solid var(--ice);}
+.wwl-list li{padding:7px 8px;border-bottom:1px solid var(--ice);
+       display:flex;gap:10px;align-items:baseline;font-size:12px;line-height:1.45;
+       flex-wrap:wrap;}
+.wwl-list li:last-child{border-bottom:0;}
+.wwl-ico{flex:0 0 20px;font-size:14px;line-height:1;padding-top:1px;text-align:center;}
+.wwl-body{flex:1;min-width:220px;}
+.wwl-head{color:var(--ink);font-weight:600;}
+.wwl-head b{color:var(--navy);margin-right:6px;}
+.wwl-meta{color:var(--muted);font-size:10.5px;margin-top:2px;
+       display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;}
+.wwl-meta a{color:#3A4890;text-decoration:none;border-bottom:1px dotted #8FA8D8;}
+.wwl-meta code{font-family:ui-monospace,Consolas,monospace;font-size:10.5px;
+       background:var(--ice);color:var(--navy);padding:0 4px;border-radius:3px;}
+.wwl-detail{color:var(--muted);font-size:11px;line-height:1.4;margin-top:2px;}
+.wwl-empty-team{font-size:11.5px;color:var(--muted);font-style:italic;padding:6px 0;}
+.wwl-empty-team code{font-family:ui-monospace,Consolas,monospace;background:var(--ice);
+       color:var(--navy);padding:1px 5px;border-radius:3px;font-style:normal;
+       font-size:10.5px;}
+.wwl-more{margin-top:10px;font-size:11.5px;}
+.wwl-more > summary{cursor:pointer;color:#3A4890;font-weight:600;padding:3px 0;
+       list-style:none;}
+.wwl-more > summary::-webkit-details-marker{display:none;}
+.wwl-more > summary::marker{content:"";}
+.wwl-more > summary:before{content:"\25B8  ";}
+.wwl-more[open] > summary:before{content:"\25BE  ";}
 /* Reviewer-mode data collapse: quietly demotes the funnel + composite-role
    scaffolding from the primary Home surface. The reviewer flow is still one
    click away and the CLI paths that write it (--review) are untouched. */
@@ -4203,6 +4234,193 @@ def build_where_team_is(fams, review, work, probes, data_cache, git, repo):
     parts.append('</div></div>')
     return "".join(parts)
 
+# ============================================================================
+# HOME TAB "WHAT WE'VE LEARNED" SECTION (reframe pass commit #2)
+# ============================================================================
+# First place in the tool where every insight source lands in one feed:
+#   * Curated findings (FINDINGS constant, mostly from EDA notebooks)
+#   * WORKLOG findings (mined from WORKLOG.md's `Findings / decisions:` lines)
+#   * Human insights (source="human" from product_review.json)
+#   * Auto-insights (source="auto:cache_diff", "auto:divergence")
+# Legacy source="auto:repo" entries are skipped here - the audit cut them as
+# noisy WORKLOG restatements, and re-surfacing them alongside real WORKLOG
+# entries would double-count. Existing entries still render on cards; they
+# just don't feed the Home synthesis feed.
+
+# Icons used to signal insight kind at a glance in the "What we've learned"
+# feed. Curated findings + WORKLOG lines get their own icons; the rest reuse
+# the existing INSIGHT_SOURCE_ICON map so a reader who has learned "wrench =
+# cache diff" on a product card sees the same wrench here.
+WWL_ICON_CURATED = "\U0001F4CC"   # pushpin - hand-selected headlines
+WWL_ICON_WORKLOG = "\U0001F4D6"   # book - team narrative record
+
+def _worklog_url(git):
+    """Same GitHub-blob-or-file-fallback pattern the pre-reframe WORKLOG
+    headline used, extracted so both callers stay in sync."""
+    gh = (git or {}).get("github_slug") or ""
+    branch = (git or {}).get("branch") or "main"
+    if gh:
+        return f"https://github.com/{gh}/blob/{branch}/WORKLOG.md"
+    return "file:///" + str((Path((git or {}).get("repo_abs", ".")) / "WORKLOG.md")
+                            ).replace("\\", "/")
+
+def build_what_learned(fams, review, worklog, git):
+    """Home-tab 'What we've learned' section. Aggregates curated FINDINGS,
+    mined WORKLOG findings, and every human / auto:cache_diff / auto:divergence
+    insight from product_review.json into one time-ordered feed.
+
+    Priority order within the feed:
+      1. Curated FINDINGS - highest signal, hand-picked headlines.
+      2. Human insights - team notes, in reverse-chronological order.
+      3. auto:divergence - state-change signals worth surfacing.
+      4. auto:cache_diff - sample-drift signals.
+      5. WORKLOG findings - full narrative in the demoted section already,
+         but surfaced here as headlines so the Home tab is a one-stop synthesis.
+    Legacy auto:repo entries are excluded (they duplicate WORKLOG text).
+    Visible cap of 15 items keeps the section scannable; the rest sit behind
+    a 'Show all (N)' <details> toggle.
+    """
+    # Curated findings first, in FINDINGS order (already curated by hand).
+    entries = []
+    for x in FINDINGS:
+        entries.append({
+            "icon":     WWL_ICON_CURATED,
+            "kind":     "curated",
+            "headline": f"{x['stat']} - {x['headline']}" if x.get("stat")
+                        else x["headline"],
+            "detail":   x.get("detail") or "",
+            "product":  x.get("family") or "",
+            "meta_tail": f"EDA nb {x['nb']}" if x.get("nb") else "",
+            "sort_key": (0, x["headline"]),   # curated group sorts before others
+        })
+
+    # Human + auto insights from product_review.json.
+    for path, r in (review or {}).items():
+        if not isinstance(r, dict): continue
+        for ins in (r.get("insights") or []):
+            src = ins.get("source") or ""
+            if src == INSIGHT_HUMAN:
+                icon = INSIGHT_SOURCE_ICON.get(src, "\U0001F464")
+                kind = "human"; sort_group = 1
+            elif src == INSIGHT_AUTO_DIVERGENCE:
+                icon = INSIGHT_SOURCE_ICON.get(src, "⚠")
+                kind = "auto:divergence"; sort_group = 2
+            elif src == INSIGHT_AUTO_CACHE_DIFF:
+                icon = INSIGHT_SOURCE_ICON.get(src, "\U0001F527")
+                kind = "auto:cache_diff"; sort_group = 3
+            else:
+                continue    # skip auto:repo (audit cut) + unknown sources
+            when = ins.get("when") or ""
+            who = ins.get("who") or ""
+            text = ins.get("text") or ""
+            entries.append({
+                "icon":     icon,
+                "kind":     kind,
+                "headline": text if len(text) <= 140 else text[:137].rstrip() + "...",
+                "detail":   "",   # text already fits headline
+                "product":  path,
+                "when_iso": when,
+                "who":      who,
+                "meta_tail": "",
+                # Newest-first inside the group.
+                "sort_key": (sort_group, -_iso_to_ord(when), path),
+            })
+
+    # WORKLOG-mined findings, in reverse-chronological order (worklog is
+    # already sorted newest-first by mine_worklog).
+    wl_url = _worklog_url(git)
+    for e in worklog:
+        for item in e.get("items", []):
+            text = item.get("text") or ""
+            stat = item.get("stat") or ""
+            headline = (f"{stat} - " if stat else "") + \
+                       (text if len(text) <= 140 else text[:137].rstrip() + "...")
+            entries.append({
+                "icon":     WWL_ICON_WORKLOG,
+                "kind":     "worklog",
+                "headline": headline,
+                "detail":   "",
+                "product":  "",   # WORKLOG doesn't record catalog paths
+                "when_iso": (e.get("date") or "") + "T00:00:00Z",
+                "who":      e.get("author") or "",
+                "meta_tail": f'<a href="{_esc(wl_url)}" target="_blank" rel="noopener">'
+                             f'{_esc(e.get("title", "")[:70])}</a>',
+                "sort_key": (4, -_iso_to_ord((e.get("date") or "") + "T00:00:00Z"),
+                             text),
+            })
+
+    # Sort by the sort_key tuples; deterministic across runs.
+    entries.sort(key=lambda x: x["sort_key"])
+    total = len(entries)
+
+    # Human-insights empty-state prompt (per spec).
+    n_human = sum(1 for e in entries if e["kind"] == "human")
+
+    parts = ['<div class="wwl-section">',
+             '<h2>What we\'ve learned</h2>',
+             '<div class="sub">Every insight the team has recorded, folded '
+             'into one feed: curated headlines from EDA notebooks, findings '
+             'mined from WORKLOG.md, team notes on individual products, and '
+             'auto-generated signals when sample data drifts or a composite '
+             'role gets declared.</div>']
+    if n_human == 0:
+        parts.append('<div class="wwl-empty-team">No team notes yet on '
+                     'individual products. Add one with '
+                     '<code>python tools/product_scope.py --review acs/acs5 '
+                     '--insight "your observation"</code>.</div>')
+
+    def _row(e):
+        # Meta line composition: product link, when (relative), who, extra.
+        meta_bits = []
+        if e.get("product"):
+            meta_bits.append(f'<a href="#prod-{_esc(e["product"])}" '
+                             f'data-jump-path="{_esc(e["product"])}" '
+                             f'class="wti-path">{_esc(e["product"])}</a>')
+        if e.get("when_iso"):
+            when = _iso_to_dt(e["when_iso"])
+            rel = _rel_time_str(when) if when else e["when_iso"][:10]
+            meta_bits.append(f'<span title="{_esc(e["when_iso"])}">{_esc(rel)}</span>')
+        if e.get("who"):
+            meta_bits.append(_esc(e["who"]))
+        if e.get("meta_tail"):
+            meta_bits.append(e["meta_tail"])
+        meta_html = (' &middot; '.join(meta_bits)) if meta_bits else ""
+        detail_html = (f'<div class="wwl-detail">{_esc(e["detail"])}</div>'
+                       if e.get("detail") else "")
+        return ('<li>'
+                f'<div class="wwl-ico">{e["icon"]}</div>'
+                '<div class="wwl-body">'
+                f'<div class="wwl-head">{_esc(e["headline"])}</div>'
+                + detail_html +
+                (f'<div class="wwl-meta">{meta_html}</div>' if meta_html else "")
+                + '</div></li>')
+
+    visible = entries[:15]
+    hidden = entries[15:]
+    parts.append('<ul class="wwl-list">')
+    if not entries:
+        parts.append('<li><div class="wwl-body"><div class="wwl-head" '
+                     'style="color:var(--muted);font-style:italic">'
+                     'No findings recorded yet.</div></div></li>')
+    else:
+        parts.extend(_row(e) for e in visible)
+    parts.append('</ul>')
+    if hidden:
+        parts.append(f'<details class="wwl-more"><summary>Show all '
+                     f'{total} findings ({len(hidden)} more)</summary>'
+                     '<ul class="wwl-list" style="border-top:1px solid var(--ice)">')
+        parts.extend(_row(e) for e in hidden)
+        parts.append('</ul></details>')
+    parts.append('</div>')
+    return "".join(parts)
+
+def _iso_to_ord(when):
+    """Turn an ISO-8601 string into a sortable float (POSIX seconds).
+    0 on parse failure so unrecognised timestamps sort last with reverse
+    sort. Kept tiny because build_what_learned() uses it in a sort key."""
+    d = _iso_to_dt(when)
+    return d.timestamp() if d else 0.0
+
 def _build_reviewer_mode_details(fams, review, work, counts, worklog,
                                   notebooks, git=None):
     """Reviewer-mode data block, collapsed behind a <details> toggle at the
@@ -4262,36 +4480,10 @@ def _build_reviewer_mode_details(fams, review, work, counts, worklog,
                      f'<td>{hh["asserts"]}</td></tr>')
         h.append("</table>")
 
-    if FINDINGS:
-        h.append(f'<h2>Curated insights ({len(FINDINGS)})</h2>'
-                 '<div class="sub">Hand-written headline cards, edited in FINDINGS in product_scope.py. '
-                 'Each also appears on its product card.</div>')
-        for x in FINDINGS:
-            odd = " odd" if x["kind"] == "oddity" else ""
-            h.append(f'<div class="tk{odd}" style="max-width:1020px"><div class="tkh">'
-                     f'<b>{_esc(x["stat"])}</b>{_esc(x["headline"])}'
-                     f'<em>{_esc(x["family"])} &bull; nb {x["nb"]}</em></div>'
-                     f'<div class="tkd">{_esc(x["detail"])}</div></div>')
-
-    total = sum(len(e["items"]) for e in worklog)
-    h.append(f'<h2>From the work log ({total} findings, {len(worklog)} entries)</h2>'
-             '<div class="sub">Latest entry only. Follow the link for the full log.</div>')
-    if worklog:
-        e = worklog[0]
-        gh = (git or {}).get("github_slug") or ""
-        branch = (git or {}).get("branch") or "main"
-        if gh:
-            wl_url = f"https://github.com/{gh}/blob/{branch}/WORKLOG.md"
-        else:
-            wl_url = "file:///" + str((Path((git or {}).get("repo_abs", ".")) / "WORKLOG.md")
-                                       ).replace("\\", "/")
-        nb = (' &bull; EDA ' + e["nb"]) if e["nb"] else ""
-        h.append(f'<div class="wl"><div class="wlh">{_esc(e["title"])}'
-                 f'<span>{e["date"]} &bull; {_esc(e["author"])}{nb} &bull; '
-                 f'<a href="{_esc(wl_url)}" target="_blank" rel="noopener" '
-                 f'class="receipt-link">open WORKLOG.md</a></span></div></div>')
-    else:
-        h.append('<div class="nowork">No parseable entries in WORKLOG.md.</div>')
+    # Note: FINDINGS + WORKLOG headline used to render here in the pre-reframe
+    # Home tab. They now aggregate into build_what_learned() at the top of the
+    # tab as part of the unified insights feed (reframe pass commit #2). This
+    # block keeps the funnel + inventory + work depth + notebook health only.
     return "".join(h)
 
 def build_home(fams, review, work, counts, worklog, notebooks, probes, git=None,
@@ -4310,6 +4502,8 @@ def build_home(fams, review, work, counts, worklog, notebooks, probes, git=None,
     # Primary framing: where we are + recently touched.
     h.append(build_where_team_is(fams, review, work, probes, data_cache or {},
                                   git, repo))
+    # Aggregated feed: curated + WORKLOG + human + auto insights (commit #2).
+    h.append(build_what_learned(fams, review, worklog, git))
     # Everything else demoted behind a details toggle.
     rev_body = _build_reviewer_mode_details(fams, review, work, counts,
                                               worklog, notebooks, git)
