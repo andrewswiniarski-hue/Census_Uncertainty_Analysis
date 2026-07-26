@@ -459,6 +459,54 @@ DOMAIN_PATTERNS = {
     "geometry": [r"geometry", r"boundar", r"cartographic"],
 }
 
+# Start-here curriculum (UX pass 2026-07-26 commit #4). Five hand-ordered
+# products a first-time reader can walk through to build a working mental
+# model of Census data reliability. Each entry pairs the product with the
+# uncertainty concept it best illustrates. Every blurb is grounded in
+# either the phase-1 findings report or the seeded FOCUS product_review
+# entry - no fabrication. See the SOURCE citation on each line.
+#
+# Placement: renders below the phase-1 hero card on Home ("if you want to
+# read first, do that; if you want to explore in the tool, walk this list").
+# Order chosen so each concept builds on the previous one - sampling noise
+# is the intuitive starting point, then privacy noise (a totally different
+# mechanism), then a demo dataset that lets you SEE the privacy noise, then
+# imputation (the third dimension), then the pre-DP baseline as a compare.
+CURRICULUM = [
+    {"path":  "acs/acs5",
+     "title": "American Community Survey 5-year",
+     "concept": "sampling noise",
+     "why":   "How margins of error work, and why small subgroups get noisy "
+              "fast. This is the noise the Bureau publishes.",
+     "source":"seeded FOCUS entry + findings report Section 3"},
+    {"path":  "dec/dhc",
+     "title": "2020 Decennial Demographic and Housing Characteristics",
+     "concept": "differential privacy",
+     "why":   "How the Bureau injects deliberate noise to protect "
+              "confidentiality, and when that noise affects usability.",
+     "source":"seeded FOCUS entry + findings report Section 4"},
+    {"path":  "dec/das-demo",
+     "title": "2020 DAS Demonstration files",
+     "concept": "privacy noise in action",
+     "why":   "Real before-and-after data showing DP noise scale by "
+              "geography. The dataset used to measure privacy noise directly.",
+     "source":"seeded uncertainty_metrics + findings report Section 4"},
+    {"path":  "acs/acs5/subject",
+     "title": "ACS 5-year Subject Tables",
+     "concept": "imputation",
+     "why":   "Includes allocation tables - which values were filled in by "
+              "the Census when respondents left them blank. Independent of "
+              "the published margin of error.",
+     "source":"seeded FOCUS entry (allocation_source) + findings report Section 5"},
+    {"path":  "dec/sf1",
+     "title": "2010 Summary File 1",
+     "concept": "the pre-DP baseline",
+     "why":   "Compare against DHC/DAS-demo to see what the 2020 DP system "
+              "changed. Protected by the older 'swapping' method - a "
+              "documented residue remains.",
+     "source":"seeded FOCUS entry (benchmark) + findings report Section 4"},
+]
+
 # Curated insight cards, written by the team, tagged with the product family they
 # belong to. Mined WORKLOG findings appear separately on the Home tab; they are NOT
 # attributed to a product, because WORKLOG does not record catalog paths and guessing
@@ -2597,6 +2645,53 @@ table.rep td{border-bottom:1px solid var(--ice);padding:7px 9px;vertical-align:t
      margin-top:0;}
 .wwl-tail b{color:var(--navy);font-weight:var(--w-head);}
 .wwl-tail a{color:#3A4890;text-decoration:none;border-bottom:1px dotted #8FA8D8;}
+/* Start-here curriculum (UX pass 2026-07-26 commit #4).
+   Five-item ordered list that walks a first-time reader through the four
+   uncertainty mechanisms via the products that illustrate them best. Sits
+   directly below the phase-1 hero card on Home. Type steps 7 & 8 anchor the
+   numbers so the eye lands on 1..5 first; each item is scannable in <5s. */
+.curriculum-section{margin:0 0 30px;max-width:1020px;}
+.curriculum-intro{font-size:var(--fs-3);color:var(--ink);line-height:var(--lh-3);
+       margin:8px 0 18px;max-width:820px;font-weight:var(--w-body);}
+.curriculum-intro b{color:var(--navy);font-weight:var(--w-emph);}
+.curriculum-list{display:flex;flex-direction:column;gap:12px;}
+.curriculum-item{display:grid;grid-template-columns:72px 1fr auto;gap:16px;
+       align-items:flex-start;padding:16px 20px;border:1px solid var(--line);
+       border-radius:10px;background:#FBFCFE;transition:border-color .12s ease,
+       box-shadow .12s ease;}
+.curriculum-item:hover{border-color:var(--navy);
+       box-shadow:0 2px 6px rgba(31,42,92,0.08);}
+.curriculum-num{font-family:var(--f-display);font-size:var(--fs-8);
+       line-height:1;color:var(--gold);font-weight:var(--w-head);
+       letter-spacing:var(--lsp-tighter);text-align:center;
+       font-variant-numeric:tabular-nums;padding-top:2px;}
+.curriculum-body{min-width:0;}
+.curriculum-title-row{display:flex;align-items:baseline;gap:10px;
+       flex-wrap:wrap;margin-bottom:4px;}
+.curriculum-title{font-family:var(--f-display);font-size:var(--fs-5);
+       color:var(--navy);font-weight:var(--w-head);
+       letter-spacing:var(--lsp-tight);line-height:var(--lh-4);}
+.curriculum-path{font-family:var(--f-mono);font-size:var(--fs-1);
+       color:var(--muted);background:var(--ice);padding:1px 8px;
+       border-radius:5px;font-weight:var(--w-emph);letter-spacing:0;}
+.curriculum-concept{font-family:var(--f-sans);font-size:var(--fs-2);
+       color:var(--gold);font-weight:var(--w-head);text-transform:uppercase;
+       letter-spacing:.10em;margin-bottom:6px;}
+.curriculum-why{font-size:var(--fs-2);color:var(--ink);line-height:var(--lh-3);
+       max-width:640px;}
+.curriculum-cta{align-self:center;background:var(--navy);color:#fff;
+       text-decoration:none;font-weight:var(--w-emph);font-size:var(--fs-2);
+       padding:9px 16px;border-radius:6px;white-space:nowrap;
+       transition:background .12s ease-out;letter-spacing:.01em;
+       border:0;font-family:inherit;cursor:pointer;line-height:1.2;}
+.curriculum-cta:hover{background:#0F1740;}
+.curriculum-cta:focus-visible{outline:2px solid var(--gold);outline-offset:2px;}
+.curriculum-cta .arrow{margin-left:5px;}
+@media(max-width:700px){
+  .curriculum-item{grid-template-columns:56px 1fr;grid-template-rows:auto auto;}
+  .curriculum-num{font-size:var(--fs-7);}
+  .curriculum-cta{grid-column:2;justify-self:flex-start;margin-top:4px;}
+}
 /* Sankey research pipeline hero (UX pass 2026-07-26 commit #3).
    Sits ABOVE the landscape treemap on Home. Answers a different question
    from the treemap: 'where in the pipeline are we?' vs. 'what's the shape of
@@ -2617,13 +2712,13 @@ table.rep td{border-bottom:1px solid var(--ice);padding:7px 9px;vertical-align:t
 .sankey-node:focus-visible .sankey-node-rect{stroke:var(--navy);stroke-width:2;}
 .sankey-node-rect{stroke:rgba(31,42,92,0.35);stroke-width:1;
        transition:filter .12s ease;}
-.sankey-node-label{font-family:var(--f-sans);font-size:12px;
+.sankey-node-label{font-family:var(--f-sans);font-size:var(--fs-1);
        font-weight:var(--w-head);fill:var(--navy);
        text-anchor:middle;pointer-events:none;letter-spacing:-0.01em;}
-.sankey-node-count{font-family:ui-monospace,"Cascadia Mono","SF Mono",Consolas,monospace;
-       font-size:16px;font-weight:var(--w-head);fill:var(--navy);
+.sankey-node-count{font-family:var(--f-mono);
+       font-size:var(--fs-3);font-weight:var(--w-head);fill:var(--navy);
        font-variant-numeric:tabular-nums;text-anchor:middle;pointer-events:none;}
-.sankey-node-sub{font-family:var(--f-sans);font-size:10px;
+.sankey-node-sub{font-family:var(--f-sans);font-size:var(--fs-1);
        fill:var(--muted);text-anchor:middle;pointer-events:none;}
 .sankey-ribbon{opacity:.55;transition:opacity .14s ease;pointer-events:none;}
 .sankey-node:hover ~ .sankey-ribbon-group .sankey-ribbon{opacity:.35;}
@@ -3505,7 +3600,10 @@ document.querySelectorAll('.filter input').forEach(function(inp){
     }
   }
   document.addEventListener('click', function(e){
-    var a = e.target.closest && e.target.closest('a.wti-path[data-jump-path]');
+    /* UX pass 2026-07-26 commit #4: broaden the selector so the curriculum
+       'Open card' CTAs (class .curriculum-cta) also participate. Anything
+       carrying data-jump-path is eligible. */
+    var a = e.target.closest && e.target.closest('[data-jump-path]');
     if (!a) return;
     e.preventDefault();
     var path = a.getAttribute('data-jump-path');
@@ -5712,6 +5810,65 @@ def build_phase1_hero_card():
         f'<span class="hero-meta">{_esc(PHASE1_REPORT_MIN_READ)}</span>'
         f'</div>')
 
+def build_curriculum_card(fams):
+    """Start-here 5-product curriculum (UX pass 2026-07-26 commit #4).
+
+    Renders below the phase-1 hero card on Home. Each of the 5 CURRICULUM
+    products becomes a scannable numbered card - large numeral, plain-English
+    concept + reasoning, and an 'Open card' CTA that jumps to the matching
+    product card on the Products tab. All 5 blurbs are grounded in either the
+    phase-1 findings report or the seeded FOCUS product_review entries; the
+    source of each blurb is documented in the CURRICULUM constant.
+
+    Products missing from the catalog (defensive - shouldn't happen given
+    all 5 are seeded FOCUS) get a muted placeholder so the numbering stays
+    intact rather than collapsing.
+    """
+    parts = [
+        '<div class="curriculum-section" role="region" '
+        'aria-label="Start here: five-product curriculum">',
+        '<h2>Start here &mdash; 5 products to learn Census data reliability</h2>',
+        '<div class="curriculum-intro">'
+        'If you want to <b>read first</b>, open the Phase 1 findings report '
+        'above. If you want to <b>explore in the tool</b>, walk this list top '
+        'to bottom. Each product illustrates one of the four uncertainty '
+        'mechanisms &mdash; sampling noise, differential privacy, imputation, '
+        'and pre-DP baselines.'
+        '</div>',
+        '<div class="curriculum-list">'
+    ]
+    for i, entry in enumerate(CURRICULUM, start=1):
+        path = entry["path"]
+        exists = path in fams
+        # Jump target on the Products tab (matching #prod-<path> id).
+        # data-jump-path hooks the same handler used by "Recently touched".
+        cta_html = (
+            f'<a class="curriculum-cta" href="#prod-{_esc(path)}" '
+            f'data-jump-path="{_esc(path)}" '
+            f'aria-label="Open the {_esc(entry["title"])} card">'
+            f'Open card <span class="arrow" aria-hidden="true">&rarr;</span>'
+            f'</a>'
+            if exists else
+            '<span class="curriculum-cta" style="background:var(--muted);'
+            'cursor:not-allowed" aria-disabled="true">Not in catalog</span>'
+        )
+        parts.append(
+            f'<div class="curriculum-item">'
+            f'<div class="curriculum-num" aria-hidden="true">{i}</div>'
+            f'<div class="curriculum-body">'
+            f'<div class="curriculum-concept">Learn: {_esc(entry["concept"])}</div>'
+            f'<div class="curriculum-title-row">'
+            f'<span class="curriculum-title">{_esc(entry["title"])}</span>'
+            f'<code class="curriculum-path">{_esc(path)}</code>'
+            f'</div>'
+            f'<div class="curriculum-why">{_esc(entry["why"])}</div>'
+            f'</div>'
+            f'{cta_html}'
+            f'</div>'
+        )
+    parts.append('</div></div>')
+    return "".join(parts)
+
 def build_where_team_is(fams, review, work, probes, data_cache, git, repo):
     """Home-tab top: named-tier research-pipeline rail + 'Recently touched' list.
 
@@ -6979,6 +7136,11 @@ def build_home(fams, review, work, counts, worklog, notebooks, probes, git=None,
     # regardless of Start-here banner dismissal (banner lives outside the
     # panel and hides itself via localStorage).
     h.append(build_phase1_hero_card())
+    # UX pass 2026-07-26 commit #4: Start-here 5-product curriculum. Renders
+    # right below the phase-1 hero as the "if you want to explore in the tool"
+    # path (the report is the "if you want to read first" path). Both feed
+    # the same mental model, addressed to two different learning styles.
+    h.append(build_curriculum_card(fams))
     # Primary framing: where we are + recently touched.
     h.append(build_where_team_is(fams, review, work, probes, data_cache or {},
                                   git, repo))
