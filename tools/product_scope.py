@@ -2597,6 +2597,38 @@ table.rep td{border-bottom:1px solid var(--ice);padding:7px 9px;vertical-align:t
      margin-top:0;}
 .wwl-tail b{color:var(--navy);font-weight:var(--w-head);}
 .wwl-tail a{color:#3A4890;text-decoration:none;border-bottom:1px dotted #8FA8D8;}
+/* Sankey research pipeline hero (UX pass 2026-07-26 commit #3).
+   Sits ABOVE the landscape treemap on Home. Answers a different question
+   from the treemap: 'where in the pipeline are we?' vs. 'what's the shape of
+   what exists?'. Pure inline SVG - no libraries, ~150 LOC of Python emits
+   Bezier ribbons + stacked-bar nodes. Compact by design (~180px tall).
+   Click on a stage node jumps to the Products tab. */
+.sankey-section{margin:0 0 22px;max-width:1020px;}
+.sankey-caption-top{font-size:var(--fs-2);color:var(--muted);
+       line-height:var(--lh-3);margin:6px 0 8px;max-width:920px;}
+.sankey-caption-top b{color:var(--navy);font-weight:var(--w-emph);}
+.sankey-wrap{border:1px solid var(--line);border-radius:10px;
+       background:#FBFCFE;padding:14px 18px 10px;
+       box-shadow:0 1px 2px rgba(31,42,92,0.05);}
+.sankey-svg{display:block;width:100%;height:auto;}
+.sankey-node{cursor:pointer;transition:filter .12s ease;}
+.sankey-node:hover .sankey-node-rect{filter:brightness(0.92);}
+.sankey-node:focus{outline:none;}
+.sankey-node:focus-visible .sankey-node-rect{stroke:var(--navy);stroke-width:2;}
+.sankey-node-rect{stroke:rgba(31,42,92,0.35);stroke-width:1;
+       transition:filter .12s ease;}
+.sankey-node-label{font-family:var(--f-sans);font-size:12px;
+       font-weight:var(--w-head);fill:var(--navy);
+       text-anchor:middle;pointer-events:none;letter-spacing:-0.01em;}
+.sankey-node-count{font-family:ui-monospace,"Cascadia Mono","SF Mono",Consolas,monospace;
+       font-size:16px;font-weight:var(--w-head);fill:var(--navy);
+       font-variant-numeric:tabular-nums;text-anchor:middle;pointer-events:none;}
+.sankey-node-sub{font-family:var(--f-sans);font-size:10px;
+       fill:var(--muted);text-anchor:middle;pointer-events:none;}
+.sankey-ribbon{opacity:.55;transition:opacity .14s ease;pointer-events:none;}
+.sankey-node:hover ~ .sankey-ribbon-group .sankey-ribbon{opacity:.35;}
+.sankey-caption-bottom{font-size:var(--fs-1);color:var(--muted);
+       margin:10px 2px 0;text-align:center;font-style:italic;}
 /* "Census data landscape" viz (Phase A ceiling-push #1). SVG squarified
    treemap: Kind (outer 4-way partition) -> Program (inner partition), area
    proportional to product count, color shaded by max team-reach tier.
@@ -3026,6 +3058,32 @@ document.addEventListener('click', function(e){
   var old = b.textContent; b.textContent = 'Downloaded ✓';
   b.classList.add('done');
   setTimeout(function(){ b.textContent = old; b.classList.remove('done'); }, 1800);
+});
+/* --- UX pass 2026-07-26 commit #3. Sankey pipeline stage click handler.
+   Clicks on a Sankey node (a stacked bar for one pipeline stage) jump the
+   reader into the Products tab so they can start exploring products at
+   that stage. Keeps the click behaviour discoverable but doesn't apply a
+   hard filter (facet system is orthogonal and adding a fifth facet just
+   for pipeline stage would be more mechanism than the click needs). */
+document.addEventListener('click', function(e){
+  var n = e.target.closest && e.target.closest('.sankey-node[data-pipeline-stage]');
+  if(!n) return;
+  e.preventDefault();
+  // Focus the first Products tab (first non-home tab); fall through to home if none.
+  var first = document.querySelector('.tab.tab-am') ||
+              document.querySelector('.tab.tab-kind');
+  if(first){ first.click(); }
+  // Keep the reader roughly where they were - scroll the panel container into
+  // view. Native anchor scrolling would jump past the freshbar.
+  var wrap = document.querySelector('.wrap');
+  if(wrap && wrap.scrollIntoView){ wrap.scrollIntoView({behavior:'smooth',block:'start'}); }
+});
+document.addEventListener('keydown', function(e){
+  if(e.key !== 'Enter' && e.key !== ' ') return;
+  var n = e.target && e.target.classList &&
+          e.target.classList.contains('sankey-node') ? e.target : null;
+  if(!n) return;
+  e.preventDefault(); n.click();
 });
 /* --- Beginner-UX pass commit #2. Start-here banner dismissal.
    Reads localStorage on load; if set, hides the banner. Click the &times;
@@ -6464,6 +6522,209 @@ def _lscape_row_inner_h(share, n_progs):
     row_min = LSCAPE_ROW_MIN_H if n_progs <= 1 else max(LSCAPE_ROW_MIN_H, 78)
     return int(max(row_min, min(LSCAPE_ROW_MAX_H, target)))
 
+# ============================================================================
+# SANKEY RESEARCH PIPELINE (UX pass 2026-07-26 commit #3)
+# ============================================================================
+# Compact 4-stage flow diagram: Catalog -> Probed -> Sampled -> Reviewed.
+# Renders ABOVE the landscape treemap on Home. Different question from the
+# treemap: "where in the pipeline are we?" vs "what's the shape of the space?"
+# Pure SVG - Bezier ribbons + node rectangles - no libraries. ~150 LOC.
+
+# Palette matches the pipeline rail from commit #2 so the eye reads the same
+# vocabulary in two places. Each node's fill is that stage's swatch colour;
+# the ribbon flowing INTO a stage is drawn in that stage's colour at low alpha.
+SANKEY_STAGE_ORDER = ["catalog", "probed", "sampled", "reviewed"]
+SANKEY_STAGE_LABEL = {
+    "catalog":  "Cataloged",
+    "probed":   "Probed",
+    "sampled":  "Sampled",
+    "reviewed": "Reviewed",
+}
+SANKEY_STAGE_FILL = {
+    "catalog":  "#DDE3EE",
+    "probed":   "#B7CDF6",
+    "sampled":  "#8BD3CC",
+    "reviewed": "#8FCD97",
+}
+
+def _sankey_cumulative_counts(pc):
+    """Turn mutually-exclusive pipeline-stage counts into cumulative
+    'reached-at-least' counts for the Sankey flow.
+
+    Model: reviewed => implies sampled + probed; sampled => implies probed;
+    probed => reached (obviously). Reviewed products in the current tool
+    can bypass sampling and probing (uncertainty_metrics was backfilled from
+    the phase-1 findings report, not from an API sample), but for the FLOW
+    visual we treat each deeper tier as having conceptually passed through
+    the shallower ones - otherwise the diagram would show three disconnected
+    puddles rather than a pipeline.
+
+    Returns: dict {stage: n} where n = # products that reached at least
+    that stage. catalog is always the total.
+    """
+    return {
+        "catalog":  pc["total"],
+        "probed":   pc["probed"] + pc["sampled"] + pc["reviewed"],
+        "sampled":  pc["sampled"] + pc["reviewed"],
+        "reviewed": pc["reviewed"],
+    }
+
+def _sankey_ribbon_path(x1, y1t, y1b, x2, y2t, y2b):
+    """Cubic Bezier ribbon path from a source stripe (x1, y1t..y1b) to a
+    target stripe (x2, y2t..y2b). Standard sankey ribbon: horizontal control
+    points at the midpoint x so the ribbon comes out flat on both ends.
+    """
+    mx = (x1 + x2) / 2.0
+    # Top edge: (x1, y1t) -> curve -> (x2, y2t)
+    # Bottom edge: (x2, y2b) -> curve -> (x1, y1b)
+    return (
+        f"M {x1:.2f} {y1t:.2f} "
+        f"C {mx:.2f} {y1t:.2f}, {mx:.2f} {y2t:.2f}, {x2:.2f} {y2t:.2f} "
+        f"L {x2:.2f} {y2b:.2f} "
+        f"C {mx:.2f} {y2b:.2f}, {mx:.2f} {y1b:.2f}, {x1:.2f} {y1b:.2f} Z"
+    )
+
+def build_sankey_pipeline(pc):
+    """Emit an inline-SVG Sankey diagram for the four research-pipeline
+    stages. `pc` is a _pipeline_counts() dict.
+
+    Returns a full <section> HTML fragment (caption + wrap + SVG + caption).
+    Compact: ~180px SVG height, full-width. Click on any node jumps to the
+    Products tab (handler wired in the shared inline <script>).
+    """
+    # Cumulative flow counts (reviewed implies sampled implies probed).
+    cc = _sankey_cumulative_counts(pc)
+
+    # SVG geometry.
+    W = 1000                   # viewBox width
+    H = 180                    # viewBox height
+    top_pad = 30               # room for stage labels
+    bot_pad = 40               # room for stage counts + "of N total"
+    inner_h = H - top_pad - bot_pad   # 110 - the max node height
+    node_w = 22
+    total = cc["catalog"] or 1
+    # Y-scale: pixels per unit product (max node = catalog = full inner_h).
+    ypp = inner_h / total
+
+    # Node x centers evenly spaced across the width.
+    n_stages = len(SANKEY_STAGE_ORDER)
+    x_left  = 90                       # room for the tallest left label
+    x_right = W - 90
+    x_step = (x_right - x_left) / (n_stages - 1)
+    node_xs = [x_left + i * x_step for i in range(n_stages)]
+
+    # Node rectangles: each centered on its x, height proportional to the
+    # cumulative count. Anchor by TOP so all nodes hang from a shared baseline
+    # (visually cleaner than centering when nodes span such different sizes).
+    node_top_y = top_pad
+    node_geoms = []   # per-stage: (x, y_top, y_bot, h, count)
+    for i, stage in enumerate(SANKEY_STAGE_ORDER):
+        n = cc[stage]
+        h = max(2.0, n * ypp)          # 2px floor so a 0-count node stays visible
+        cx = node_xs[i]
+        node_geoms.append({
+            "stage": stage, "n": n,
+            "x": cx - node_w / 2, "y_top": node_top_y,
+            "y_bot": node_top_y + h, "h": h,
+            "cx": cx,
+        })
+
+    # Emit SVG.
+    svg = [
+        f'<svg class="sankey-svg" xmlns="http://www.w3.org/2000/svg" '
+        f'viewBox="0 0 {W} {H}" width="100%" preserveAspectRatio="xMidYMid meet" '
+        f'role="img" aria-label="Research pipeline flow: '
+        f'{cc["catalog"]:,} cataloged, {cc["probed"]:,} probed, '
+        f'{cc["sampled"]:,} sampled, {cc["reviewed"]:,} reviewed.">'
+    ]
+
+    # Ribbons: one per adjacent pair of stages, width = destination count
+    # (the source count minus the drop = advance = destination count).
+    # Ribbon attaches to the FULL height of the destination node and to the
+    # TOP portion of the source node equal to that destination count.
+    svg.append('<g class="sankey-ribbon-group">')
+    for i in range(len(node_geoms) - 1):
+        src = node_geoms[i]
+        dst = node_geoms[i + 1]
+        # Advance flow = destination count. Source stripe = top h_src px of
+        # source (same # of units). Destination stripe = full destination.
+        if dst["n"] <= 0 or src["n"] <= 0:
+            continue
+        adv_h = dst["n"] * ypp
+        # Source right edge: (x = src.x + node_w, top = src.y_top,
+        # bot = src.y_top + adv_h)
+        x1 = src["x"] + node_w
+        y1t = src["y_top"]
+        y1b = src["y_top"] + max(2.0, adv_h)
+        # Destination left edge: (x = dst.x, top = dst.y_top,
+        # bot = dst.y_bot)
+        x2 = dst["x"]
+        y2t = dst["y_top"]
+        y2b = dst["y_bot"]
+        fill = SANKEY_STAGE_FILL[dst["stage"]]
+        path = _sankey_ribbon_path(x1, y1t, y1b, x2, y2t, y2b)
+        svg.append(
+            f'<path class="sankey-ribbon" d="{path}" fill="{fill}" '
+            f'stroke="none">'
+            f'<title>{dst["n"]:,} advanced from {SANKEY_STAGE_LABEL[src["stage"]]} '
+            f'to {SANKEY_STAGE_LABEL[dst["stage"]]}</title>'
+            f'</path>')
+    svg.append('</g>')
+
+    # Nodes (drawn AFTER ribbons so nodes sit on top of ribbon edges).
+    for g in node_geoms:
+        stage = g["stage"]
+        fill = SANKEY_STAGE_FILL[stage]
+        label = SANKEY_STAGE_LABEL[stage]
+        # Group: clickable, keyboard-focusable.
+        svg.append(
+            f'<g class="sankey-node" data-pipeline-stage="{stage}" '
+            f'tabindex="0" role="button" '
+            f'aria-label="{label}: {g["n"]:,} products. '
+            f'Click to jump to the products tab.">'
+        )
+        svg.append(
+            f'<rect class="sankey-node-rect" x="{g["x"]:.2f}" y="{g["y_top"]:.2f}" '
+            f'width="{node_w}" height="{g["h"]:.2f}" rx="3" ry="3" '
+            f'fill="{fill}"/>'
+        )
+        # Stage label ABOVE the node.
+        svg.append(
+            f'<text class="sankey-node-label" x="{g["cx"]:.2f}" '
+            f'y="{g["y_top"] - 12:.2f}">{label}</text>'
+        )
+        # Count BELOW the node.
+        svg.append(
+            f'<text class="sankey-node-count" x="{g["cx"]:.2f}" '
+            f'y="{g["y_bot"] + 18:.2f}">{g["n"]:,}</text>'
+        )
+        # "products" subtext (kept tiny to preserve the compact height).
+        svg.append(
+            f'<text class="sankey-node-sub" x="{g["cx"]:.2f}" '
+            f'y="{g["y_bot"] + 32:.2f}">products</text>'
+        )
+        svg.append('</g>')
+
+    svg.append('</svg>')
+
+    return (
+        '<div class="sankey-section">'
+        '<h2>Research pipeline</h2>'
+        '<div class="sankey-caption-top">'
+        'How products move from the Census catalog to a fully reviewed '
+        'uncertainty note. <b>Ribbon width</b> shows the number of products '
+        'that carried forward to the next stage; the shrinking node stacks '
+        'show how many dropped off along the way.'
+        '</div>'
+        '<div class="sankey-wrap">'
+        + "".join(svg) +
+        '<div class="sankey-caption-bottom">'
+        'Click any stage to jump to the Products tab.'
+        '</div>'
+        '</div>'
+        '</div>'
+    )
+
 def build_landscape_viz(fams, work, probes, data_cache):
     """Home-tab landscape: stacked full-width rows, one per dataset kind, each
     with its own squarified treemap of programs. Row height is proportional
@@ -6723,6 +6984,12 @@ def build_home(fams, review, work, counts, worklog, notebooks, probes, git=None,
                                   git, repo))
     # Aggregated feed: curated + WORKLOG + human + auto insights.
     h.append(build_what_learned(fams, review, worklog, git))
+    # UX pass 2026-07-26 commit #3: Sankey research-pipeline flow.
+    # Sits ABOVE the landscape treemap - different question (pipeline
+    # progress vs. shape of the space). The treemap stays as the landscape
+    # awareness view.
+    pc = _pipeline_counts(fams, review, work, probes, data_cache or {})
+    h.append(build_sankey_pipeline(pc))
     # Landscape viz: hierarchical Kind -> Program treemap.
     h.append(build_landscape_viz(fams, work, probes, data_cache or {}))
     return "".join(h)
