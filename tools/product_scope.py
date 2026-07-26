@@ -162,6 +162,40 @@ def insight_hash(source, text):
     import hashlib
     return hashlib.sha256((str(source) + str(text)).encode("utf-8")).hexdigest()[:16]
 
+# ---- Phase-1 findings report anchors (2026-07-26) ---------------------------
+# Repo-relative path to the plain-language Phase 1 findings report. Used both
+# by the Home-tab hero card CTA and by the per-card "Related in the Phase 1
+# report" footer link. The path resolves against wherever product_report.html
+# sits (repo root), so any teammate opening the report locally lands in the
+# same file, and on GitHub the same href resolves to the rendered .md.
+PHASE1_REPORT_PATH = "docs/phase1-findings-report.md"
+PHASE1_REPORT_MIN_READ = "10 min read"
+
+# Products the phase-1 findings report EXPLICITLY discusses. Section anchors
+# use GitHub's slugified-header rules (lowercase, punctuation stripped, spaces
+# and em-dashes collapsed to '-') so the same href works on github.com and,
+# when unresolved, gracefully falls back to the top of the .md file locally.
+# Additions here must trace back to a specific report section - no guessing.
+PHASE1_REPORT_SECTIONS = {
+    # Section 3 - Sampling noise (EDA 01-03). ACS 5-year is the primary CV
+    # source across findings 1, 2, 3.
+    "acs/acs5":         ("3-sampling-noise-the-law-of-shrinking-places-eda-0103",
+                         "Section 3 - Sampling noise"),
+    "acs/acs5/subject": ("3-sampling-noise-the-law-of-shrinking-places-eda-0103",
+                         "Section 3 - Sampling noise (subject tables)"),
+    "acs/acs5/profile": ("3-sampling-noise-the-law-of-shrinking-places-eda-0103",
+                         "Section 3 - Sampling noise"),
+    "acs/acs5/cprofile":("3-sampling-noise-the-law-of-shrinking-places-eda-0103",
+                         "Section 3 - Sampling noise"),
+    # Section 4 - Privacy noise (EDA 04). DHC, SF1 baseline, DAS demo.
+    "dec/dhc":          ("4-privacy-noise-a-fixed-cost-that-small-places-pay-eda-04",
+                         "Section 4 - Privacy noise"),
+    "dec/sf1":          ("4-privacy-noise-a-fixed-cost-that-small-places-pay-eda-04",
+                         "Section 4 - 2010 SF1 baseline used against DHC noise"),
+    "dec/das-demo":     ("4-privacy-noise-a-fixed-cost-that-small-places-pay-eda-04",
+                         "Section 4 - DAS demonstration data"),
+}
+
 # Tabs, from the Bureau's own dataset flags. Not our categories.
 KINDS = ["Aggregate tables", "Microdata", "Time series", "Uncategorized"]
 KIND_BLURB = {
@@ -2108,6 +2142,45 @@ header p{color:#CADCFC;font-size:13px;max-width:940px;}
      border:0;color:var(--muted);font-size:16px;line-height:1;cursor:pointer;
      padding:4px 6px;border-radius:4px;font-family:inherit;}
 .starthere .sh-dismiss:hover{background:var(--ice);color:var(--navy);}
+/* Phase-1 findings report hero card (2026-07-26). Sits at the top of the Home
+   panel, above "Where the team is". Distinct from other cards: warmer gold
+   accent, larger type, book emoji anchor. The single most important call to
+   action for a first-time reader - the report is the plain-English tour that
+   makes the rest of the tool make sense. */
+.home-hero-p1{background:linear-gradient(135deg,#FFF6DC 0%,#FBF0C2 100%);
+     border:1.5px solid var(--gold);border-radius:10px;
+     padding:18px 22px 20px;margin:0 0 26px;max-width:1020px;
+     box-shadow:0 2px 6px rgba(201,162,39,0.14);position:relative;}
+.home-hero-p1 .hero-eyebrow{color:#7A5C0F;font-weight:700;font-size:10.5px;
+     letter-spacing:.16em;text-transform:uppercase;margin-bottom:6px;}
+.home-hero-p1 .hero-title{font-family:Georgia,serif;color:var(--navy);
+     font-size:19.5px;font-weight:700;line-height:1.28;margin:0 0 8px;}
+.home-hero-p1 .hero-title .hero-emoji{font-size:22px;margin-right:9px;
+     vertical-align:-1px;}
+.home-hero-p1 .hero-body{color:#3A2E0B;font-size:13.5px;line-height:1.55;
+     margin:0 0 14px;max-width:820px;}
+.home-hero-p1 .hero-cta{display:inline-block;background:var(--navy);color:#fff;
+     text-decoration:none;font-weight:700;font-size:13px;letter-spacing:.02em;
+     padding:9px 16px;border-radius:6px;
+     box-shadow:0 1px 2px rgba(31,42,92,0.20);transition:background .12s ease-out;}
+.home-hero-p1 .hero-cta:hover{background:#0F1740;}
+.home-hero-p1 .hero-cta:focus-visible{outline:2px solid var(--gold);
+     outline-offset:3px;}
+.home-hero-p1 .hero-cta .arrow{margin-left:6px;}
+.home-hero-p1 .hero-meta{display:inline-block;margin-left:14px;color:#6B5518;
+     font-size:11.5px;font-style:italic;vertical-align:middle;}
+/* Phase-1 report footer link on card drill-downs (2026-07-26). Small tinted
+   row anchoring the drill-down back to the report section that covers this
+   product. Same gold-family palette as the hero card so the two read as one
+   system. */
+.ql-d-p1link{background:#FBF6E4;border:1px solid #E8D9A5;border-radius:5px;
+     padding:8px 11px;margin:8px 0 2px;font-size:12px;color:#4E3E11;
+     line-height:1.45;}
+.ql-d-p1link .p1-label{color:#7A5C0F;font-weight:700;font-size:10.5px;
+     letter-spacing:.10em;text-transform:uppercase;margin-right:8px;}
+.ql-d-p1link a{color:var(--navy);text-decoration:none;
+     border-bottom:1px dotted #B69B45;font-weight:600;}
+.ql-d-p1link a:hover{color:#3A4890;border-bottom-style:solid;}
 /* Beginner-UX pass commit #2. Inline glossary tooltip. Circle-question after a
    term; hover reveals the definition. Pure CSS (no JS needed). ::after tooltip
    positions above the ? and pointer-events:none so it can't intercept clicks.
@@ -4337,6 +4410,19 @@ def _ql_catalog_detail_html(f, non_api, uncertainty_metrics=""):
         parts.append('<div class="ql-d-row"><span class="ql-k">Uncertainty</span> '
                      '<span class="ql-muted">not yet documented - fill '
                      '<code>uncertainty_metrics</code> in product_review.json.</span></div>')
+    # Phase-1 findings report cross-link (2026-07-26). Turns the tool into a
+    # wayfinder into the report - not a replacement for it. Only rendered when
+    # this product's path appears in PHASE1_REPORT_SECTIONS (i.e. the report
+    # covers it explicitly).
+    p1 = PHASE1_REPORT_SECTIONS.get(f.get("path", ""))
+    if p1:
+        anchor, section_label = p1
+        href = f"{PHASE1_REPORT_PATH}#{anchor}"
+        parts.append('<div class="ql-d-p1link">'
+                     '<span class="p1-label">&#128214; Phase 1 report</span>'
+                     f'<a href="{_esc(href)}" target="_blank" rel="noopener">'
+                     f'{_esc(section_label)} &rarr;</a>'
+                     '</div>')
     return "".join(parts)
 
 def _ql_empty_state_html(f, tier, non_api):
@@ -5271,6 +5357,37 @@ def _recency_signals(fams, review, work, probes, data_cache, repo):
                              -(r["when"].timestamp() if r["when"] else 0),
                              r["path"]))
     return out
+
+def build_phase1_hero_card():
+    """Home-tab hero card (2026-07-26). Renders as the very first element in
+    the Home panel, above "Where the team is", so it survives dismissal of the
+    Start-here banner (which is outside the panel and gets hidden per-machine
+    once acknowledged). The report it points at is the plain-English tour that
+    frames what everything else in the tool is measuring - sampling noise,
+    imputation, differential privacy, and the composite score we're building.
+    Warm gold accent + book emoji make it visually distinct from the neutral
+    grey/navy cards below."""
+    return (
+        f'<div class="home-hero-p1" role="region" '
+        f'aria-label="New here? Start with the Phase 1 findings report">'
+        f'<div class="hero-eyebrow">New here? Start here.</div>'
+        f'<div class="hero-title">'
+        f'<span class="hero-emoji" aria-hidden="true">&#128214;</span>'
+        f'Read the team&rsquo;s Phase 1 findings report first.'
+        f'</div>'
+        f'<div class="hero-body">'
+        f'A plain-English tour of how Census data reliability actually works &mdash; '
+        f'sampling noise, imputation, differential privacy, the composite score, '
+        f'and what we found while analyzing New Jersey ACS and Decennial data. '
+        f'Everything else in this tool makes more sense after you&rsquo;ve read it.'
+        f'</div>'
+        f'<a class="hero-cta" href="{_esc(PHASE1_REPORT_PATH)}" '
+        f'target="_blank" rel="noopener">'
+        f'Open the Phase 1 findings report'
+        f'<span class="arrow" aria-hidden="true">&rarr;</span>'
+        f'</a>'
+        f'<span class="hero-meta">{_esc(PHASE1_REPORT_MIN_READ)}</span>'
+        f'</div>')
 
 def build_where_team_is(fams, review, work, probes, data_cache, git, repo):
     """Home-tab top: coverage bars + 'Recently touched' list. Renders in place
@@ -6288,6 +6405,11 @@ def build_home(fams, review, work, counts, worklog, notebooks, probes, git=None,
     h = []
     if diff is not None:
         h.append(build_diff_banner(diff, eda_diffs))
+    # Phase-1 findings report hero card (2026-07-26). Sits above "Where the
+    # team is" so a first-time reader's eye lands on it immediately. Persists
+    # regardless of Start-here banner dismissal (banner lives outside the
+    # panel and hides itself via localStorage).
+    h.append(build_phase1_hero_card())
     # Primary framing: where we are + recently touched.
     h.append(build_where_team_is(fams, review, work, probes, data_cache or {},
                                   git, repo))
