@@ -34,7 +34,7 @@ Usage:
 Output: product_report.html (self-contained, no CDN, no storage APIs).
 """
 
-import argparse, json, os, re, subprocess, sys, datetime, urllib.request
+import argparse, json, os, re, subprocess, sys, datetime, time, urllib.request
 from pathlib import Path
 
 try:
@@ -3919,6 +3919,10 @@ def main():
     rvw.add_argument("--author", metavar="NAME", default=None,
                     help="attribution for this write (last_reviewed_by AND "
                          "insight `who`). Defaults to git config user.name.")
+    rvw.add_argument("--no-regen", dest="no_regen", action="store_true",
+                    help="after --review, skip the automatic HTML regen. Use "
+                         "when batching multiple review writes from a shell "
+                         "loop, so the report only regenerates on the last one.")
     args = ap.parse_args()
     repo = Path(args.repo).resolve()
     if not (repo / "ingestion").exists():
@@ -3929,12 +3933,30 @@ def main():
     else:
         out = Path(args.out).resolve() if args.out else repo / "product_report.html"
 
-    # Phase 5 pivot - --review exits via cli_review_action() and never falls
-    # through to the render pipeline. Single atomic write under the shared
-    # review lock; validation errors exit 2 with no state change.
+    # Phase 5 pivot - --review runs cli_review_action() first (atomic write to
+    # product_review.json under the shared lock; validation errors exit 2 with
+    # no state change). Post-audit UX pass: on a successful review write we
+    # now also regenerate product_report.html so the reviewer sees their edit
+    # reflected immediately, unless --no-regen was passed (for scripts that
+    # batch several writes and want a single regen at the end).
     if args.review is not None:
-        sys.exit(cli_review_action(repo, args))
+        code = cli_review_action(repo, args)
+        if code == 0 and not args.no_regen:
+            print("regenerating product_report.html...")
+            t0 = time.perf_counter()
+            _run_report_pipeline(repo, args, out)
+            print(f"regenerated in {time.perf_counter() - t0:.2f}s -> {out.name}")
+        sys.exit(code)
 
+    _run_report_pipeline(repo, args, out)
+
+def _run_report_pipeline(repo, args, out):
+    """Full report-render pipeline: scan repo, load catalog, run any queued
+    probes / samples, emit auto-insights, and write product_report.html to
+    `out`. Extracted from main() so the --review auto-regen path (post-audit
+    UX pass) can invoke exactly the same pipeline after a successful review
+    write. The --export short-circuit inside this helper still writes a CSV/
+    XLSX instead of HTML and returns early; that mirrors main()'s old flow."""
     print(f"Scanning {repo} ...")
     evidence = deep_scan(repo) if DEEP else fallback_scan(repo)
     print(f"  {len(evidence)} files scanned ({'deep forensics' if DEEP else 'regex fallback'})")
