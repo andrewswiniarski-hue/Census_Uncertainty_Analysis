@@ -29,8 +29,8 @@ What this tool does, and just as importantly what it refuses to do:
      text on a card is the sentence a teammate wrote; nothing is rephrased.
 
 Usage:
-    python tools/product_scope.py --repo .            # uses the cached crawl
-    python tools/product_scope.py --repo . --online   # re-crawl the API catalog
+    python tools/product_scope.py             # uses the cached crawl
+    python tools/product_scope.py --online    # re-crawl the API catalog
 Output: product_report.html (self-contained, no CDN, no storage APIs).
 """
 
@@ -907,7 +907,7 @@ def cli_review_action(repo: Path, args):
         if product_id not in review or not isinstance(review.get(product_id), dict):
             outcome["code"] = 1
             outcome["err"] = (f"no review entry for {product_id!r} - "
-                              "run `python tools/product_scope.py --repo .` "
+                              "run `python tools/product_scope.py` "
                               "first so the catalog is loaded into "
                               "product_review.json.")
             return
@@ -2185,15 +2185,15 @@ footer{padding:22px 44px;color:var(--muted);font-size:11.5px;}
 <div class="freshbar" data-generated-at="__GEN_ISO__" data-head-sha="__HEAD_SHA__">
   <span>Regenerated <span id="fresh-pill" class="pill">just now</span></span>
   <span>Rerun:</span>
-  <span class="copy-cmd"><code>python tools/product_scope.py --repo .</code>
-    <button data-copy="python tools/product_scope.py --repo .">Copy</button></span>
+  <span class="copy-cmd"><code>python tools/product_scope.py</code>
+    <button data-copy="python tools/product_scope.py">Copy</button></span>
   <span class="sha" title="HEAD SHA at generation time">__HEAD_SHORT__ &bull; __BRANCH__</span>
   <span class="kbd-hint" title="Press E on any product card to open or close its drill-down">Press <kbd>E</kbd> on a card to toggle details</span>
 </div>
 <div class="wrap">__PANELS__</div>
 <div id="qbar"><span><b id="qn">0</b> queued for probe</span>
   <button id="qdl">Download queue</button><button class="sec" id="qcl">Clear</button>
-  <code>python tools\product_scope.py --repo . --probe-queue &lt;downloaded file&gt;</code></div>
+  <code>python tools\product_scope.py --probe-queue &lt;downloaded file&gt;</code></div>
 <script>
 /* --- Click-to-copy (reused by freshness bar, per-card action prompts, etc.) --- */
 function _copyText(txt, btn){
@@ -2748,9 +2748,9 @@ def _affordances(f, r, ws, has_probe, git, snapshot, has_eda=False):
     path = f["path"]
     stage = r.get("stage", "cataloged")
     out = []
-    probe_cmd  = f'python tools/product_scope.py --repo . --probe {path}'
-    sample_cmd = f'python tools/product_scope.py --repo . --sample --product {path}'
-    regen_cmd  = 'python tools/product_scope.py --repo .'
+    probe_cmd  = f'python tools/product_scope.py --probe {path}'
+    sample_cmd = f'python tools/product_scope.py --sample {path}'
+    regen_cmd  = 'python tools/product_scope.py'
     if ws == 0:
         out.append({"tone": "info",
                     "text": "No repo evidence yet - ask the API what this product publishes:",
@@ -3113,10 +3113,11 @@ def _ql_probe_detail_html(probe_entry):
                      + ", ".join(_esc(x) for x in levels) + '</div>')
     return "".join(parts)
 
-def _ql_catalog_detail_html(f, non_api):
+def _ql_catalog_detail_html(f, non_api, uncertainty_metrics=""):
     """Drill-down for the Tier-0 portion: full catalog description + endpoint
-    URL (or the 'non-API' explanatory note). Sits above the probe/sample
-    detail blocks so the reader gets context before numbers."""
+    URL (or the 'non-API' explanatory note) + optional Bureau documentation
+    link + the human-written uncertainty_metrics description from the review
+    file (folded in from the removed 'Uncertainty surface' card section)."""
     parts = []
     desc = f.get("desc") or ""
     if desc:
@@ -3131,6 +3132,19 @@ def _ql_catalog_detail_html(f, non_api):
         parts.append('<div class="ql-d-row"><span class="ql-k">Endpoint</span> '
                      '<span class="ql-muted">not sample-able via API (bulk-download product)'
                      '</span></div>')
+    doc = f.get("doc") or ""
+    if doc:
+        parts.append(f'<div class="ql-d-row"><span class="ql-k">Bureau docs</span> '
+                     f'<a class="ql-d-link" href="{_esc(doc)}" target="_blank" '
+                     f'rel="noopener">{_esc(doc)}</a></div>')
+    unc = (uncertainty_metrics or "").strip()
+    if unc:
+        parts.append(f'<div class="ql-d-row"><span class="ql-k">Uncertainty</span> '
+                     f'<span>{_esc(unc)}</span></div>')
+    else:
+        parts.append('<div class="ql-d-row"><span class="ql-k">Uncertainty</span> '
+                     '<span class="ql-muted">not yet documented - fill '
+                     '<code>uncertainty_metrics</code> in product_review.json.</span></div>')
     return "".join(parts)
 
 def _ql_empty_state_html(f, tier, non_api):
@@ -3151,7 +3165,7 @@ def _ql_empty_state_html(f, tier, non_api):
                 'bulk-download product (e.g. TIGER shapefiles, DAS demo). '
                 'The catalog record above is all we have.</div>')
     if tier == 0:
-        cmd = f'python tools/product_scope.py --repo . --probe {f["path"]}'
+        cmd = f'python tools/product_scope.py --probe {f["path"]}'
         return (
             '<div class="ql-d-empty">Not yet probed - run this to populate '
             'structural data (variable counts, MOE flags, geography levels):'
@@ -3160,7 +3174,7 @@ def _ql_empty_state_html(f, tier, non_api):
             f'<button data-copy="{_esc(cmd)}">Copy</button></span></div>'
             '</div>')
     if tier == 1:
-        cmd = f'python tools/product_scope.py --repo . --sample --product {f["path"]}'
+        cmd = f'python tools/product_scope.py --sample {f["path"]}'
         return (
             '<div class="ql-d-empty">Not yet sampled - run this to fetch a '
             'data slice and cache canonical EDA:'
@@ -3170,13 +3184,14 @@ def _ql_empty_state_html(f, tier, non_api):
             '</div>')
     return ""
 
-def _ql_details_html(f, probe_entry, cache_entry, tier, non_api, insights=None):
+def _ql_details_html(f, probe_entry, cache_entry, tier, non_api, insights=None,
+                     uncertainty_metrics=""):
     """Assemble the expanded (behind-the-toggle) content for one card. Order
     of blocks matches the TL;DR tier order so the reader can follow the
     thread: Tier 0 context, Tier 1 probe detail, Tier 2 full EDA tables,
     Phase 5 #6 full insights feed, empty-state affordance last."""
     parts = []
-    cat = _ql_catalog_detail_html(f, non_api)
+    cat = _ql_catalog_detail_html(f, non_api, uncertainty_metrics=uncertainty_metrics)
     if cat:
         parts.append('<div class="ql-d-block ql-d-t0">' + cat + '</div>')
     probe_html = _ql_probe_detail_html(probe_entry)
@@ -3309,7 +3324,8 @@ def _insight_row_html(ins, kind="drill"):
             f'<div class="ins-text">{_esc(text)}</div>'
             f'</div></li>')
 
-def render_quick_look(f, probe_entry, cache_entry, insights=None):
+def render_quick_look(f, probe_entry, cache_entry, insights=None,
+                       uncertainty_metrics=""):
     """One card's Quick Look branch. Always shows a compact 2-3 line TL;DR:
 
       * Line 1 (always): tier chip + Tier-0 catalog facts.
@@ -3377,7 +3393,8 @@ def render_quick_look(f, probe_entry, cache_entry, insights=None):
     # visual link to the TL;DR line's stripe is preserved on drill-in.
     tier_slug = {0: "ql-d-tier0", 1: "ql-d-tier1", 2: "ql-d-tier2"}[tier]
     details_body = _ql_details_html(f, probe_entry, cache_entry, tier, non_api,
-                                     insights=insights)
+                                     insights=insights,
+                                     uncertainty_metrics=uncertainty_metrics)
     parts.append(
         f'<details class="ql-details {tier_slug}" data-product-id="{_esc(f["path"])}">'
         f'<summary class="ql-summary" title="Toggle drill-down (press E when focused)">'
@@ -3430,7 +3447,8 @@ def product_row(f, review, work, probes, ctx=None):
     _data_cache = ctx.get("data_cache") or {}
     branches.append(render_quick_look(f, probes.get(f["path"]),
                                        _data_cache.get(f["path"]),
-                                       insights=r.get("insights") or []))
+                                       insights=r.get("insights") or [],
+                                       uncertainty_metrics=r.get("uncertainty_metrics", "")))
 
     # Contextual affordances: state-driven copyable commands that fill
     # what would otherwise be a blank section. Rules in _affordances().
@@ -3442,25 +3460,12 @@ def product_row(f, review, work, probes, ctx=None):
     banners = _affordances(f, r, ws, has_probe, git, snapshot, has_eda)
     aff = _affordance_html(banners)
     if aff: branches.append(aff)
-    unc = r.get("uncertainty_metrics", "")
-    unc_html = (f'<div class="unc">{_esc(unc)}</div>' if unc else
-                '<div class="unc todo">Not yet documented. Documenting what this product publishes IS '
-                'the review: fill uncertainty_metrics in product_review.json.</div>')
-    branches.append('<div class="branch"><div class="bcard"><div class="blabel">Uncertainty surface</div>'
-                    + unc_html + '</div></div>')
-
-    facts = [f'<span class="kindchip">{_esc(f["kind"])}</span>',
-             f'<span class="kindchip">{_esc(f["group"])}</span>',
-             f'<span class="meta">vintages {_vint(f)}</span>']
-    if f.get("spatial"):
-        facts.append('<span class="meta"> &bull; ' + _esc(sorted(f["spatial"])[0]) + '</span>')
-    if f.get("doc"):
-        facts.append('<span class="meta"> &bull; <a href="' + _esc(f["doc"]) + '">Bureau documentation</a></span>')
-    d = f.get("desc") or ""
-    tail = "..." if len(d) > 420 else ""
-    dhtml = ('<div class="desc" style="margin-top:5px">' + _esc(d[:420]) + tail + '</div>') if d else ""
-    branches.append('<div class="branch"><div class="bcard"><div class="blabel">From the Census catalog</div>'
-                    + "".join(facts) + dhtml + '</div></div>')
+    # NOTE: the "Uncertainty surface" and "From the Census catalog" card
+    # sections were removed in audit simplify 3. The uncertainty_metrics text
+    # + Bureau doc link + catalog description now live inside Quick Look's
+    # "More details" drill-down (via _ql_catalog_detail_html). The other
+    # catalog facets (kind chip, family chip, vintages, spatial) already
+    # appear on line 1 of Quick Look's TL;DR (_ql_tier0_line).
 
     pr = probes.get(f["path"])
     if pr:
