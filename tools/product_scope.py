@@ -1768,7 +1768,7 @@ def sample_products(repo, fams, review, probes, only_product, size, refresh, git
     counts and per-product results for the caller to display.
 
     Note - on-demand semantics:
-      * --sample --product X (single-product mode)   -> hits the API immediately.
+      * --sample <PRODUCT_ID> (single-product mode) -> hits the API immediately.
         The freshness short-circuit below only applies when we're batch-iterating
         candidates without --refresh. Requesting one product by ID is a
         deliberate reviewer action, and re-fetching is what the reviewer asked
@@ -1786,7 +1786,7 @@ def sample_products(repo, fams, review, probes, only_product, size, refresh, git
                          if (r.get("stage") or "").lower() == "candidate")
     if not targets:
         print("[sample] nothing to sample: no products marked 'candidate' in "
-              "product_review.json (or pass --product <ID> to sample one directly).")
+              "product_review.json (or pass --sample <ID> to sample one directly).")
         return {"sampled": [], "skipped_fresh": [], "skipped_non_api": [],
                 "failed": [], "diffs": {}}
 
@@ -1808,7 +1808,7 @@ def sample_products(repo, fams, review, probes, only_product, size, refresh, git
             continue
         # Fresh-cache short-circuit: skip HTTP entirely when a recent entry
         # exists and the user didn't force --refresh. Only applies in BATCH
-        # mode (only_product is None). Single --sample --product X always
+        # mode (only_product is None). Single --sample <PRODUCT_ID> always
         # hits the API - the reviewer explicitly asked for that product, and
         # silently returning a stale-ish cache instead is surprising.
         cached = cache.get(path)
@@ -4016,7 +4016,6 @@ def main():
     # ---- Phase 3: sample / EDA mode (see SAMPLE / EDA MODE section above) --
     # --sample takes an optional positional product id: `--sample acs/acs5`
     # samples one product; `--sample` alone batch-samples every Candidate.
-    # Legacy `--sample --product X` still works (product wins over positional).
     ap.add_argument("--sample", nargs="?", const="__BATCH__", default=None, metavar="PRODUCT_ID",
                     help="fetch actual data slices and run a canonical EDA. "
                          "With a product id (e.g. --sample acs/acs5), samples that one "
@@ -4030,9 +4029,6 @@ def main():
                     help="force re-sampling even if a fresh cache entry exists (used "
                          "with --sample). Diff against the previous sample is surfaced "
                          "in the report.")
-    ap.add_argument("--product", metavar="ID", default=None,
-                    help="deprecated: legacy target product for --sample. "
-                         "Prefer `--sample PRODUCT_ID`; still accepted for back-compat.")
     # ---- Phase 5 (CLI helper): --review + action flags ----------------------
     # Additive, atomic write to product_review.json. Preserves the schema +
     # auto-insight pieces from earlier Phase 5 commits; replaces the (dropped)
@@ -4213,14 +4209,10 @@ def _run_report_pipeline(repo, args, out):
     # Phase 3: --sample runs before HTML render; results feed back into the report.
     # args.sample values (nargs='?' with const='__BATCH__'):
     #   None          -> flag not passed; skip sampling
-    #   '__BATCH__'   -> `--sample` alone; batch every Candidate (unless --product
-    #                    provides a target, kept for back-compat with legacy
-    #                    `--sample --product X` invocations)
+    #   '__BATCH__'   -> `--sample` alone; batch every Candidate
     #   any other str -> `--sample <product_id>`; single-product mode
     if args.sample is not None:
-        sample_target = args.product
-        if sample_target is None and args.sample != "__BATCH__":
-            sample_target = args.sample
+        sample_target = None if args.sample == "__BATCH__" else args.sample
         sample_products(repo, fams, review, probes, sample_target,
                         args.sample_size, args.refresh, git)
 

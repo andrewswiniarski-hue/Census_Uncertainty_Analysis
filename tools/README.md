@@ -114,7 +114,7 @@ A **probe** tells you what a product publishes. A **sample** fetches an actual d
 python tools\product_scope.py --sample acs/acs5
 ```
 
-Always hits the API. **Freshness is NOT checked** — the reviewer asked for that product, so we fetch it, regardless of what's in the cache. (The legacy form `--sample --product acs/acs5` still works.)
+Always hits the API. **Freshness is NOT checked** — the reviewer asked for that product, so we fetch it, regardless of what's in the cache.
 
 **Batch-sample every Candidate.**
 
