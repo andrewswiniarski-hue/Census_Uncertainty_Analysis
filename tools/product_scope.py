@@ -842,22 +842,21 @@ def cli_review_action(repo: Path, args):
         return 2
 
     # ---- Author attribution -------------------------------------------------
-    author = (args.author or "").strip()
-    if not author:
-        author = _git_user_name(repo) or "unknown"
+    # Phase A #2 (2026-07-26): --author flag removed alongside --role/--note
+    # (they only mattered for composite-role attribution). All writes now
+    # attribute to git config user.name (with "unknown" fallback).
+    author = _git_user_name(repo) or "unknown"
 
     # ---- Which actions did the caller pass? ---------------------------------
     action_flags = {
         "insight":       args.insight,
         "status":        args.status,
-        "role":          args.role,
-        "note":          args.note,
         "notes":         args.notes,
     }
     passed = {k: v for k, v in action_flags.items() if v is not None}
     if not passed:
         print("error: --review requires at least one action flag "
-              "(--insight/--status/--role/--note/--notes)",
+              "(--insight/--status/--notes)",
               file=sys.stderr)
         return 2
 
@@ -884,57 +883,15 @@ def cli_review_action(repo: Path, args):
             return 2
         patch["stage"] = canon
 
-    if "role" in passed:
-        raw = str(passed["role"] or "").strip()
-        canon = raw.lower()
-        # Empty string clears the role (also blanks the note).
-        if canon and canon not in COMPOSITE_ROLES:
-            print(f"error: --role must be one of {'/'.join(COMPOSITE_ROLES)} "
-                  f"(got {raw!r})", file=sys.stderr)
-            return 2
-        patch["composite_role"] = canon
-
-    if "note" in passed:
-        patch["composite_role_note"] = str(passed["note"] or "")
-
     if "notes" in passed:
         patch["note"] = str(passed["notes"] or "")
 
-    # ---- Interactive TTY prompt for --role missing --note (UX pass #5) ------
-    # If the caller passed --role but not --note AND they're in an interactive
-    # shell AND the entry doesn't already carry a note, prompt for one inline
-    # instead of erroring out. Kept out of the file lock: input() would hold
-    # the flock while waiting for a human, and the prompt is a UX affordance
-    # for interactive users, not a schema thing. In a non-TTY context (pipes,
-    # scripts, CI) we do nothing here and let write-time enforcement fail as
-    # before, so anything that expected exit 2 keeps getting exit 2.
-    if ("role" in passed and "note" not in passed
-        and str(passed.get("role") or "").strip()
-        and sys.stdin.isatty()):
-        # Cheap peek at the file (outside the lock) - if the entry already has
-        # a note, no prompt needed. Best-effort: any read failure -> prompt.
-        prompt_needed = True
-        try:
-            p = repo / "product_review.json"
-            if p.exists():
-                data = json.loads(p.read_text(encoding="utf-8"))
-                existing_note = ((data.get(product_id) or {})
-                                    .get("composite_role_note") or "").strip()
-                if existing_note:
-                    prompt_needed = False
-        except Exception:
-            pass
-        if prompt_needed:
-            try:
-                entered = input("Composite role requires a note. Enter "
-                                "note (or blank to abort): ").strip()
-            except (EOFError, KeyboardInterrupt):
-                print("\naborted (no note provided)", file=sys.stderr)
-                return 2
-            if not entered:
-                print("aborted (no note provided)", file=sys.stderr)
-                return 2
-            patch["composite_role_note"] = entered
+    # Phase A #2 (2026-07-26): --role / --note / --author validation, plus
+    # the interactive TTY prompt for --role-without---note, all removed. The
+    # composite framing is on hold, so this CLI helper no longer sets or
+    # clears composite_role / composite_role_note. Existing role values in
+    # product_review.json still round-trip on read (schema preserved); only
+    # the write path is retired.
 
     # ---- Atomic read-modify-write under the review lock ---------------------
     outcome = {"code": 0, "err": None, "summary": []}
@@ -949,49 +906,17 @@ def cli_review_action(repo: Path, args):
             return
         entry = _ensure_review_shape(review[product_id])
 
-        # composite_role_note requirement (write-time enforcement) -----------
-        # --role X requires --note "..." OR an existing non-empty note on the
-        # entry. --note "..." alone (no --role) is only OK if the entry already
-        # has a declared role.
-        if "composite_role" in patch:
-            new_role = patch["composite_role"]
-            if new_role:
-                merged_note = (patch.get("composite_role_note",
-                                          entry.get("composite_role_note", ""))
-                                or "").strip()
-                if not merged_note:
-                    outcome["code"] = 2
-                    outcome["err"] = ("--role requires --note (composite "
-                                      "roles must include a written "
-                                      "justification)")
-                    return
-        elif "composite_role_note" in patch:
-            existing_role = (entry.get("composite_role") or "").strip()
-            if not existing_role:
-                outcome["code"] = 2
-                outcome["err"] = ("--note requires --role (there is no "
-                                  "declared composite_role on this entry "
-                                  "to justify)")
-                return
+        # Phase A #2 (2026-07-26): composite_role / composite_role_note
+        # patching removed - the CLI no longer accepts --role/--note, so the
+        # write path never sees those keys. Schema-read of both fields is
+        # preserved by _ensure_review_shape() so existing FOCUS entries
+        # round-trip cleanly.
 
-        # All validation passed - apply the patch. Summary bits track what
-        # changed for the success line.
+        # Apply the patch. Summary bits track what changed for the success line.
         bits = []
         if "stage" in patch:
             entry["stage"] = patch["stage"]
             bits.append(f"status -> {STAGE_LABELS[patch['stage']]}")
-        if "composite_role" in patch:
-            role = patch["composite_role"]
-            entry["composite_role"] = role
-            if "composite_role_note" in patch:
-                entry["composite_role_note"] = patch["composite_role_note"]
-            elif not role:
-                # Blanking role also blanks the note; keeps the contract clean.
-                entry["composite_role_note"] = ""
-            bits.append(f"role -> {role or '(cleared)'}")
-        elif "composite_role_note" in patch:
-            entry["composite_role_note"] = patch["composite_role_note"]
-            bits.append("note updated")
         if "note" in patch:
             entry["note"] = patch["note"]
             bits.append("notes updated")
@@ -2965,12 +2890,16 @@ def product_facet_values(f, review, work, probes, top_families, data_cache=None)
 # group='primary'   -> discovery-oriented facets, always visible.
 # group='reviewer'  -> review-workflow facets, collapsed behind a details toggle
 #                      at the bottom of the sidebar (reframe pass commit #4).
+# Phase A #2 (2026-07-26): the "Composite role" facet was removed alongside
+# the --role/--note/--author CLI flags. Composite framing is on hold; the
+# schema field still exists so the 5 pre-existing FOCUS entries preserve
+# their roles on read, but the facet, CLI setters, and role-required-note
+# TTY prompt are all gone.
 FACET_DEFS = [
     ("fbucket",   "Family",              "count",  "primary"),
     ("agency",    "Agency",              "count",  "primary"),
     ("freq",      "Frequency",           None,     "primary"),
     ("stage",     "Status",              None,     "reviewer"),
-    ("role",      "Composite role",      "count",  "reviewer"),
     ("evidence",  "Has repo evidence",   None,     "reviewer"),
     ("probe",     "Has API probe",       None,     "reviewer"),
     ("validated", "Notebook validated",  None,     "reviewer"),
@@ -5144,26 +5073,16 @@ def main():
     rvw = ap.add_argument_group("review helper (--review + action flags)")
     rvw.add_argument("--review", metavar="PRODUCT_ID", default=None,
                     help="target product id (e.g. acs/acs5). Requires at least "
-                         "one of --insight / --status / --role / --note / "
-                         "--notes. All actions apply atomically.")
+                         "one of --insight / --status / --notes. All actions "
+                         "apply atomically.")
     rvw.add_argument("--insight", metavar="TEXT", default=None,
                     help="append a human insight (source='human'). Non-empty "
                          "text required; who defaults to git config user.name.")
     rvw.add_argument("--status", metavar="VALUE", default=None,
                     help="set stage; one of " + "/".join(STAGES) + " "
                          "(case-insensitive on input).")
-    rvw.add_argument("--role", metavar="VALUE", default=None,
-                    help="set composite_role; one of "
-                         + "/".join(COMPOSITE_ROLES) + ". Requires --note "
-                         "on the same invocation unless the entry already "
-                         "carries a non-empty composite_role_note.")
-    rvw.add_argument("--note", metavar="TEXT", default=None,
-                    help="set composite_role_note (justification for --role).")
     rvw.add_argument("--notes", metavar="TEXT", default=None,
                     help="set free-text notes (the review file's `note` field).")
-    rvw.add_argument("--author", metavar="NAME", default=None,
-                    help="attribution for this write (last_reviewed_by AND "
-                         "insight `who`). Defaults to git config user.name.")
     rvw.add_argument("--no-regen", dest="no_regen", action="store_true",
                     help="after --review, skip the automatic HTML regen. Use "
                          "when batching multiple review writes from a shell "
