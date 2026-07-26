@@ -2079,6 +2079,46 @@ table.rep td{border-bottom:1px solid var(--ice);padding:7px 9px;vertical-align:t
 .wwl-more > summary::marker{content:"";}
 .wwl-more > summary:before{content:"\25B8  ";}
 .wwl-more[open] > summary:before{content:"\25BE  ";}
+/* "Census data landscape" viz (reframe pass commit #3). Hierarchical
+   treemap-style boxes: Kind (top-level 4-way split) -> Program (subdivided
+   by product count). Each box shaded by the highest tier reached inside
+   its slice - grey for untouched slices, blue for probe-reach, green for
+   sampled-reach. Self-contained (no D3, no external CSS), readable with
+   JS disabled - hover tooltips and click-to-drill are pure enhancement. */
+.lscape-section{margin:0 0 24px;max-width:1020px;}
+.lscape-caption{font-size:12px;color:var(--muted);margin:6px 0 12px;
+       max-width:900px;line-height:1.4;}
+.lscape-kind-row{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 14px;}
+.lscape-kind-box{flex:1 1 220px;min-width:200px;border:1px solid var(--ice);
+       border-radius:8px;padding:8px 10px;background:#fff;}
+.lscape-kind-head{display:flex;justify-content:space-between;align-items:baseline;
+       margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--ice);}
+.lscape-kind-name{font-family:Georgia,serif;font-size:14px;color:var(--navy);
+       font-weight:700;}
+.lscape-kind-count{font-family:ui-monospace,Consolas,monospace;font-size:10.5px;
+       color:var(--muted);}
+.lscape-progs{display:flex;flex-wrap:wrap;gap:4px;}
+.lscape-prog{border-radius:5px;padding:4px 6px;font-size:10.5px;line-height:1.25;
+       cursor:pointer;border:1px solid transparent;color:var(--ink);
+       transition:filter .12s ease, transform .12s ease;overflow:hidden;
+       text-overflow:ellipsis;min-width:60px;}
+.lscape-prog:hover{filter:brightness(0.95);transform:translateY(-1px);}
+.lscape-prog b{font-family:ui-monospace,Consolas,monospace;font-weight:700;
+       color:inherit;}
+.lscape-prog .lscape-prog-name{font-weight:600;display:block;
+       overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.lscape-prog .lscape-prog-cnt{font-family:ui-monospace,Consolas,monospace;
+       font-size:9.5px;color:inherit;opacity:0.75;}
+.lscape-prog.tier-0{background:#EDF0F7;color:#5A6072;border-color:#D6DBE8;}
+.lscape-prog.tier-1{background:#DCE7FA;color:#1F2A5C;border-color:#8FA8D8;}
+.lscape-prog.tier-2{background:#D6EDD9;color:#1F5A2E;border-color:#7ABF89;}
+.lscape-legend{display:flex;gap:14px;align-items:center;font-size:11px;
+       color:var(--muted);margin:6px 0 0;flex-wrap:wrap;}
+.lscape-legend .lscape-swatch{display:inline-block;width:11px;height:11px;
+       border-radius:3px;margin-right:4px;vertical-align:-1px;border:1px solid transparent;}
+.lscape-legend .lscape-swatch.tier-0{background:#EDF0F7;border-color:#D6DBE8;}
+.lscape-legend .lscape-swatch.tier-1{background:#DCE7FA;border-color:#8FA8D8;}
+.lscape-legend .lscape-swatch.tier-2{background:#D6EDD9;border-color:#7ABF89;}
 /* Reviewer-mode data collapse: quietly demotes the funnel + composite-role
    scaffolding from the primary Home surface. The reviewer flow is still one
    click away and the CLI paths that write it (--review) are untouched. */
@@ -2668,6 +2708,55 @@ document.querySelectorAll('.filter input').forEach(function(inp){
     if (!target) return;
     e.preventDefault();
     target.open = !target.open;
+  });
+})();
+/* --- Reframe pass commit #3 - Landscape viz click-to-drill handler ---
+   Clicking any .lscape-prog box jumps to the Products tab and populates
+   the tab's text-filter box with the program name so the reader lands on
+   that slice of the catalog with all matching cards visible. Reuses the
+   existing filter-input listener (._applyFacets) so behavior stays in
+   sync with sidebar facet + AM toggle changes. */
+(function(){
+  document.addEventListener('click', function(e){
+    var box = e.target.closest && e.target.closest('.lscape-prog[data-landscape-prog]');
+    if (!box) return;
+    e.preventDefault();
+    var prog = box.getAttribute('data-landscape-prog');
+    if (!prog) return;
+    /* Ensure the reader can see all matching cards: flip on show-all if
+       the AM-only default is filtering some out. */
+    if (!document.body.classList.contains('am-showall')){
+      var cb = document.querySelector('.am-cb');
+      if (cb){ cb.checked = true;
+        cb.dispatchEvent(new Event('change', {bubbles: true})); }
+    }
+    /* Prefer whichever kind panel actually contains this program's cards.
+       If several panels contain matches (unlikely - a program almost always
+       maps to a single kind), pick the first non-empty one. */
+    var panels = document.querySelectorAll('.panel.panel-kind, .panel.panel-am');
+    var target = null;
+    for (var i = 0; i < panels.length; i++){
+      var p = panels[i];
+      var any = p.querySelector('.prod[data-family="' + CSS.escape(prog) + '"]');
+      if (any){ target = p; break; }
+    }
+    if (!target) return;
+    var pid = target.id;
+    var key = pid.replace(/^panel-/, '');
+    var tab = document.querySelector('.tab[data-k="' + key + '"]');
+    if (tab && !tab.classList.contains('on')) tab.click();
+    /* Populate the filter input and fire input event so the sidebar re-applies. */
+    var inp = target.querySelector('.filter input');
+    if (inp){
+      inp.value = prog;
+      inp.dispatchEvent(new Event('input', {bubbles: true}));
+      /* Scroll the products area into view. */
+      setTimeout(function(){
+        var y = inp.getBoundingClientRect().top + window.pageYOffset - 60;
+        window.scrollTo({top: y, behavior: 'smooth'});
+        inp.focus({preventScroll: true});
+      }, 30);
+    }
   });
 })();
 /* --- Reframe pass commit #1 - Home tab "Recently touched" jump handler ---
@@ -4414,6 +4503,133 @@ def build_what_learned(fams, review, worklog, git):
     parts.append('</div>')
     return "".join(parts)
 
+# ============================================================================
+# HOME TAB "CENSUS DATA LANDSCAPE" VIZ (reframe pass commit #3)
+# ============================================================================
+# Interactive-but-self-contained hierarchical view of how Census products are
+# organised. Top level: 4 kinds from the Bureau's own dataset flags
+# (Aggregate / Microdata / Timeseries / Unflagged). Second level: program,
+# with box size proportional to product count within that program. Color
+# reflects the highest tier of team reach anywhere in the slice - grey
+# (untouched), blue (any probe cached), green (any sample cached). Every
+# program box is clickable: jumps into the Products tab filtered to that
+# program (via the sidebar text-filter input, reusing the existing filter JS).
+#
+# Design notes:
+#   * Self-contained. No D3, no CDN, no external JS. Plain flex + width%
+#     for the treemap sizing; a single delegated JS handler for the click.
+#   * Readable with JS off. Static state is meaningful: kind labels + program
+#     boxes with counts + color-coded tiers convey the whole message.
+#   * Data source: catalog `fams` dict (already loaded); no extra API call.
+
+def _prog_tier(fams_in_prog, work, probes, data_cache):
+    """Highest team-reach tier reached anywhere in a program's products.
+       0 - no signals; 1 - at least one probe; 2 - at least one sample.
+       Repo evidence alone (tier 0+) is treated as 'reached' by upgrading to
+       tier 1 so grey stays reserved for products the team hasn't opened at
+       all. The chip legend and caption both say this so no ambiguity."""
+    tier = 0
+    for f in fams_in_prog:
+        path = f["path"]
+        if (data_cache or {}).get(path):
+            return 2      # sampled trumps everything - short-circuit
+        pe = (probes or {}).get(path)
+        if isinstance(pe, dict) and pe.get("ok"):
+            tier = max(tier, 1)
+            continue
+        prod = f.get("product")
+        if prod and (work or {}).get(prod, {}).get("status", 0) > 0:
+            tier = max(tier, 1)
+    return tier
+
+def build_landscape_viz(fams, work, probes, data_cache):
+    """Home-tab hierarchical viz: Kind -> Program treemap-style boxes, sized
+    by product count and colored by max team-reach tier. Uses only inline
+    HTML/CSS + a single click handler. See the reframe spec commit #3.
+    """
+    # Group by kind, then by program group. Use catalog `group` (the human
+    # program name) as the second level - it's what already appears as the
+    # kind-panel section heads on the Products tab, so the reader learns
+    # the same vocabulary in two places.
+    by_kind = {}
+    for f in fams.values():
+        by_kind.setdefault(f["kind"], {}).setdefault(f.get("group") or "Other",
+                                                      []).append(f)
+
+    parts = ['<div class="lscape-section">',
+             '<h2>The Census data landscape</h2>',
+             '<div class="lscape-caption">Every Census product family from '
+             'the API catalog, grouped by kind and program. Each box is a '
+             'program; box size is proportional to product count, and color '
+             'shows how far the team has reached into that slice. '
+             '<b>Click any program to jump to the matching products.</b></div>']
+
+    kind_order = [k for k in KINDS if k in by_kind]
+    for kind in kind_order:
+        progs = by_kind[kind]
+        total_in_kind = sum(len(v) for v in progs.values())
+        # Sort programs by product count descending so the biggest reads first.
+        prog_names = sorted(progs, key=lambda n: (-len(progs[n]), n))
+        parts.append('<div class="lscape-kind-box">')
+        parts.append('<div class="lscape-kind-head">'
+                     f'<span class="lscape-kind-name">{_esc(kind)}</span>'
+                     f'<span class="lscape-kind-count">'
+                     f'{total_in_kind} product{"s" if total_in_kind != 1 else ""} '
+                     f'across {len(prog_names)} program'
+                     f'{"s" if len(prog_names) != 1 else ""}</span>'
+                     '</div>')
+        parts.append('<div class="lscape-progs">')
+        for pname in prog_names:
+            items = progs[pname]
+            n = len(items)
+            tier = _prog_tier(items, work, probes, data_cache)
+            reached = sum(1 for f in items
+                           if (data_cache or {}).get(f["path"]) or
+                              ((probes or {}).get(f["path"]) or {}).get("ok") or
+                              (f.get("product") and
+                               (work or {}).get(f.get("product"), {}).get("status", 0) > 0))
+            sampled = sum(1 for f in items if (data_cache or {}).get(f["path"]))
+            # Size proportional to product count with a floor so the smallest
+            # programs stay clickable. Percent of the total-in-kind so the row
+            # of programs fills the kind box regardless of overall counts.
+            pct = 100.0 * n / total_in_kind if total_in_kind else 0
+            # Convert to a flex-basis proportional value; add a min-width from
+            # the CSS so tiny slices are still legible.
+            basis = max(60, min(360, int(pct * 6.4)))
+            tooltip = (f"{_esc(pname)} - {n} product"
+                       f"{'s' if n != 1 else ''}, {reached} touched, "
+                       f"{sampled} sampled")
+            parts.append(
+                f'<div class="lscape-prog tier-{tier}" '
+                f'style="flex:0 0 {basis}px" '
+                f'title="{tooltip}" data-landscape-prog="{_esc(pname)}">'
+                f'<span class="lscape-prog-name">{_esc(pname)}</span>'
+                f'<span class="lscape-prog-cnt">{n} '
+                f'&middot; {reached}/{n} touched</span>'
+                '</div>')
+        parts.append('</div></div>')
+
+    # Legend + counts summary at the bottom.
+    touched_total = 0; sampled_total = 0
+    for f in fams.values():
+        path = f["path"]
+        if (data_cache or {}).get(path): sampled_total += 1
+        if ((data_cache or {}).get(path) or
+             ((probes or {}).get(path) or {}).get("ok") or
+             (f.get("product") and
+              (work or {}).get(f.get("product"), {}).get("status", 0) > 0)):
+            touched_total += 1
+    parts.append('<div class="lscape-legend">'
+                 '<span><span class="lscape-swatch tier-0"></span>untouched</span>'
+                 '<span><span class="lscape-swatch tier-1"></span>reached '
+                 '(repo evidence or probe)</span>'
+                 '<span><span class="lscape-swatch tier-2"></span>sampled</span>'
+                 f'<span style="margin-left:auto">Team reach: {touched_total} '
+                 f'of {len(fams)} products touched &middot; {sampled_total} sampled</span>'
+                 '</div>')
+    parts.append('</div>')
+    return "".join(parts)
+
 def _iso_to_ord(when):
     """Turn an ISO-8601 string into a sortable float (POSIX seconds).
     0 on parse failure so unrecognised timestamps sort last with reverse
@@ -4504,6 +4720,8 @@ def build_home(fams, review, work, counts, worklog, notebooks, probes, git=None,
                                   git, repo))
     # Aggregated feed: curated + WORKLOG + human + auto insights (commit #2).
     h.append(build_what_learned(fams, review, worklog, git))
+    # Landscape viz: hierarchical Kind -> Program treemap (commit #3).
+    h.append(build_landscape_viz(fams, work, probes, data_cache or {}))
     # Everything else demoted behind a details toggle.
     rev_body = _build_reviewer_mode_details(fams, review, work, counts,
                                               worklog, notebooks, git)
