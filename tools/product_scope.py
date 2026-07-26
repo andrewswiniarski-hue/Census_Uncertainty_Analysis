@@ -2854,6 +2854,50 @@ details.disc[open] > summary .disc-preview{display:none;}
      margin-top:0;}
 .wwl-tail b{color:var(--navy);font-weight:var(--w-head);}
 .wwl-tail a{color:#3A4890;text-decoration:none;border-bottom:1px dotted #8FA8D8;}
+/* "Up next" action queue (mission-statement pass 2026-07-26). Team Pulse
+   chapter lead: a state-derived punch list of the 3-5 highest-priority
+   next actions, each with a rank chip, an action-type icon, a one-line
+   why, and a copyable one-command action (reusing the .copy-cmd control).
+   Gold-tinted card (same family as the Start-here banner) so it reads as
+   "do something" rather than "read something". Overflow suggestions sit
+   behind the unified details.disc grammar. */
+.upnext-section{margin:0 0 20px;max-width:1020px;
+    border:1px solid var(--gold);border-radius:8px;
+    background:linear-gradient(180deg,#FBF8EC 0%,#FDFEFF 100%);
+    padding:14px 18px;}
+.upnext-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;
+    margin-bottom:2px;}
+.upnext-head h2{font-family:var(--f-display);font-size:var(--fs-5);
+    color:var(--navy);margin:0;font-weight:var(--w-head);
+    letter-spacing:var(--lsp-tight);}
+.upnext-tag{display:inline-block;padding:1px 8px;border-radius:8px;
+    font-size:var(--fs-1);font-weight:var(--w-head);letter-spacing:.03em;
+    text-transform:uppercase;background:#F5E9C8;color:#6E4E11;}
+.upnext-caption{font-size:var(--fs-1);color:var(--muted);margin:0 0 8px;
+    line-height:1.4;}
+.upnext-list{list-style:none;padding:0;margin:0;border-top:1px solid #EADFB8;}
+.upnext-list li{display:flex;gap:10px;align-items:center;padding:7px 0;
+    border-bottom:1px solid #F0EAD2;font-size:var(--fs-2);line-height:1.4;
+    flex-wrap:wrap;}
+.upnext-list li:last-child{border-bottom:0;}
+.una-rank{flex:0 0 22px;height:22px;border-radius:50%;background:var(--navy);
+    color:#F5D77A;font-size:var(--fs-1);font-weight:var(--w-head);
+    display:flex;align-items:center;justify-content:center;
+    font-family:var(--f-mono);}
+.una-ico{flex:0 0 20px;text-align:center;font-size:var(--fs-3);line-height:1;}
+.una-body{flex:1;min-width:240px;}
+.una-name{color:var(--navy);font-weight:var(--w-emph);text-decoration:none;
+    border-bottom:1px dotted #8FA8D8;}
+.una-name:hover{border-bottom-style:solid;}
+.una-act{color:var(--ink);font-weight:var(--w-emph);}
+.una-why{color:var(--muted);font-size:var(--fs-1);margin-top:1px;line-height:1.4;}
+.upnext-list .copy-cmd{margin-left:auto;}
+.upnext-list .copy-cmd code{max-width:340px;}
+.upnext-more{margin-top:8px;font-size:var(--fs-2);}
+.upnext-done{display:flex;gap:10px;align-items:center;padding:8px 0;
+    color:#1F5A2E;font-size:var(--fs-2);line-height:1.45;}
+.upnext-done .una-ico{flex:0 0 20px;}
+.upnext-done b{color:#1F5A2E;font-weight:var(--w-head);}
 /* Bureau press-release mini-feed (Phase A 2026-07-26 commit #2). Compact
    5-item list showing the newest census.gov press releases so a reader has
    external "what did the Bureau publish this week?" recency signal alongside
@@ -7280,6 +7324,236 @@ def fetch_census_press_releases(cache_path):
     # (4) No cache at all + network failed.
     return [], "empty"
 
+# ============================================================================
+# "UP NEXT" ACTION QUEUE (mission-statement pass 2026-07-26)
+# ============================================================================
+# The tool's mission statement is two jobs: (1) a first-timer learns what
+# Census data is, fast; (2) the team tracks what to do next. The discovery
+# pivot demoted all the decide-next machinery, so job 2 had no surface left.
+# This section derives a ranked punch list ENTIRELY from existing state
+# (product_review.json stages/insights/metrics, product_probes.json,
+# scope_data_cache.json, the CURRICULUM constant) - no new schema, nothing
+# hand-maintained. Finish an item, regen, and it disappears on its own.
+
+# One icon per action type (the visual cue the eye keys on before reading).
+NEXT_ACTION_ICONS = {
+    "probe":   "\U0001F4E1",  # satellite antenna - fetch API metadata
+    "sample":  "\U0001F52C",  # microscope - data peek / canonical EDA
+    "deepen":  "\U0001F393",  # graduation cap - curriculum depth
+    "insight": "\U0001F4DD",  # memo - record a human observation
+    "metrics": "\U0001F4CF",  # ruler - document reliability
+}
+
+# Verb phrase per action type, composed after the linked product name
+# ("American Community Survey 5-year - probe its metadata").
+NEXT_ACTION_VERBS = {
+    "probe":   "probe its metadata",
+    "sample":  "pull a data sample",
+    "deepen":  "give it a first probe",
+    "insight": "Record the team's first insight (any product)",
+    "metrics": "document its reliability",
+}
+
+def _derive_next_actions(fams, review, probes, data_cache):
+    """Rank-ordered list of next-action dicts, derived purely from existing
+    state. Rules, in priority order (rule order IS the ranking):
+
+      1. probe   - FOCUS products never probed: reviewed on paper, but the
+                   tool has never fetched their actual API metadata.
+      2. sample  - FOCUS products probed but never sampled: no data peek to
+                   verify the reliability notes against real values.
+      3. deepen  - CURRICULUM products with no team touch at all (no human
+                   insight, no successful probe, no sample): in the learning
+                   path but nobody has gone deeper than the blurb.
+      4. insight - zero human insights anywhere: the feed is all automated,
+                   so prompt the first real team note (targets acs/acs5 as
+                   the canonical starting product; the command is editable).
+      5. metrics - stage != cataloged but uncertainty_metrics empty: flagged
+                   as important with reliability undocumented.
+
+    Staleness of the report itself is deliberately NOT a rule here - the
+    freshness pill in the header already carries that signal, and duplicating
+    it would violate the one-source-per-signal principle from Phase A #1.
+
+    Each product appears AT MOST ONCE, under its highest-priority rule
+    (e.g. an unprobed FOCUS product queues its probe, not also its sample -
+    probe-then-sample is the pipeline order the Sankey draws). Within rule 1
+    the FOCUS products sort in CURRICULUM order first (learning-path order
+    is the reading order the Home tab already teaches), then by path.
+
+    Returns [{rule, icon, path (None for rule 4), why, cmd}], full list -
+    the renderer decides how many are visible vs. behind the disclosure.
+    """
+    review = review or {}
+    probes = probes or {}
+    data_cache = data_cache or {}
+
+    def _probed(p):
+        pe = probes.get(p)
+        return isinstance(pe, dict) and pe.get("ok")
+
+    def _sampled(p):
+        return p in data_cache
+
+    def _has_human_insight(p):
+        r = review.get(p) or {}
+        return any(i.get("source") == INSIGHT_HUMAN
+                   for i in (r.get("insights") or []) if isinstance(i, dict))
+
+    curriculum_rank = {e["path"]: i for i, e in enumerate(CURRICULUM)}
+    focus_paths = sorted(
+        (p for p, r in review.items()
+         if isinstance(r, dict) and r.get("stage") == "focus" and p in fams),
+        key=lambda p: (curriculum_rank.get(p, len(CURRICULUM)), p))
+
+    actions, queued = [], set()
+
+    def _add(rule, path, why, cmd):
+        if path is not None:
+            if path in queued:
+                return
+            queued.add(path)
+        actions.append({"rule": rule, "icon": NEXT_ACTION_ICONS[rule],
+                        "path": path, "why": why, "cmd": cmd})
+
+    # Rule 1: FOCUS never probed.
+    for p in focus_paths:
+        if not _probed(p):
+            _add("probe", p,
+                 "Focus product - we've reviewed it on paper but never "
+                 "fetched its actual metadata.",
+                 f"python tools/product_scope.py --probe {p} --open")
+
+    # Rule 2: FOCUS probed but never sampled.
+    for p in focus_paths:
+        if _probed(p) and not _sampled(p):
+            _add("sample", p,
+                 "No data peek yet - the EDA would verify our reliability "
+                 "notes.",
+                 f"python tools/product_scope.py --sample {p} --open")
+
+    # Rule 3: curriculum products with no team touch beyond the blurb.
+    for e in CURRICULUM:
+        p = e["path"]
+        if p not in fams:
+            continue
+        if not (_probed(p) or _sampled(p) or _has_human_insight(p)):
+            _add("deepen", p,
+                 "In the learning path but nobody's gone deeper.",
+                 f"python tools/product_scope.py --probe {p} --open")
+
+    # Rule 4: zero human insights across the whole review file.
+    n_human = sum(1 for r in review.values() if isinstance(r, dict)
+                  for i in (r.get("insights") or [])
+                  if isinstance(i, dict) and i.get("source") == INSIGHT_HUMAN)
+    if n_human == 0:
+        _add("insight", None,
+             "The insights feed is all automated - no teammate has recorded "
+             "an observation yet.",
+             'python tools/product_scope.py --review acs/acs5 '
+             '--insight "your observation"')
+
+    # Rule 5: promoted past cataloged but reliability undocumented.
+    for p in sorted(review):
+        r = review.get(p)
+        if not isinstance(r, dict) or p not in fams:
+            continue
+        if ((r.get("stage") or "cataloged") != "cataloged"
+                and not (r.get("uncertainty_metrics") or "").strip()):
+            _add("metrics", p,
+                 "Flagged as important but reliability is undocumented.",
+                 f'python tools/product_scope.py --review {p} '
+                 f'--notes "reliability: ..."')
+
+    return actions
+
+UPNEXT_VISIBLE_CAP = 5
+
+def build_up_next(fams, review, probes, data_cache):
+    """Team Pulse chapter lead: the 'Up next' action-queue card.
+
+    Renders the top-5 derived actions from _derive_next_actions() as a
+    10-second punch list - rank chip, action-type icon, linked product name
+    + verb phrase, one-line why, and the exact command click-to-copyable on
+    the right (the same .copy-cmd control the freshbar and card scaffolds
+    use). Product names jump to their card via the existing data-jump-path
+    handler. Overflow beyond 5 sits behind the unified details.disc
+    disclosure (persisted under product_scope:upnext_more). A fully
+    caught-up state renders a green celebration line, not an empty box.
+    """
+    actions = _derive_next_actions(fams, review, probes, data_cache)
+    n = len(actions)
+    parts = [
+        '<div class="upnext-section" role="region" '
+        'aria-label="Up next - suggested team actions">',
+        '<div class="upnext-head"><h2>Up next</h2>'
+        + (f'<span class="upnext-tag">{n} queued</span>' if n else
+           '<span class="upnext-tag" style="background:#D6EDD9;'
+           'color:#1F5A2E">all clear</span>')
+        + '</div>',
+        '<div class="upnext-caption">What the team should do next, ranked - '
+        'derived from the tracker\'s current state at regen time, nothing '
+        'hand-maintained. Finish an item and it drops off on the next '
+        'regen.</div>',
+    ]
+
+    if not actions:
+        parts.append(
+            '<div class="upnext-done">'
+            '<span class="una-ico" aria-hidden="true">✅</span>'
+            '<span><b>All caught up - nothing queued.</b> Browse the '
+            'landscape or add a note to any product.</span>'
+            '</div></div>')
+        return "".join(parts)
+
+    def _row(a, rank):
+        path = a["path"]
+        verb = NEXT_ACTION_VERBS[a["rule"]]
+        if path:
+            name = (fams.get(path) or {}).get("title") or path
+            head = (f'<a class="una-name" href="#prod-{_esc(path)}" '
+                    f'data-jump-path="{_esc(path)}">{_esc(name)}</a>'
+                    f' <span class="una-act">&mdash; {_esc(verb)}</span>')
+        else:
+            head = f'<span class="una-act">{_esc(verb)}</span>'
+        return ('<li>'
+                f'<span class="una-rank" aria-hidden="true">{rank}</span>'
+                f'<span class="una-ico" aria-hidden="true">{a["icon"]}</span>'
+                f'<span class="una-body">'
+                f'<span class="una-head">{head}</span>'
+                f'<span class="una-why" style="display:block">'
+                f'{_esc(a["why"])}</span>'
+                f'</span>'
+                f'<span class="copy-cmd light"><code>{_esc(a["cmd"])}</code>'
+                f'<button data-copy="{_esc(a["cmd"])}">Copy</button></span>'
+                '</li>')
+
+    visible = actions[:UPNEXT_VISIBLE_CAP]
+    hidden = actions[UPNEXT_VISIBLE_CAP:]
+    parts.append('<ul class="upnext-list">')
+    parts.extend(_row(a, i) for i, a in enumerate(visible, start=1))
+    parts.append('</ul>')
+
+    if hidden:
+        # Closed-state preview names the next suggestion, per the unified
+        # disclosure grammar (tell the reader what's inside before opening).
+        nxt = hidden[0]
+        nxt_name = ((fams.get(nxt["path"]) or {}).get("title") or nxt["path"]
+                    if nxt["path"] else NEXT_ACTION_VERBS[nxt["rule"]])
+        preview = f'next: {nxt["icon"]} {_esc(nxt_name)}'
+        parts.append(
+            f'<details class="upnext-more disc" data-persist-key="upnext_more">'
+            f'<summary>+ {len(hidden)} more suggestion'
+            f'{"s" if len(hidden) != 1 else ""}'
+            f'<span class="disc-preview">{preview}</span></summary>'
+            '<ul class="upnext-list" style="border-top:1px solid #EADFB8">')
+        parts.extend(_row(a, i) for i, a in
+                     enumerate(hidden, start=len(visible) + 1))
+        parts.append('</ul></details>')
+
+    parts.append('</div>')
+    return "".join(parts)
+
 def build_census_press_feed(cache_path):
     """Return an HTML fragment for the Bureau press-release mini-feed. Always
     renders SOMETHING - fresh feed, cached feed with a `may be outdated` tag,
@@ -9419,15 +9693,20 @@ def build_home(fams, review, work, counts, worklog, notebooks, probes, git=None,
                       "pipeline &middot; treemap", ch2))
 
     # ---- Chapter 3: Team pulse -------------------------------------------
-    # External (Bureau press releases) + internal (WWL synthesis feed)
-    # activity signals. Visually clustered so the reader sees "what's new
-    # this week" as one section rather than two scattered feeds.
-    ch3 = []
+    # Action first, then signals. The "Up next" queue (mission-statement
+    # pass 2026-07-26) leads the chapter: pulse implies action, and this is
+    # the one place on the page that answers "what should the team do next"
+    # (job 2 of the tool's mission statement). Below it, the external
+    # (Bureau press releases) + internal (WWL synthesis feed) activity
+    # signals, visually clustered so the reader sees "what's new this week"
+    # as one section rather than two scattered feeds.
+    ch3 = [build_up_next(fams, review, probes, data_cache or {})]
     if repo is not None:
         ch3.append(build_census_press_feed(repo / CENSUS_PRESS_CACHE))
     ch3.append(build_what_learned(fams, review, worklog, git))
     h.append(_chapter("team-pulse", "Team pulse",
-                      "Bureau feed &middot; team findings", ch3))
+                      "up next &middot; Bureau feed &middot; team findings",
+                      ch3))
     # Phase A 2026-07-26 commit #3: auto-tooltip jargon in the Home body copy
     # (MOE, CV, DP, PUMS, allocation, swapping, imputation, variance replicate,
     # differential privacy). Handled as a post-render pass so descriptions and
