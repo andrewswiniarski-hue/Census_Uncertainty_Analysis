@@ -3060,6 +3060,10 @@ details.disc[open] > summary .disc-preview{display:none;}
    treemap lives inside the sibling `.lscape-expanded` div which stays
    `hidden` until the user (or persisted localStorage state) opens it.
    `data-landscape-toggle` buttons flip between the two views. */
+/* Scope statement under the landscape h2 (2026-07-26). Always visible in
+   both compact and expanded states - it frames what the count means. */
+.lscape-scope-note{font-size:var(--fs-1);color:var(--muted);margin:2px 0 10px;
+       max-width:900px;line-height:1.55;}
 .lscape-compact{margin:6px 0 0;}
 .lscape-compact-caption{font-size:var(--fs-2);color:var(--muted);
        line-height:1.45;margin:0 0 10px;max-width:900px;}
@@ -8577,6 +8581,20 @@ def build_landscape_viz(fams, work, probes, data_cache, review=None):
 
     return ('<div class="lscape-section" data-collapsible="landscape">'
             '<h2>The Census data landscape</h2>'
+            # Scope statement (2026-07-26, dataset-count discussion): what
+            # this inventory covers and what it deliberately does not, so
+            # nobody quotes "~570 products" as the Bureau's total output.
+            # Mirrored in tools/README.md; the open mentor question about
+            # which other non-API products belong lives in the repo-root
+            # README's "Open Questions for Mentors" list.
+            '<div class="lscape-scope-note">'
+            '~570 product families from the Census Data API catalog. The API '
+            'covers ~1,800 dataset-vintages; the Bureau&rsquo;s full '
+            'file-level catalog is larger (~6,000+ files counting every '
+            'release) &mdash; non-API bulk products like TIGER shapefiles '
+            'and DAS demonstration files are hand-added where relevant to '
+            'our analysis.'
+            '</div>'
             '<div class="lscape-compact" data-landscape-view="compact">'
             '<div class="lscape-compact-caption">'
             f'{len(fams):,} Census products across {len(kind_order)} dataset '

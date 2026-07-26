@@ -55,6 +55,8 @@ The review workflow — marking products as candidates or FOCUS, filtering the s
 
 Our inventory of every Census statistical product, what each one publishes, and how far our own work has gotten on it. Re-run it before each biweekly; the output is a single self-contained HTML page.
 
+**Catalog scope.** ~570 product families from the Census Data API catalog. The API covers ~1,800 dataset-vintages; the Bureau's full file-level catalog is larger (~6,000+ files counting every release) — non-API bulk products like TIGER shapefiles and DAS demonstration files are hand-added where relevant to our analysis. (Which other non-API products belong in the inventory is an open question on the repo-root README's "Open Questions for Mentors" list.)
+
 **Two files, both required.** `product_scope.py` is the tool. `scope_evidence.py` is the evidence engine it uses to read the repo. They must sit in the same folder — if `scope_evidence.py` goes missing the tool still runs but downgrades to a shallow text scan and says so. Watch for `deep forensics` in the output; `regex fallback` means something is wrong.
 
 ---
