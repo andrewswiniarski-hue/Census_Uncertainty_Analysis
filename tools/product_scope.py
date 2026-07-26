@@ -3854,7 +3854,8 @@ def render(fams, review, work, worklog, notebooks, probes, repo_name, catnote, o
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--repo", required=True)
+    ap.add_argument("--repo", default=".",
+                    help="repo root (default: current directory).")
     ap.add_argument("--out", default=None,
                     help="default: <repo>/product_report.html (or product_review.<ext> with --export)")
     ap.add_argument("--online", action="store_true")
@@ -3867,11 +3868,15 @@ def main():
                          "Default output file is product_review.csv or product_review.xlsx "
                          "at the repo root; override with --out.")
     # ---- Phase 3: sample / EDA mode (see SAMPLE / EDA MODE section above) --
-    ap.add_argument("--sample", action="store_true",
-                    help="fetch actual data slices and run a canonical EDA. Combined "
-                         "with --product X, samples one product; alone, batch-samples "
-                         "every product currently marked 'candidate' in product_review.json. "
-                         "Skips fresh cache entries (< 7 days) unless --refresh is given.")
+    # --sample takes an optional positional product id: `--sample acs/acs5`
+    # samples one product; `--sample` alone batch-samples every Candidate.
+    # Legacy `--sample --product X` still works (product wins over positional).
+    ap.add_argument("--sample", nargs="?", const="__BATCH__", default=None, metavar="PRODUCT_ID",
+                    help="fetch actual data slices and run a canonical EDA. "
+                         "With a product id (e.g. --sample acs/acs5), samples that one "
+                         "product; alone, batch-samples every product currently marked "
+                         "'candidate' in product_review.json. Skips fresh cache entries "
+                         "(< 7 days) unless --refresh is given.")
     ap.add_argument("--sample-size", type=int, default=SAMPLE_SIZE_DEFAULT, metavar="N",
                     help=f"row count per sample (default: {SAMPLE_SIZE_DEFAULT}). "
                          "The Census data API truncates automatically; smaller = faster.")
@@ -3880,8 +3885,8 @@ def main():
                          "with --sample). Diff against the previous sample is surfaced "
                          "in the report.")
     ap.add_argument("--product", metavar="ID", default=None,
-                    help="target product for --sample (single-product mode). "
-                         "Ignored otherwise.")
+                    help="deprecated: legacy target product for --sample. "
+                         "Prefer `--sample PRODUCT_ID`; still accepted for back-compat.")
     # ---- Phase 5 (CLI helper): --review + action flags ----------------------
     # Additive, atomic write to product_review.json. Preserves the schema +
     # auto-insight pieces from earlier Phase 5 commits; replaces the (dropped)
@@ -3978,8 +3983,17 @@ def main():
               + (f" | github: {git['github_slug']}" if git.get("github_slug") else ""))
 
     # Phase 3: --sample runs before HTML render; results feed back into the report.
-    if args.sample:
-        sample_products(repo, fams, review, probes, args.product,
+    # args.sample values (nargs='?' with const='__BATCH__'):
+    #   None          -> flag not passed; skip sampling
+    #   '__BATCH__'   -> `--sample` alone; batch every Candidate (unless --product
+    #                    provides a target, kept for back-compat with legacy
+    #                    `--sample --product X` invocations)
+    #   any other str -> `--sample <product_id>`; single-product mode
+    if args.sample is not None:
+        sample_target = args.product
+        if sample_target is None and args.sample != "__BATCH__":
+            sample_target = args.sample
+        sample_products(repo, fams, review, probes, sample_target,
                         args.sample_size, args.refresh, git)
 
     if args.export:

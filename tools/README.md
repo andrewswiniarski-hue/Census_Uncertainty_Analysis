@@ -5,12 +5,14 @@ Decide whether a Census product belongs in the composite.
 ## Try it in 3 commands
 
 ```powershell
-python tools\product_scope.py --repo . --review acs/acs5 --status focus --role cv_source --note "primary CV source for every ACS geography"
-python tools\product_scope.py --repo .
+python tools\product_scope.py --review acs/acs5 --status focus --role cv_source --note "primary CV source for every ACS geography"
+python tools\product_scope.py
 start product_report.html
 ```
 
 That's the whole verb: review a product, log an insight, see it in the report. Everything below is reference.
+
+`--repo` defaults to the current directory, so run these from the repo root and the tool finds itself.
 
 ---
 
@@ -28,16 +30,16 @@ From the **repo root**, with the venv active:
 
 ```powershell
 .venv\Scripts\activate
-python tools\product_scope.py --repo .
+python tools\product_scope.py
 start product_report.html
 ```
 
-That's the routine run — it uses the cached catalog, so it takes a couple of seconds.
+That's the routine run — it uses the cached catalog, so it takes a couple of seconds. `--repo` defaults to the current directory; pass `--repo <path>` only if you're running from somewhere else.
 
 **To refresh the catalog** (new products get published; do this occasionally and before a milestone):
 
 ```powershell
-python tools\product_scope.py --repo . --online
+python tools\product_scope.py --online
 ```
 
 Crawls `api.census.gov/data.json` — about 1,800 dataset-vintages collapsing to roughly 570 product families — and rewrites `scope_field_cache.json`.
@@ -47,8 +49,8 @@ If the crawl fails, the tool says so loudly and lists only the non-API products.
 **To export a per-product review table** (one row per product family, for spreadsheet review workflows outside the browser):
 
 ```powershell
-python tools\product_scope.py --repo . --export csv    # writes product_review.csv
-python tools\product_scope.py --repo . --export xlsx   # writes product_review.xlsx
+python tools\product_scope.py --export csv    # writes product_review.csv
+python tools\product_scope.py --export xlsx   # writes product_review.xlsx
 ```
 
 Skips the HTML report and writes only the export. Same catalog + review + evidence + probe sources the report uses, so the export cannot drift from what the tabs show. Columns: `Product ID, Name, Family, Agency, Status, Repo Evidence, MOE Var Count, Allocation Groups, Geography Levels, Notes, Last Reviewed By, Last Reviewed Date`. Override the default path with `--out`. Both files are gitignored — treat them as script output, not committed state.
@@ -86,14 +88,14 @@ acs/acs5  36,144 variables; 12,048 carry an _M margin of error; 3 allocation gro
 **To probe:** tick the `probe` box on any number of product cards. A bar appears bottom-right with a count. Click **Download queue** — it saves `probe_queue.json` to your Downloads. Then:
 
 ```powershell
-python tools\product_scope.py --repo . --probe-queue "$env:USERPROFILE\Downloads\probe_queue.json"
-python tools\product_scope.py --repo .        # rebuild the report to see the results
+python tools\product_scope.py --probe-queue "$env:USERPROFILE\Downloads\probe_queue.json"
+python tools\product_scope.py        # rebuild the report to see the results
 ```
 
 Or probe one directly, no clicking:
 
 ```powershell
-python tools\product_scope.py --repo . --probe acs/acs5 --probe dec/dhc
+python tools\product_scope.py --probe acs/acs5 --probe dec/dhc
 ```
 
 Results land in **`product_probes.json` at the repo root, which IS committed** — probe once, the whole team sees it. Probed products show a gold `probe` chip so you can tell at a glance what's been checked.
@@ -109,15 +111,15 @@ A **probe** tells you what a product publishes. A **sample** fetches an actual d
 **Sample one product directly.**
 
 ```powershell
-python tools\product_scope.py --repo . --sample --product acs/acs5
+python tools\product_scope.py --sample acs/acs5
 ```
 
-Always hits the API. **Freshness is NOT checked** — the reviewer asked for that product, so we fetch it, regardless of what's in the cache.
+Always hits the API. **Freshness is NOT checked** — the reviewer asked for that product, so we fetch it, regardless of what's in the cache. (The legacy form `--sample --product acs/acs5` still works.)
 
 **Batch-sample every Candidate.**
 
 ```powershell
-python tools\product_scope.py --repo . --sample
+python tools\product_scope.py --sample
 ```
 
 Batch mode picks up every product currently `stage: "candidate"` in `product_review.json`, skips ones with a fresh cache (< 7 days), and skips non-API products (DAS demo, TIGER, anything without a queryable `variables.json`) with a clear message. Sequential requests with a 500 ms delay to be polite to the Census API.
@@ -125,7 +127,7 @@ Batch mode picks up every product currently `stage: "candidate"` in `product_rev
 **Force a re-sample** even if the cache is fresh:
 
 ```powershell
-python tools\product_scope.py --repo . --sample --refresh
+python tools\product_scope.py --sample --refresh
 ```
 
 `--refresh` also runs a **diff** against the previous cached sample and surfaces material changes (new/removed columns, dtype changes, missingness deltas > 10 percentage points, row-count deltas > 10 %) both on the affected card and in the Home tab's "Since last regeneration" banner.
@@ -179,19 +181,19 @@ Hand-editing `product_review.json` with a text editor works fine for one-off cha
 
 ```powershell
 # Append a human insight (source='human'); who = your git config user.name
-python tools\product_scope.py --repo . --review acs/acs5 --insight "Confirmed replicate weights ship with the microdata extract"
+python tools\product_scope.py --review acs/acs5 --insight "Confirmed replicate weights ship with the microdata extract"
 
 # Set stage; case-insensitive input, canonical lowercase on disk
-python tools\product_scope.py --repo . --review acs/acs5 --status FOCUS
+python tools\product_scope.py --review acs/acs5 --status FOCUS
 
 # Declare a composite role — REQUIRES --note on the same command
-python tools\product_scope.py --repo . --review acs/acs5 --role cv_source --note "primary CV source across every geography"
+python tools\product_scope.py --review acs/acs5 --role cv_source --note "primary CV source across every geography"
 
 # Multiple actions atomically in one write
-python tools\product_scope.py --repo . --review dec/dhc --status Candidate --insight "Set as Candidate; DHC exposes DP noise magnitudes that feed the composite reliability score"
+python tools\product_scope.py --review dec/dhc --status Candidate --insight "Set as Candidate; DHC exposes DP noise magnitudes that feed the composite reliability score"
 
 # Override the git-derived attribution (e.g. logging insight from a mentor)
-python tools\product_scope.py --repo . --review acs/acs5 --author "Andrew" --insight "Mentor confirmed the B98/B99 allocation tables ship separately from the estimate MOEs"
+python tools\product_scope.py --review acs/acs5 --author "Andrew" --insight "Mentor confirmed the B98/B99 allocation tables ship separately from the estimate MOEs"
 ```
 
 **Available action flags** (at least one required per invocation):
