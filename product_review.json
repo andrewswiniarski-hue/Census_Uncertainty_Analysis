@@ -1,0 +1,3734 @@
+{
+  "abscb": {
+    "composite_role": "",
+    "composite_role_note": "",
+    "insights": [],
+    "last_reviewed_by": "",
+    "last_reviewed_date": "",
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "abscbo": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "abscs": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "absmcb": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "absnesd": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "absnesdo": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "abstcb": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "acs/acs1": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "acs/acs1/cprofile": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "acs/acs1/profile": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "acs/acs1/pums": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "acs/acs1/pumspr": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "acs/acs1/sdataprofile/cd119": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "acs/acs1/spp": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "acs/acs1/subject": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "acs/acs3": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "acs/acs3/cprofile": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "acs/acs3/profile": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "acs/acs3/spp": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "acs/acs3/subject": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "acs/acs5": {
+    "composite_role": "cv_source",
+    "composite_role_note": "primary CV source for every ACS geography",
+    "insights": [
+      {
+        "source": "auto:repo",
+        "text": "Andrew Swiniarski added analysis/acs.py referencing this product (commit ac621c8)",
+        "when": "2026-07-25T22:14:27Z",
+        "who": "Andrew Swiniarski"
+      },
+      {
+        "source": "auto:repo",
+        "text": "Andrew Swiniarski added analysis/acs.py referencing this product (commit 537a66e)",
+        "when": "2026-07-25T22:14:27Z",
+        "who": "Andrew Swiniarski"
+      },
+      {
+        "source": "auto:repo",
+        "text": "Andrew Swiniarski added docs/data-dictionary.md referencing this product (commit ffb57c9)",
+        "when": "2026-07-25T22:14:27Z",
+        "who": "Andrew Swiniarski"
+      },
+      {
+        "source": "auto:repo",
+        "text": "Andrew Swiniarski added docs/data-dictionary.md referencing this product (commit ac4921a)",
+        "when": "2026-07-25T22:14:27Z",
+        "who": "Andrew Swiniarski"
+      },
+      {
+        "source": "auto:repo",
+        "text": "Andrew Swiniarski added docs/data-dictionary.md referencing this product (commit 1728466)",
+        "when": "2026-07-25T22:14:27Z",
+        "who": "Andrew Swiniarski"
+      },
+      {
+        "source": "auto:repo",
+        "text": "Andrew Swiniarski added ingestion/pull_acs_alloc_nj.py referencing this product (commit ffb57c9)",
+        "when": "2026-07-25T22:14:27Z",
+        "who": "Andrew Swiniarski"
+      },
+      {
+        "source": "auto:repo",
+        "text": "Andrew Swiniarski added ingestion/pull_acs_nj.py referencing this product (commit 3e0cb91)",
+        "when": "2026-07-25T22:14:27Z",
+        "who": "Andrew Swiniarski"
+      },
+      {
+        "source": "auto:repo",
+        "text": "christiansenkather added ingestion/pull_acs_us.py referencing this product (commit 621c9c2)",
+        "when": "2026-07-25T22:14:27Z",
+        "who": "christiansenkather"
+      },
+      {
+        "source": "auto:repo",
+        "text": "Andrew Swiniarski added notebooks/05-allocation-rates-vs-cv.ipynb referencing this product (commit ffb57c9)",
+        "when": "2026-07-25T22:14:27Z",
+        "who": "Andrew Swiniarski"
+      },
+      {
+        "source": "auto:cache_diff",
+        "text": "Sample refreshed. Row count jumped 0%: 1000 -> 1000.",
+        "when": "2026-07-25T22:18:26Z",
+        "who": "auto"
+      },
+      {
+        "source": "auto:cache_diff",
+        "text": "Sample refreshed. Row count jumped 1%: 1000 -> 1100.",
+        "when": "2026-07-25T22:18:26Z",
+        "who": "auto"
+      },
+      {
+        "source": "auto:divergence",
+        "text": "Role removed. No composite code references this product.",
+        "when": "2026-07-25T23:02:19Z",
+        "who": "auto"
+      },
+      {
+        "source": "auto:divergence",
+        "text": "cv_source role declared with note. No composite code references this product yet.",
+        "when": "2026-07-26T00:03:46Z",
+        "who": "auto"
+      }
+    ],
+    "last_reviewed_by": "Garrett",
+    "last_reviewed_date": "2026-07-25",
+    "note": "",
+    "sample_config": "always",
+    "stage": "focus",
+    "uncertainty_metrics": ""
+  },
+  "acs/acs5/aian": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "acs/acs5/aianprofile": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "acs/acs5/cprofile": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "acs/acs5/eeo": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "acs/acs5/profile": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "acs/acs5/pums": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "acs/acs5/pumspr": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "acs/acs5/spt": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "acs/acs5/sptprofile": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "acs/acs5/subject": {
+    "composite_role": "allocation_source",
+    "composite_role_note": "Proxy for the B98/B99 allocation tables (which technically live inside acs/acs5). Subject Tables are the closest distinct catalog family \u2014 used here to give allocation its own composite role since acs/acs5 already carries cv_source.",
+    "insights": [
+      {
+        "source": "auto:divergence",
+        "text": "allocation_source role declared with note. No composite code references this product yet.",
+        "when": "2026-07-26T00:03:46Z",
+        "who": "auto"
+      }
+    ],
+    "last_reviewed_by": "Garrett",
+    "last_reviewed_date": "2026-07-25",
+    "note": "",
+    "stage": "focus",
+    "uncertainty_metrics": ""
+  },
+  "acs/acsse": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "acs/flows": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "acs1/cd113": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "acs1/cd115": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "acs5": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "aiesnonemp": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ase/csa": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ase/cscb": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ase/cscbo": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cbp": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cfsarea": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cfsexport": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cfshazmat": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cfsprelim": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cfspum/cfspumdest": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cfspum/cfspumorig": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cfstemp": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/arts/feb": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/asec/mar": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/basic/apr": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/basic/aug": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/basic/dec": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/basic/feb": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/basic/jan": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/basic/jul": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/basic/jun": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/basic/mar": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/basic/may": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/basic/nov": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/basic/oct": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/basic/sep": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/civic/nov": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/contworker/feb": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/contworker/may": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/disability/jul": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/disability/may": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/dwjt/feb": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/dwjt/jan": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/fertility/jun": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/foodsec/apr": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/foodsec/aug": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/foodsec/dec": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/foodsec/sep": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/immigration/aug": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/internet/aug": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/internet/dec": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/internet/jul": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/internet/nov": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/internet/oct": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/internet/sep": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/library/oct": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/marital/jun": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/pubarts/aug": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/pubarts/jul": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/race/may": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/school/oct": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/tobacco/aug": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/tobacco/jan": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/tobacco/jul": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/tobacco/may": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/tobacco/sep": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/unbank/jan": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/unbank/jun": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/vets/aug": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/vets/jul": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/vets/sep": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/volunteer/sep": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/voting/nov": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cps/worksched/may": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "cre": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "crepuertorico": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/aian": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/aianprofile": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/as": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/asyoe": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/cd110h": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/cd110hprofile": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/cd110s": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/cd110sprofile": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/cd113": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/cd113profile": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/cd115": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/cd115profile": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/cd116": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/cd118": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/cd119": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/cqr": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/crosstabas": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/crosstabgu": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/crosstabmp": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/crosstabvi": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/das-demo": {
+    "insights": [
+      {
+        "source": "auto:repo",
+        "text": "Andrew Swiniarski added analysis/dhc.py referencing this product (commit ac4921a)",
+        "when": "2026-07-25T22:14:27Z",
+        "who": "Andrew Swiniarski"
+      },
+      {
+        "source": "auto:repo",
+        "text": "Andrew Swiniarski added docs/data-dictionary.md referencing this product (commit ffb57c9)",
+        "when": "2026-07-25T22:14:27Z",
+        "who": "Andrew Swiniarski"
+      },
+      {
+        "source": "auto:repo",
+        "text": "Andrew Swiniarski added docs/data-dictionary.md referencing this product (commit ac4921a)",
+        "when": "2026-07-25T22:14:27Z",
+        "who": "Andrew Swiniarski"
+      },
+      {
+        "source": "auto:repo",
+        "text": "Andrew Swiniarski added docs/data-dictionary.md referencing this product (commit 1728466)",
+        "when": "2026-07-25T22:14:27Z",
+        "who": "Andrew Swiniarski"
+      },
+      {
+        "source": "auto:repo",
+        "text": "Andrew Swiniarski added ingestion/pull_das_demo_nj.py referencing this product (commit 1728466)",
+        "when": "2026-07-25T22:14:27Z",
+        "who": "Andrew Swiniarski"
+      },
+      {
+        "source": "auto:repo",
+        "text": "Andrew Swiniarski added ingestion/pull_sf1_2010_nj.py referencing this product (commit ac4921a)",
+        "when": "2026-07-25T22:14:27Z",
+        "who": "Andrew Swiniarski"
+      },
+      {
+        "source": "auto:repo",
+        "text": "Andrew Swiniarski added notebooks/04-privacy-noise-das-demo.ipynb referencing this product (commit ac4921a)",
+        "when": "2026-07-25T22:14:27Z",
+        "who": "Andrew Swiniarski"
+      }
+    ],
+    "last_reviewed_by": "",
+    "last_reviewed_date": "",
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/ddhca": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/ddhcb": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/dhc": {
+    "composite_role": "privacy_noise",
+    "composite_role_note": "DHC exposes DP noise magnitudes that feed the composite reliability score",
+    "insights": [
+      {
+        "source": "auto:repo",
+        "text": "Andrew Swiniarski added analysis/dhc.py referencing this product (commit ac4921a)",
+        "when": "2026-07-25T22:14:27Z",
+        "who": "Andrew Swiniarski"
+      },
+      {
+        "source": "auto:repo",
+        "text": "Andrew Swiniarski added docs/data-dictionary.md referencing this product (commit ffb57c9)",
+        "when": "2026-07-25T22:14:27Z",
+        "who": "Andrew Swiniarski"
+      },
+      {
+        "source": "auto:repo",
+        "text": "Andrew Swiniarski added docs/data-dictionary.md referencing this product (commit ac4921a)",
+        "when": "2026-07-25T22:14:27Z",
+        "who": "Andrew Swiniarski"
+      },
+      {
+        "source": "auto:repo",
+        "text": "Andrew Swiniarski added docs/data-dictionary.md referencing this product (commit 1728466)",
+        "when": "2026-07-25T22:14:27Z",
+        "who": "Andrew Swiniarski"
+      },
+      {
+        "source": "auto:repo",
+        "text": "Andrew Swiniarski added notebooks/04-privacy-noise-das-demo.ipynb referencing this product (commit ac4921a)",
+        "when": "2026-07-25T22:14:27Z",
+        "who": "Andrew Swiniarski"
+      },
+      {
+        "source": "auto:divergence",
+        "text": "privacy_noise role declared with note. No composite code references this product yet.",
+        "when": "2026-07-26T00:03:46Z",
+        "who": "auto"
+      }
+    ],
+    "last_reviewed_by": "Garrett",
+    "last_reviewed_date": "2026-07-25",
+    "note": "",
+    "stage": "focus",
+    "uncertainty_metrics": ""
+  },
+  "dec/dhcas": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/dhcgu": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/dhcmp": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/dhcvi": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/dp": {
+    "insights": [
+      {
+        "source": "auto:repo",
+        "text": "Andrew Swiniarski added docs/data-dictionary.md referencing this product (commit ffb57c9)",
+        "when": "2026-07-25T22:14:27Z",
+        "who": "Andrew Swiniarski"
+      },
+      {
+        "source": "auto:repo",
+        "text": "Andrew Swiniarski added docs/data-dictionary.md referencing this product (commit ac4921a)",
+        "when": "2026-07-25T22:14:27Z",
+        "who": "Andrew Swiniarski"
+      },
+      {
+        "source": "auto:repo",
+        "text": "Andrew Swiniarski added docs/data-dictionary.md referencing this product (commit 1728466)",
+        "when": "2026-07-25T22:14:27Z",
+        "who": "Andrew Swiniarski"
+      }
+    ],
+    "last_reviewed_by": "",
+    "last_reviewed_date": "",
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/dpas": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/dpgu": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/dpmp": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/dpvi": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/gu": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/guyoe": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/mp": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/mpyoe": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/pes": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/pl": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/plnat": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/responserate": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/sdhc": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/selfresponserate": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/sf1": {
+    "composite_role": "benchmark",
+    "composite_role_note": "SF1 used as an out-of-composite validation benchmark for the reliability score",
+    "insights": [
+      {
+        "source": "auto:repo",
+        "text": "Andrew Swiniarski added analysis/dhc.py referencing this product (commit ac4921a)",
+        "when": "2026-07-25T22:14:27Z",
+        "who": "Andrew Swiniarski"
+      },
+      {
+        "source": "auto:repo",
+        "text": "Andrew Swiniarski added docs/data-dictionary.md referencing this product (commit ffb57c9)",
+        "when": "2026-07-25T22:14:27Z",
+        "who": "Andrew Swiniarski"
+      },
+      {
+        "source": "auto:repo",
+        "text": "Andrew Swiniarski added docs/data-dictionary.md referencing this product (commit ac4921a)",
+        "when": "2026-07-25T22:14:27Z",
+        "who": "Andrew Swiniarski"
+      },
+      {
+        "source": "auto:repo",
+        "text": "Andrew Swiniarski added docs/data-dictionary.md referencing this product (commit 1728466)",
+        "when": "2026-07-25T22:14:27Z",
+        "who": "Andrew Swiniarski"
+      },
+      {
+        "source": "auto:repo",
+        "text": "Andrew Swiniarski added ingestion/pull_sf1_2010_nj.py referencing this product (commit ac4921a)",
+        "when": "2026-07-25T22:14:27Z",
+        "who": "Andrew Swiniarski"
+      },
+      {
+        "source": "auto:repo",
+        "text": "Andrew Swiniarski added notebooks/04-privacy-noise-das-demo.ipynb referencing this product (commit ac4921a)",
+        "when": "2026-07-25T22:14:27Z",
+        "who": "Andrew Swiniarski"
+      },
+      {
+        "source": "auto:divergence",
+        "text": "benchmark role declared with note. No composite code references this product yet.",
+        "when": "2026-07-26T00:03:46Z",
+        "who": "auto"
+      }
+    ],
+    "last_reviewed_by": "Garrett",
+    "last_reviewed_date": "2026-07-25",
+    "note": "",
+    "stage": "focus",
+    "uncertainty_metrics": ""
+  },
+  "dec/sf2": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/sf2profile": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/sf3": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/sf3profile": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/sf4": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/sf4profile": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/sldh": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/sldhprofile": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/slds": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/sldsprofile": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "dec/vi": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecn/islandareas": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecn/islandareas/comp": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecn/islandareas/ind": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecn/islandareas/lines": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecn/islandareas/napcs": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnadbnprop": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnadmben": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnbasic": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnbranddeal": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnbridge1": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnbridge2": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnbrordeal": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecncashadv": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnccard": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnclcust": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnclientorg": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecncomm": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecncomp": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnconact": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnconcess": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecncrfin": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecndirprem": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecndissmed": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnecomm": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnelmenu": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnempfunc": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnentsup": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecneoyinv": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecneoyinvwh": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnequip": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnexpbyaux": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnexpnrg": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnexpsvc": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnflspace": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnfoodsvc": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnfran": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecngrant": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecngrmargprof": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnguest": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnguestsize": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnhosp": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnhotel": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecninstr": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecninvval": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnipa": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnkob": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnlabor": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnlifomfg": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnlifomine": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnlifoval": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnlines": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnloan": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnloccons": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnlocmfg": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnlocmine": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnmargin": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnmatfuel": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnmealcost": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnmenutype": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnnapcsind": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnnapcsprd": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnpatient": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnpetrfac": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnpetrprod": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnpetrrec": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnpetrstat": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnprofit": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnpurelec": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnpurgas": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnpurmode": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnrdacq": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnrdofc": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnseat": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnsize": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnsocial": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecntelemeds": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecntype": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecntypepayer": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecntypop": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ecnvalcon": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "ewks": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "geo/tiger": {
+    "composite_role": "geometry",
+    "composite_role_note": "TIGER shapefiles supply the geographic boundaries used for composite aggregation",
+    "insights": [
+      {
+        "source": "auto:repo",
+        "text": "Andrew Swiniarski added docs/data-dictionary.md referencing this product (commit ffb57c9)",
+        "when": "2026-07-25T22:14:27Z",
+        "who": "Andrew Swiniarski"
+      },
+      {
+        "source": "auto:repo",
+        "text": "Andrew Swiniarski added docs/data-dictionary.md referencing this product (commit ac4921a)",
+        "when": "2026-07-25T22:14:27Z",
+        "who": "Andrew Swiniarski"
+      },
+      {
+        "source": "auto:repo",
+        "text": "Andrew Swiniarski added docs/data-dictionary.md referencing this product (commit 1728466)",
+        "when": "2026-07-25T22:14:27Z",
+        "who": "Andrew Swiniarski"
+      },
+      {
+        "source": "auto:repo",
+        "text": "christiansenkather added ingestion/pull_acs_us.py referencing this product (commit 621c9c2)",
+        "when": "2026-07-25T22:14:27Z",
+        "who": "christiansenkather"
+      },
+      {
+        "source": "auto:repo",
+        "text": "Andrew Swiniarski added ingestion/pull_nj_geometry.py referencing this product (commit e7895a5)",
+        "when": "2026-07-25T22:14:27Z",
+        "who": "Andrew Swiniarski"
+      },
+      {
+        "source": "auto:divergence",
+        "text": "geometry role declared with note. No composite code references this product yet.",
+        "when": "2026-07-26T00:03:46Z",
+        "who": "auto"
+      }
+    ],
+    "last_reviewed_by": "Garrett",
+    "last_reviewed_date": "2026-07-25",
+    "note": "",
+    "stage": "focus",
+    "uncertainty_metrics": ""
+  },
+  "geoinfo": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "intltrade/imp_exp": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "language": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "nonemp": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "pdb/blockgroup": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "pdb/statecounty": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "pdb/tract": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "pep/agesex": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "pep/agespecial5": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "pep/agespecial6": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "pep/agespecialpr": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "pep/charage": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "pep/charagegroups": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "pep/charv": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "pep/cochar5": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "pep/cochar6": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "pep/components": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "pep/cty": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "pep/housing": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "pep/int_charage": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "pep/int_charagegroups": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "pep/int_housingunits": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "pep/int_natcivpop": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "pep/int_natmonthly": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "pep/int_natresafo": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "pep/int_natrespop": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "pep/int_population": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "pep/monthlynatchar5": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "pep/monthlynatchar6": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "pep/natmonthly": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "pep/natstprc": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "pep/natstprc18": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "pep/population": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "pep/prcagesex": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "pep/prm": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "pep/prmagesex": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "pep/projagegroups": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "pep/projbirths": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "pep/projdeaths": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "pep/projnat": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "pep/projnim": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "pep/projpop": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "pep/stchar5": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "pep/stchar6": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "pep/subcty": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "popproj/agegroups": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "popproj/births": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "popproj/deaths": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "popproj/nat": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "popproj/nim": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "popproj/pop": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "pubschlfin": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "rhfs": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sbo/cs": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sbo/cscb": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sbo/cscbo": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/benefit/1990panel": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/benefit/1991panel": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1990panel/wave1": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1990panel/wave2": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1990panel/wave3": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1990panel/wave4": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1990panel/wave5": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1990panel/wave6": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1990panel/wave7": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1990panel/wave8": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1991panel/wave1": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1991panel/wave2": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1991panel/wave3": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1991panel/wave4": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1991panel/wave5": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1991panel/wave6": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1991panel/wave7": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1991panel/wave8": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1992panel/wave1": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1992panel/wave2": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1992panel/wave3": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1992panel/wave4": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1992panel/wave5": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1992panel/wave6": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1992panel/wave7": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1992panel/wave8": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1992panel/wave9": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1993panel/wave1": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1993panel/wave2": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1993panel/wave3": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1993panel/wave4": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1993panel/wave5": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1993panel/wave6": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1993panel/wave7": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1993panel/wave8": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1993panel/wave9": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1996panel/wave1": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1996panel/wave10": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1996panel/wave11": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1996panel/wave12": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1996panel/wave2": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1996panel/wave3": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1996panel/wave4": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1996panel/wave5": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1996panel/wave6": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1996panel/wave7": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1996panel/wave8": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/1996panel/wave9": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/2001panel/wave1": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/2001panel/wave2": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/2001panel/wave3": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/2001panel/wave4": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/2001panel/wave5": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/2001panel/wave6": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/2001panel/wave7": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/2001panel/wave8": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/2001panel/wave9": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/2004panel/wave1": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/2004panel/wave10": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/2004panel/wave11": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/2004panel/wave12": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/2004panel/wave2": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/2004panel/wave3": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/2004panel/wave4": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/2004panel/wave5": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/2004panel/wave6": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/2004panel/wave7": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/2004panel/wave8": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/2004panel/wave9": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/2008panel/wave1": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/2008panel/wave10": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/2008panel/wave11": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/2008panel/wave12": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/2008panel/wave13": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/2008panel/wave14": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/2008panel/wave15": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/2008panel/wave16": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/2008panel/wave2": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/2008panel/wave3": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/2008panel/wave4": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/2008panel/wave5": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/2008panel/wave6": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/2008panel/wave7": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/2008panel/wave8": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/core/2008panel/wave9": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/1990panel/wave2": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/1990panel/wave3": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/1990panel/wave4": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/1990panel/wave6": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/1990panel/wave7": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/1990panel/wave8": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/1991panel/wave2": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/1991panel/wave3": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/1991panel/wave4": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/1991panel/wave5": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/1991panel/wave6": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/1991panel/wave7": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/1992panel/wave1": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/1992panel/wave2": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/1992panel/wave3": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/1992panel/wave4": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/1992panel/wave6": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/1992panel/wave7": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/1992panel/wave9": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/1993panel/wave1": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/1993panel/wave2": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/1993panel/wave3": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/1993panel/wave4": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/1993panel/wave6": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/1993panel/wave7": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/1993panel/wave9": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/1996panel/wave1": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/1996panel/wave10": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/1996panel/wave11": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/1996panel/wave12": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/1996panel/wave2": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/1996panel/wave3": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/1996panel/wave4": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/1996panel/wave5": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/1996panel/wave6": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/1996panel/wave7": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/1996panel/wave8": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/1996panel/wave9": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/2001panel/wave1": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/2001panel/wave2": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/2001panel/wave3": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/2001panel/wave4": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/2001panel/wave5": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/2001panel/wave6": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/2001panel/wave7": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/2001panel/wave8": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/2001panel/wave9": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/2004panel/wave1": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/2004panel/wave2": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/2004panel/wave3": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/2004panel/wave4": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/2004panel/wave5": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/2004panel/wave6": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/2004panel/wave7": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/2004panel/wave8": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/2008panel/wave1": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/2008panel/wave10": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/2008panel/wave11": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/2008panel/wave13": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/2008panel/wave2": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/2008panel/wave3": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/2008panel/wave4": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/2008panel/wave5": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/2008panel/wave6": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/2008panel/wave7": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/2008panel/wave8": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topical/2008panel/wave9": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topicaled/1990panel/wave5": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topicaled/1991panel/wave8": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topicaled/1992panel/wave5": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topicaled/1992panel/wave8": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topicaled/1993panel/wave5": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topicaled/1993panel/wave8": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topicaledex/1990panel/wave5": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topicaledex/1990panel/wave8": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topicaledex/1991panel/wave5": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topicaledex/1991panel/wave8": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topicaledex/1992panel/wave5": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topicaledex/1992panel/wave8": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topicaledex/1993panel/wave5": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topicaledex/1993panel/wave8": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topicalex/1992panel/wave6": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topicalex/1993panel/wave3": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topicalres/1990panel/wave5": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topicalres/1991panel/wave8": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topicalres/1992panel/wave5": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topicalres/1992panel/wave8": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topicalres/1993panel/wave5": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topicalres/1993panel/wave8": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "sipp/topicalres/2001panel/wave8": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "surname": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/aies/basic": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/aies/ecom": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/aies/exp01": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/aies/exp02": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/aies/inv": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/aies/miscsector": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/asm/area2012": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/asm/area2017": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/asm/benchmark2017": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/asm/benchmark2022": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/asm/industry": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/asm/product": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/asm/state": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/asm/value2012": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/asm/value2017": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/bds": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/eits/advm3": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/eits/bfs": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/eits/ftd": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/eits/ftdadv": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/eits/hv": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/eits/m3": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/eits/marts": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/eits/mhs": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/eits/mhs2": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/eits/mrts": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/eits/mrtsadv": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/eits/mtis": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/eits/mwts": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/eits/mwtsadv": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/eits/qfr": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/eits/qpr": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/eits/qss": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/eits/qtax": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/eits/resconst": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/eits/ressales": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/eits/vip": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/govs": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/govsemp": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/govspension": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/govsschfin": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/govsstatefin": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/govsstatetax": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/healthins/sahie": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/hhpulse": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/hps": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/idb/1year": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/idb/5year": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/intltrade/exports/enduse": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/intltrade/exports/enduseexport": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/intltrade/exports/hitech": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/intltrade/exports/hitechexport": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/intltrade/exports/hs": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/intltrade/exports/hsexport": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/intltrade/exports/naics": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/intltrade/exports/naicsexport": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/intltrade/exports/porths": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/intltrade/exports/porthsexport": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/intltrade/exports/sitc": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/intltrade/exports/sitcexport": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/intltrade/exports/statehs": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/intltrade/exports/statehsexport": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/intltrade/exports/statenaics": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/intltrade/exports/statenaicsexport": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/intltrade/exports/usda": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/intltrade/exports/usdaexport": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/intltrade/imports/enduse": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/intltrade/imports/enduseimport": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/intltrade/imports/hitech": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/intltrade/imports/hitechimport": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/intltrade/imports/hs": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/intltrade/imports/hsimport": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/intltrade/imports/naics": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/intltrade/imports/naicsimport": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/intltrade/imports/porths": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/intltrade/imports/porthsimport": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/intltrade/imports/sitc": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/intltrade/imports/sitcimport": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/intltrade/imports/statehs": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/intltrade/imports/statehsimport": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/intltrade/imports/statenaics": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/intltrade/imports/statenaicsimport": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/intltrade/imports/usda": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/intltrade/imports/usdaimport": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/poverty/histpov2": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/poverty/saipe": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/poverty/saipe/schdist": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/pseo/earnings": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/pseo/flows": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/qwi/rh": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/qwi/sa": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/qwi/se": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "timeseries/soma": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "viusa": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "viusb": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "viusc": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "viusd": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "viuse": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "viusf": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "viuspuf": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
+  "zbp": {
+    "insights": [],
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  }
+}
