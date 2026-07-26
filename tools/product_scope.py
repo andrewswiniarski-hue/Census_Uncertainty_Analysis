@@ -3961,8 +3961,11 @@ def render(fams, review, work, worklog, notebooks, probes, repo_name, catnote, o
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--repo", default=".",
-                    help="repo root (default: current directory).")
+    ap.add_argument("--repo", default=None,
+                    help="repo root. Default: auto-detect by walking up from "
+                         "the current directory until a .git file/dir is found; "
+                         "falls back to '.' if none. Pass an explicit path (or "
+                         "'.') to skip auto-detect.")
     ap.add_argument("--out", default=None,
                     help="default: <repo>/product_report.html (or product_review.<ext> with --export)")
     ap.add_argument("--online", action="store_true")
@@ -4031,7 +4034,19 @@ def main():
                          "--no-regen). Uses stdlib webbrowser, which delegates "
                          "to start / open / xdg-open on the host OS.")
     args = ap.parse_args()
-    repo = Path(args.repo).resolve()
+    if args.repo is None:
+        cwd = Path.cwd().resolve()
+        detected = _find_repo_root(cwd)
+        if detected is None:
+            print(f"warning: no .git found from {cwd}; using . as repo root",
+                  file=sys.stderr)
+            repo = cwd
+        else:
+            repo = detected
+            if repo != cwd:
+                print(f"resolved repo root: {repo} (walked up from cwd)")
+    else:
+        repo = Path(args.repo).resolve()
     if not (repo / "ingestion").exists():
         sys.exit(f"error: {repo} doesn't look like the project repo")
     if args.export:
@@ -4064,6 +4079,22 @@ def main():
         _run_report_pipeline(repo, args, out)
     if args.open_report and not args.export:
         _open_report_in_browser(out)
+
+def _find_repo_root(start):
+    """Walk up from `start` looking for a directory (or file, for git worktrees)
+    called '.git'. Returns the first hit as an absolute Path, or None if we
+    reach the filesystem root without finding one. Post-audit UX pass #4:
+    lets a teammate run `python tools/product_scope.py` from any subdirectory
+    (notebooks/, analysis/, etc.) and have the tool find the real repo root
+    on its own, instead of erroring confusingly about a missing ingestion/."""
+    cur = Path(start).resolve()
+    while True:
+        if (cur / ".git").exists():
+            return cur
+        parent = cur.parent
+        if parent == cur:            # reached filesystem root
+            return None
+        cur = parent
 
 def _open_report_in_browser(out_path):
     """Open the report file in the default browser via stdlib webbrowser.
