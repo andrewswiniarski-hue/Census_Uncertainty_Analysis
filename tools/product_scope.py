@@ -3704,20 +3704,80 @@ def _ql_insights_tldr_html(insights):
     return ('<ul class="ql-insights">' + "".join(rows) + '</ul>'
             + (f'<div style="margin:2px 0 0">{more_link}</div>' if more_link else ""))
 
+def _ql_curated_findings_html(product_id):
+    """Render curated FINDINGS that match this card's family as pinned rows
+    at the top of the drill-down insights feed. Phase A #5 (2026-07-26): the
+    12 hand-curated headlines used to live only in Home's 'What we've
+    learned'; they now also inline on the matching card so a reviewer who
+    opens a product's drill-down doesn't have to jump back to Home to see
+    what the team has synthesised on it.
+
+    Order: curated findings first (editorial synthesis of the EDA notebooks),
+    then human insights (chronological), then auto-insights (recent). Cards
+    with no matching curated finding render nothing here - the caller keeps
+    the existing empty state / insights feed unchanged in that case.
+
+    Icon: WWL_ICON_CURATED (pinned pushpin) matches the Home feed so a
+    reader who has learned 'pushpin = editorial finding' gets the same
+    visual on the card."""
+    finds = [x for x in FINDINGS if x.get("family") == product_id]
+    if not finds:
+        return ""
+    rows = []
+    for x in finds:
+        headline = x.get("headline") or ""
+        stat = x.get("stat") or ""
+        detail = x.get("detail") or ""
+        nb = x.get("nb") or ""
+        kind_lbl = x.get("kind") or "finding"
+        head_html = ((f'<b>{_esc(stat)}</b> &middot; ' if stat else "")
+                     + _esc(headline))
+        meta_bits = []
+        if nb: meta_bits.append(f'EDA nb {_esc(nb)}')
+        meta_bits.append(_esc(kind_lbl))
+        meta_html = ' &middot; '.join(meta_bits)
+        rows.append('<li class="ins-row ins-curated" data-source="curated">'
+                    f'<span class="ins-ico" title="curated finding">'
+                    f'{WWL_ICON_CURATED}</span>'
+                    '<div class="ins-body">'
+                    f'<div class="ins-meta"><span class="ins-badge '
+                    f'ins-src-curated">curated</span>'
+                    f'<span class="ins-who">{meta_html}</span></div>'
+                    f'<div class="ins-text">{head_html}'
+                    + (f'<div class="wwl-detail" style="margin-top:3px">'
+                       f'{_esc(detail)}</div>' if detail else "")
+                    + '</div></div></li>')
+    return "".join(rows)
+
 def _ql_insights_drill_html(insights, product_id):
     """Full chronological feed of insights for the drill-down, read-only.
     Wrapped inside the tier-flavoured ql-d-block so it fits the drill-down
     visual language. Writes come from the CLI helper (`python tools/product_scope.py
-    --review <id> --insight "..."`) - the HTML itself never mutates anything."""
-    if not insights:
+    --review <id> --insight "..."`) - the HTML itself never mutates anything.
+
+    Post-Phase-A #5: curated FINDINGS matching this product family render as
+    pinned rows at the top of the feed. Order within the feed: curated
+    findings first, then human insights (newest first), then auto-insights.
+    """
+    curated_rows = _ql_curated_findings_html(product_id)
+    # Split human vs auto so we can order them independently. Human insights
+    # get chronological (newest first); auto-insights sort the same way.
+    def _split(inss):
+        human = [i for i in inss if (i.get("source") or "") == INSIGHT_HUMAN]
+        auto  = [i for i in inss if (i.get("source") or "") != INSIGHT_HUMAN]
+        return human, auto
+    human, auto = _split(insights or [])
+    human.sort(key=lambda i: i.get("when") or "", reverse=True)
+    auto.sort(key=lambda i: i.get("when") or "", reverse=True)
+    rows_html = curated_rows + "".join(
+        _insight_row_html(i, kind="drill") for i in (human + auto))
+    if not rows_html:
         insights_html = ('<div class="ins-empty">No insights yet. '
                          'Add one with <code>python tools/product_scope.py '
                          '--review ' + _esc(product_id) + ' --insight "..."</code>.</div>')
     else:
-        ordered = sorted(insights, key=lambda i: i.get("when") or "", reverse=True)
         insights_html = ('<ul class="scope-insights-feed" style="max-height:none">'
-                         + "".join(_insight_row_html(i, kind="drill") for i in ordered)
-                         + '</ul>')
+                         + rows_html + '</ul>')
     return ('<div class="ql-d-block ql-d-t2" style="background:#FAFAFC;'
             'border-color:#EDEEF3">'
             '<div class="ql-d-cap">Insights feed</div>'
