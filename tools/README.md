@@ -1,4 +1,20 @@
-# /tools — Product Scope Tracker
+# Product Scope Tracker
+
+Decide whether a Census product belongs in the composite.
+
+## Try it in 3 commands
+
+```powershell
+python tools\product_scope.py --repo . --review acs/acs5 --status focus --role cv_source --note "primary CV source for every ACS geography"
+python tools\product_scope.py --repo .
+start product_report.html
+```
+
+That's the whole verb: review a product, log an insight, see it in the report. Everything below is reference.
+
+---
+
+## What this tool is
 
 Our inventory of every Census statistical product, what each one publishes, and how far our own work has gotten on it. Re-run it before each biweekly; the output is a single self-contained HTML page.
 
@@ -90,17 +106,15 @@ Results land in **`product_probes.json` at the repo root, which IS committed** �
 
 A **probe** tells you what a product publishes. A **sample** fetches an actual data slice and runs a canonical EDA on it — dtype, missingness, numeric summaries, categorical top-5, geography breakdown, unicode sparklines. Same principle as the probe: it reports what the data looks like, it never writes a verdict.
 
-There are two ways to sample: **on-demand** (one product, right now) and **bulk** (`--warm-cache`, whole catalog, thread-pooled). They are separate entry points and have deliberately different rules — pick the one that matches what you're doing.
-
-**On-demand: sample one product directly.**
+**Sample one product directly.**
 
 ```powershell
 python tools\product_scope.py --repo . --sample --product acs/acs5
 ```
 
-Always hits the API. **Freshness is NOT checked** — the reviewer asked for that product, so we fetch it, regardless of what's in the cache. This is the difference from `--warm-cache`.
+Always hits the API. **Freshness is NOT checked** — the reviewer asked for that product, so we fetch it, regardless of what's in the cache.
 
-**On-demand: batch-sample every Candidate.**
+**Batch-sample every Candidate.**
 
 ```powershell
 python tools\product_scope.py --repo . --sample
@@ -126,67 +140,6 @@ Results land in **`scope_data_cache.json` at the repo root, which is GITIGNORED*
 
 ---
 
-## Warming the cache — bulk pass with `--warm-cache`
-
-`--warm-cache` walks the whole catalog and, for every product, runs a probe (into `product_probes.json`) then a sample (into `scope_data_cache.json`). It's the "everything at once" path — after one warm-cache run, every card in the report has the deepest tier of cached data the product supports, without a reviewer clicking through 573 products.
-
-```powershell
-python tools\product_scope.py --repo . --warm-cache
-```
-
-**What it skips** (and how the summary tags each case):
-
-- **Non-API products** (no `variables.json` endpoint — TIGER shapefiles, DAS demo, etc.) → `skipped_non_api`. These land in the Quick Look with a "not sample-able via API" note instead of the generic empty state.
-- **Fresh cache** — a probe cache < 7 days old AND a sample cache < 7 days old both count as fresh → `skipped_fresh`. `--refresh` overrides.
-- **`sample_config: "skip"`** in `product_review.json` (see below) → `skipped_config`. Never sampled by warm-cache, no matter how stale.
-
-Failures (HTTP timeouts, 4xx, bad JSON) are counted as `failed` and printed at the end with the reason; the run continues past every failure so one broken endpoint can't tank the whole batch.
-
-**Concurrency:** the batch runs in a `ThreadPoolExecutor` with 6 workers by default. Override with `--concurrency N`. Set `--concurrency 1` for a sequential run (no thread pool), which is much cleaner for debugging a specific failure.
-
-**Rate limiting:** outbound requests are held under **10 req/sec globally** via a sliding-window limiter shared across all workers. If any response returns a `Retry-After` header, the limiter honors it and every worker slows down accordingly. Rate limit responses (HTTP 429) are retried once.
-
-**Incremental persistence:** every successful probe/sample is written to its cache file immediately, under a `threading.Lock`. A mid-run crash — power loss, Ctrl-C, exception — keeps all completed work. Restart and it picks up where it left off (with `--refresh` if you want to re-do the freshly-cached ones).
-
-**Wall time is honest:** it depends on catalog size and Census API responsiveness. Rough guide on the current ~570-product catalog: a first pass without a `CENSUS_API_KEY` takes several minutes because the public rate limit throttles you; with a key it's typically under 2 minutes end-to-end. A steady-state re-run (`--warm-cache` with no `--refresh`) is a few seconds because most products are fresh-cache skipped.
-
-**Force a full re-warm:**
-
-```powershell
-python tools\product_scope.py --repo . --warm-cache --refresh
-```
-
-Ignores every freshness check and re-does the whole catalog. `--refresh` also triggers the EDA diff logic from `--sample`, so per-card drift banners appear.
-
-**Summary artifact:** `.warm_cache_last_run.json` at the repo root (gitignored) records counts, path lists, and the finish timestamp. The report reads it to fill in the "Last warm-cache: Xh ago" line under the freshness bar.
-
-### Per-product opt-outs and opt-ins: `sample_config`
-
-The review file supports an optional `sample_config` field per product:
-
-```json
-"dec/dhc": {
-  "stage": "focus",
-  "sample_config": "always"
-},
-"some/huge/product": {
-  "stage": "set-aside",
-  "sample_config": "skip"
-}
-```
-
-Values:
-
-- `"default"` (or missing) — respect `--warm-cache` freshness + non-API skip logic.
-- `"always"` — re-sample on every `--warm-cache` run even if the cache is fresh. Useful for FOCUS products where drift matters.
-- `"skip"` — never sample during warm-cache runs. Useful for Set-aside, huge, or API-problematic products.
-
-Unknown values (typos) fall back to `"default"` and log a warning to stderr so the reviewer notices.
-
-`--sample --product X` ignores `sample_config` entirely — an explicit ask from a reviewer always runs.
-
----
-
 ## The Quick Look card section
 
 Every product card carries a **Quick Look** section near the top. It renders the highest tier of data currently cached for that product and tags it with a colored chip so you can see the state at a glance without expanding the card:
@@ -196,14 +149,6 @@ Every product card carries a **Quick Look** section near the top. It renders the
 | **Cached: catalog** (grey)  | Tier 0 — only catalog metadata (family, agency, vintages, endpoint URL). |
 | **Cached: probe** (blue)    | Tier 1 — probe results cached: MOE variable count, allocation groups, geography levels. |
 | **Cached: sample** (green)  | Tier 2 — a data sample has been fetched: full EDA (dtypes, missingness, numeric summaries, top-5 categoricals, sparklines). |
-
-The Home tab's freshness bar carries a **cache coverage line** below it:
-
-```
-Cache coverage: 342/570 sampled (60%), 145/570 non-API, 83/570 unfetched · Last warm-cache: 4h ago
-```
-
-Green pill above 80% sampled, amber 40–80%, red below 40%. The denominator ignores non-API products (TIGER, DAS demo) because they can never contribute to that fraction. The Products tab's sidebar has a matching **Cache tier** facet (`sample / probe / catalog / not sample-able`) so you can filter to "candidates that haven't been sampled yet" in one click.
 
 ---
 
@@ -243,7 +188,7 @@ python tools\product_scope.py --repo . --review acs/acs5 --status FOCUS
 python tools\product_scope.py --repo . --review acs/acs5 --role cv_source --note "primary CV source across every geography"
 
 # Multiple actions atomically in one write
-python tools\product_scope.py --repo . --review dec/dhc --status Candidate --sample-config always --insight "Set as Candidate; will sample every warm-cache pass to catch DP noise drift"
+python tools\product_scope.py --repo . --review dec/dhc --status Candidate --insight "Set as Candidate; DHC exposes DP noise magnitudes that feed the composite reliability score"
 
 # Override the git-derived attribution (e.g. logging insight from a mentor)
 python tools\product_scope.py --repo . --review acs/acs5 --author "Andrew" --insight "Mentor confirmed the B98/B99 allocation tables ship separately from the estimate MOEs"
@@ -257,7 +202,6 @@ python tools\product_scope.py --repo . --review acs/acs5 --author "Andrew" --ins
 | `--status VALUE` | Set the entry's `stage`. | One of `cataloged / reviewed / candidate / focus / set-aside`; case-insensitive on input, stored lowercase. |
 | `--role VALUE` | Set the entry's `composite_role`. | One of `cv_source / allocation_source / privacy_noise / geometry / benchmark / unused`. Also requires `--note` on the same invocation UNLESS the entry already carries a non-empty `composite_role_note`. |
 | `--note TEXT` | Set the entry's `composite_role_note`. | Standalone `--note` (no `--role`) is only accepted if the entry already declares a role to justify. |
-| `--sample-config VALUE` | Set the entry's `sample_config`. | One of `default / always / skip`. |
 | `--notes TEXT` | Set the entry's free-text `note` field. | No validation. |
 | `--author NAME` | Override the git-derived attribution. Applies to both `last_reviewed_by` AND any `--insight`'s `who`. | Optional. |
 
@@ -271,7 +215,7 @@ python tools\product_scope.py --repo . --review acs/acs5 --author "Andrew" --ins
 
 ## Findings
 
-**From the work log** — the Home tab reads `WORKLOG.md` directly and shows every finding, newest first, quoted exactly as the teammate wrote it. Nothing is summarised or scored. Add a WORKLOG entry in the normal format and it appears on the next run; no registration needed.
+**From the work log** — the Home tab shows the newest WORKLOG.md entry's headline (title + date + author) with a link to the full file. Prior entries are not inlined — the link goes to GitHub if `git remote` resolves to GitHub, otherwise to a local `file://` path. Add a WORKLOG entry in the normal format and its title appears here on the next run.
 
 **Curated insights** — the hand-written headline cards. Append a dict to `FINDINGS` near the top of `product_scope.py`, tagged with the product family:
 
