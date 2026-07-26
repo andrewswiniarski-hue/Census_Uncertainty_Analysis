@@ -56,3 +56,7 @@ scope_data_cache.json
 # (.product_review.json.tmp.<pid>).
 .product_review.json.lock
 .product_review.json.tmp.*
+# Beginner-UX pass commit #5: dev-only smoke-test artifacts from the notes/
+# ingestion flow. The dev container can't unlink these files, so this pattern
+# keeps them out of the commit while leaving them harmless on disk.
+notes/ingested/test_beginner_ux_flow*

@@ -848,6 +848,167 @@ def collect_auto_divergence_insights(fams, review, snapshot_prev):
         tuples.append((path, INSIGHT_AUTO_DIVERGENCE, text, None, "auto"))
     return tuples
 
+# ============================================================================
+# Beginner-UX pass commit #5: notes/ folder ingestion (browser-only note flow)
+# ============================================================================
+# The browser "+ Add a note" button downloads a small plain-text stub. Teammate
+# edits it, saves it into notes/<something>.txt, next regen picks it up.
+# Format is intentionally forgiving:
+#   * Lines starting with # are comments (ignored)
+#   * `Key: value` header lines up to the first blank line
+#   * Everything after the first blank line is the body text
+#   * Required keys: product_id, who
+# Ingested files move to notes/ingested/ so the git log shows what got absorbed
+# and the tool doesn't re-ingest them next run. Content-hash dedup prevents
+# re-inserting a duplicate that was already added on this product from the
+# same author.
+
+NOTE_FILE_EXTS = (".txt", ".md")
+
+def _parse_note_text(text):
+    """Parse a plain-text note file. Returns dict{product_id, who, body} or
+    None if required fields are missing or the body is empty.
+
+    Format (human-friendly; no YAML/TOML dependency needed):
+      # any line starting with # is a comment
+      product_id: acs/acs5
+      who: Katie Doe
+      <blank line>
+      <body text - free-form, may span many lines>
+    """
+    if not text: return None
+    # Pre-strip: remove all comment lines (any line whose first non-whitespace
+    # is '#'). Comments can appear both before and inside the header block -
+    # a beginner who follows the downloaded template will have several # lines
+    # at the top before the first `product_id:` line, and we must not treat
+    # the blank line between comments and the header as end-of-header.
+    cleaned = [ln for ln in text.splitlines()
+               if not ln.lstrip().startswith("#")]
+    # Skip any leading blank lines so the header block starts at the first
+    # actual `Key: value`.
+    while cleaned and not cleaned[0].strip():
+        cleaned.pop(0)
+    header = {}
+    body_lines = []
+    in_body = False
+    for raw in cleaned:
+        if not in_body:
+            stripped = raw.strip()
+            if not stripped:
+                # First real blank line after the header starts -> body begins.
+                in_body = True
+                continue
+            if ":" not in raw:
+                # Non-blank, non-key while still in header: treat as start of body.
+                in_body = True
+                body_lines.append(raw)
+                continue
+            k, v = raw.split(":", 1)
+            header[k.strip().lower()] = v.strip()
+        else:
+            body_lines.append(raw)
+    pid = header.get("product_id", "").strip()
+    who = header.get("who", "").strip() or "unknown"
+    # Strip trailing blank lines from body.
+    while body_lines and not body_lines[-1].strip():
+        body_lines.pop()
+    while body_lines and not body_lines[0].strip():
+        body_lines.pop(0)
+    body = "\n".join(body_lines).strip()
+    if not pid or not body:
+        return None
+    return {"product_id": pid, "who": who, "body": body}
+
+def ingest_notes(repo: Path, review, fams):
+    """Scan repo/notes/*.txt (and .md), parse each, and _append_insight() any
+    non-dedup ones as source='human'. Move processed files into
+    notes/ingested/ so the same note doesn't re-ingest on the next regen.
+    Returns list of (product_id, who) tuples actually ingested (for logging).
+
+    Dedup rule (spec): don't append if identical (who, text) exists on that
+    product from source='human'. Belt-and-suspenders alongside the file-move
+    step - the move is what stops re-scans, this stops manual re-drops of the
+    same content. Uses insight_hash() so the semantics match auto-insights."""
+    notes_dir = repo / "notes"
+    if not notes_dir.exists():
+        return []
+    ingested_dir = notes_dir / "ingested"
+    ingested = []
+    to_move = []  # (src_path, dst_path)
+    for p in sorted(notes_dir.iterdir()):
+        if p.is_dir(): continue
+        if p.suffix.lower() not in NOTE_FILE_EXTS: continue
+        if p.name.lower().startswith("readme"): continue
+        try:
+            text = p.read_text(encoding="utf-8", errors="replace")
+        except Exception as ex:
+            print(f"  [notes] skipping {p.name}: read failed ({ex})",
+                  file=sys.stderr)
+            continue
+        parsed = _parse_note_text(text)
+        if not parsed:
+            print(f"  [notes] skipping {p.name}: missing product_id or body "
+                  "(see notes/README.md for the format)", file=sys.stderr)
+            continue
+        pid = parsed["product_id"]
+        if pid not in review:
+            # Not in the catalog - don't create a stub, don't ingest, but do
+            # tell the user so they can fix the typo.
+            print(f"  [notes] skipping {p.name}: product_id {pid!r} not in "
+                  "the catalog (typo? use the full catalog path such as "
+                  "acs/acs5)", file=sys.stderr)
+            continue
+        # Content-hash dedup: same (who, body) already logged? Skip AND still
+        # move the file so we don't re-report on every regen.
+        who = parsed["who"]
+        body = parsed["body"]
+        entry = review.get(pid) or {}
+        h = insight_hash("human:" + who, body)
+        dup = any(
+            (ins.get("source") == INSIGHT_HUMAN
+             and (ins.get("who") or "") == who
+             and insight_hash("human:" + who, ins.get("text") or "") == h)
+            for ins in (entry.get("insights") or []))
+        # File mtime -> ISO 8601 UTC 'when'. Falls back to current time on
+        # any oddity (e.g. mtime read failure).
+        try:
+            mt = datetime.datetime.utcfromtimestamp(p.stat().st_mtime)
+            when_iso = mt.strftime("%Y-%m-%dT%H:%M:%SZ")
+        except Exception:
+            when_iso = _now_iso_z()
+        if dup:
+            print(f"  [notes] {p.name}: duplicate (who + text already on "
+                  f"{pid}); moving to notes/ingested/ without re-inserting")
+        else:
+            _append_insight(review, pid, INSIGHT_HUMAN, body,
+                            when=when_iso, who=who)
+            ingested.append((pid, who))
+        # Stage the move (do the actual filesystem move after the loop so a
+        # mid-loop error doesn't leave a partial ingest state).
+        to_move.append((p, ingested_dir / p.name))
+    if to_move:
+        try:
+            ingested_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as ex:
+            print(f"  [notes] could not create {ingested_dir}: {ex}",
+                  file=sys.stderr)
+            return ingested
+        for src, dst in to_move:
+            # If a same-named file already lives in ingested/, add a suffix
+            # rather than overwrite (rare edge case: two teammates land the
+            # same filename on the same day).
+            final_dst = dst
+            n = 1
+            while final_dst.exists():
+                final_dst = dst.with_name(f"{dst.stem}.{n}{dst.suffix}")
+                n += 1
+            try:
+                os.replace(str(src), str(final_dst))
+            except OSError as ex:
+                print(f"  [notes] move failed for {src.name}: {ex}",
+                      file=sys.stderr)
+    return ingested
+
 def emit_auto_insights(repo: Path, review, tuples, log_prefix="auto-insight"):
     """Apply a batch of (path, source, text, when, who) tuples, save once at
     the end under the review lock, and print a one-line summary. Returns the
@@ -1994,6 +2155,22 @@ header p{color:#CADCFC;font-size:13px;max-width:940px;}
 .ql-lm-more-body{padding:5px 4px 2px;}
 .ql-lm-sub{font-size:10px;color:var(--muted);font-weight:700;letter-spacing:.05em;
      text-transform:uppercase;margin-bottom:2px;}
+/* Beginner-UX pass commit #5. "+ Add a note" button + hint. Small ice-blue
+   button so it doesn't compete with the gold "Learn more" primary action;
+   sits at the bottom of every card's insights feed. */
+.ql-addnote-wrap{display:flex;flex-wrap:wrap;align-items:center;gap:8px;
+     padding:8px 4px 2px;margin-top:6px;border-top:1px dotted #E1E7F0;}
+.ql-addnote-btn{font:inherit;font-size:11.5px;font-weight:700;padding:5px 12px;
+     border:1px solid var(--line);border-radius:5px;background:var(--ice);
+     color:var(--navy);cursor:pointer;line-height:1.3;}
+.ql-addnote-btn:hover{background:var(--navy);color:#F5D77A;border-color:var(--navy);}
+.ql-addnote-btn:focus-visible{outline:2px solid var(--gold);outline-offset:2px;}
+.ql-addnote-btn.done{background:#5FA76F;color:#fff;border-color:#5FA76F;}
+.ql-addnote-hint{font-size:10.5px;color:var(--muted);flex:1;min-width:200px;
+     line-height:1.4;}
+.ql-addnote-hint code{background:var(--ice);color:var(--navy);
+     font-family:ui-monospace,Consolas,monospace;font-size:10px;padding:0 4px;
+     border-radius:3px;}
 /* .funnel / .fstep / .farrow / .f-cand / .f-focus removed Phase A #3
    alongside _build_reviewer_mode_details() — the pre-reframe funnel bar
    was 568 -> 0 -> 0 -> 5 -> 0 (depressing without being informative). */
@@ -2518,6 +2695,44 @@ document.addEventListener('click', function(e){
   if(!b) return;
   e.preventDefault(); e.stopPropagation();
   _copyText(b.getAttribute('data-copy'), b);
+});
+/* --- Beginner-UX pass commit #5. "+ Add a note" download handler.
+   Delegated click handler on buttons with data-addnote-path=<product_id>.
+   Constructs a small plain-text stub in memory, downloads it as
+   note_<path-slug>_<timestamp>.txt via Blob + programmatic anchor click.
+   The user edits the file, drops it into notes/ in the repo, and the next
+   `python tools/product_scope.py` regen ingests it as a human insight. */
+document.addEventListener('click', function(e){
+  var b = e.target.closest && e.target.closest('button[data-addnote-path]');
+  if(!b) return;
+  e.preventDefault(); e.stopPropagation();
+  var pid = b.getAttribute('data-addnote-path') || 'unknown';
+  var ts = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_')
+             .split('.')[0];
+  var slug = pid.replace(/[^a-zA-Z0-9]+/g, '_');
+  var fname = 'note_' + slug + '_' + ts + '.txt';
+  var body = [
+    '# Note for ' + pid,
+    '# Save this file into the notes/ folder in the repo. Next regen',
+    '# picks it up and drops it into notes/ingested/.',
+    '# Lines starting with # are comments and get ignored on ingest.',
+    '# The blank line below separates the header from the body.',
+    '',
+    'product_id: ' + pid,
+    'who: Your Name',
+    '',
+    '(Write your thought here — what did you notice? What surprised you?',
+    ' What might it be useful for?)',
+    ''
+  ].join('\n');
+  var blob = new Blob([body], {type: 'text/plain'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = fname;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  // Visual confirmation on the button.
+  var old = b.textContent; b.textContent = 'Downloaded ✓';
+  b.classList.add('done');
+  setTimeout(function(){ b.textContent = old; b.classList.remove('done'); }, 1800);
 });
 /* --- Beginner-UX pass commit #2. Start-here banner dismissal.
    Reads localStorage on load; if set, hides the banner. Click the &times;
@@ -4279,8 +4494,11 @@ def _ql_curated_findings_html(product_id):
 def _ql_insights_drill_html(insights, product_id):
     """Full chronological feed of insights for the drill-down, read-only.
     Wrapped inside the tier-flavoured ql-d-block so it fits the drill-down
-    visual language. Writes come from the CLI helper (`python tools/product_scope.py
-    --review <id> --insight "..."`) - the HTML itself never mutates anything.
+    visual language. Writes come from either the CLI helper (`python
+    tools/product_scope.py --review <id> --insight "..."`) OR - since
+    beginner-UX pass commit #5 - the browser "+ Add a note" download flow
+    that emits a template file into notes/ for the next regen to ingest.
+    The HTML page itself still never mutates JSON directly.
 
     Post-Phase-A #5: curated FINDINGS matching this product family render as
     pinned rows at the top of the feed. Order within the feed: curated
@@ -4299,16 +4517,27 @@ def _ql_insights_drill_html(insights, product_id):
     rows_html = curated_rows + "".join(
         _insight_row_html(i, kind="drill") for i in (human + auto))
     if not rows_html:
-        insights_html = ('<div class="ins-empty">No insights yet. '
-                         'Add one with <code>python tools/product_scope.py '
-                         '--review ' + _esc(product_id) + ' --insight "..."</code>.</div>')
+        insights_html = ('<div class="ins-empty">No notes yet on this product. '
+                         'Click <b>+ Add a note</b> below to record one from '
+                         'your browser (no terminal needed).</div>')
     else:
         insights_html = ('<ul class="scope-insights-feed" style="max-height:none">'
                          + rows_html + '</ul>')
+    # Beginner-UX pass commit #5: "+ Add a note" button downloads a small text
+    # stub the user edits and drops into notes/ for the next regen to ingest.
+    # Delegated JS handler wired in the page script (see makeNoteStub()).
+    add_note_btn = (f'<div class="ql-addnote-wrap">'
+                    f'<button type="button" class="ql-addnote-btn" '
+                    f'data-addnote-path="{_esc(product_id)}">'
+                    f'+ Add a note</button>'
+                    f'<span class="ql-addnote-hint">Downloads a small text '
+                    f'file you edit and drop into <code>notes/</code>. Next '
+                    f'regen picks it up. No terminal needed.</span>'
+                    f'</div>')
     return ('<div class="ql-d-block ql-d-t2" style="background:#FAFAFC;'
             'border-color:#EDEEF3">'
-            '<div class="ql-d-cap">Insights feed</div>'
-            + insights_html + '</div>')
+            '<div class="ql-d-cap">Notes &amp; insights</div>'
+            + insights_html + add_note_btn + '</div>')
 
 # ============================================================================
 # PHASE 5 #6 - INSIGHT ROW / RELATIVE-TIME HELPERS
@@ -4713,9 +4942,10 @@ def build_facet_sidebar(prods, review, work, probes, top_families, data_cache=No
             n = vals[v]
             lbl = FACET_VALUE_LABELS.get(key, {}).get(v, v)
             # Beginner-UX pass commit #2: gloss() tooltip on first occurrence
-            # of glossary-tracked value labels (e.g. Cataloged in the STAGE
-            # facet). No-op after first call per render.
-            gloss_html = gloss(lbl) if key == "stage" else ""
+            # of glossary-tracked value labels (e.g. "cataloged" in the STAGE
+            # facet, which renders as "Listed only" post-#3-rename but keeps
+            # the internal enum value for GLOSSARY lookup).
+            gloss_html = gloss(v) if key == "stage" else ""
             items.append(
                 f'<li data-v="{_esc(v)}"><label>'
                 f'<input type="checkbox" data-f="{_esc(key)}" value="{_esc(v)}"> '
@@ -6177,6 +6407,31 @@ def _run_report_pipeline(repo, args, out):
     ai_cache_diff = collect_auto_cache_diff_insights(eda_diffs)
     emit_auto_insights(repo, review, ai_div + ai_cache_diff,
                        log_prefix="auto-insight/regen")
+    # Beginner-UX pass commit #5: ingest any notes/*.txt files a teammate has
+    # dropped from the browser "+ Add a note" flow. Runs before render() so
+    # freshly ingested notes appear on the same regen's cards. Under the same
+    # review lock as auto-insights so a concurrent --review CLI write can't
+    # clobber them (via _append_insight inside with_review_locked).
+    def _ingest_and_save(disk_review):
+        for path, entry in review.items():
+            if path not in disk_review:
+                disk_review[path] = entry
+        return ingest_notes(repo, disk_review, fams)
+    _ingested = with_review_locked(repo, _ingest_and_save) or []
+    if _ingested:
+        # Post-ingest: refresh in-memory review from disk so render() sees the
+        # freshly appended notes. Read outside the lock is fine here - we've
+        # already committed the writes.
+        try:
+            _rpath = repo / "product_review.json"
+            review = json.loads(_rpath.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+        _pids_ingested = sorted({pid for pid, _ in _ingested})
+        preview = ", ".join(_pids_ingested[:5])
+        more = f" (+{len(_pids_ingested) - 5} more)" if len(_pids_ingested) > 5 else ""
+        print(f"  [notes] ingested {len(_ingested)} note(s) from notes/ "
+              f"({preview}{more})")
     counts = render(fams, review, work, worklog, notebooks, probes, repo.name, catnote, out, git,
                     snapshot_prev, diff, data_cache, eda_diffs)
     print("  funnel: " + " -> ".join(f"{STAGE_LABELS[s]} {counts.get(s, 0)}" for s in STAGES))
