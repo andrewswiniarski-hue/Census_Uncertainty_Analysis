@@ -4011,18 +4011,28 @@ def build_home(fams, review, work, counts, worklog, notebooks, probes, git=None,
                      f'<em>{_esc(x["family"])} &bull; nb {x["nb"]}</em></div>'
                      f'<div class="tkd">{_esc(x["detail"])}</div></div>')
 
+    # Latest WORKLOG headline only (audit cut 3). Prior behaviour rendered the
+    # full log inline - useful once, then a megabyte of duplicated content in
+    # every report, including ghost quotes of dropped code (--serve, etc.).
+    # Reader clicks the link for the full log.
     total = sum(len(e["items"]) for e in worklog)
     h.append(f'<h2>From the work log ({total} findings, {len(worklog)} entries)</h2>'
-             '<div class="sub">Read straight from WORKLOG.md, newest first. Every sentence is quoted as the '
-             'teammate wrote it - nothing is summarised, rephrased or scored. Add an entry to the log and it '
-             'appears here on the next run.</div>')
-    for e in worklog:
+             '<div class="sub">Latest entry only. Follow the link for the full log.</div>')
+    if worklog:
+        e = worklog[0]
+        gh = (git or {}).get("github_slug") or ""
+        branch = (git or {}).get("branch") or "main"
+        if gh:
+            wl_url = f"https://github.com/{gh}/blob/{branch}/WORKLOG.md"
+        else:
+            wl_url = "file:///" + str((Path((git or {}).get("repo_abs", ".")) / "WORKLOG.md")
+                                       ).replace("\\", "/")
         nb = (' &bull; EDA ' + e["nb"]) if e["nb"] else ""
-        items = "".join('<div class="wli">' + (('<b>' + _esc(i["stat"]) + '</b>') if i["stat"] else "")
-                        + _esc(i["text"]) + '</div>' for i in e["items"])
         h.append(f'<div class="wl"><div class="wlh">{_esc(e["title"])}'
-                 f'<span>{e["date"]} &bull; {_esc(e["author"])}{nb}</span></div>{items}</div>')
-    if not worklog:
+                 f'<span>{e["date"]} &bull; {_esc(e["author"])}{nb} &bull; '
+                 f'<a href="{_esc(wl_url)}" target="_blank" rel="noopener" '
+                 f'class="receipt-link">open WORKLOG.md</a></span></div></div>')
+    else:
         h.append('<div class="nowork">No parseable entries in WORKLOG.md.</div>')
     return "".join(h)
 
