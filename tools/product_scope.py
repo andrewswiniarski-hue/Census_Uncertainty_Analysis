@@ -1969,6 +1969,31 @@ header p{color:#CADCFC;font-size:13px;max-width:940px;}
      transition:opacity .14s ease-in .04s;}
 .gloss:hover::after,.gloss:hover::before,.gloss:focus::after,.gloss:focus::before{
      opacity:1;}
+/* Beginner-UX pass commit #4. Single "Learn more" one-command button pinned
+   to the top of every card drill-down. Bold gold background so it reads as
+   the primary action; keyboard focus ring included. The "More options for
+   advanced users" collapsible below holds the individual probe / sample
+   commands for the (few) users who want to run them separately. */
+.ql-lm-wrap{background:#FBF8EC;border:1px solid var(--gold);border-radius:6px;
+     padding:8px 10px;margin:2px 0 8px;}
+.ql-lm-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;}
+.ql-lm-btn{font:inherit;font-size:12.5px;font-weight:700;padding:7px 14px;
+     border:0;border-radius:6px;background:var(--gold);color:#16204A;
+     cursor:pointer;line-height:1.3;letter-spacing:.01em;}
+.ql-lm-btn:hover{background:#B7912A;color:#fff;}
+.ql-lm-btn:focus-visible{outline:2px solid var(--navy);outline-offset:2px;}
+.ql-lm-btn.done{background:#5FA76F;color:#fff;}
+.ql-lm-note{font-size:11px;color:#8a4d1c;font-style:italic;flex:1;min-width:0;}
+.ql-lm-more{margin-top:8px;font-size:11px;color:var(--muted);}
+.ql-lm-more > summary{cursor:pointer;font-weight:600;color:var(--navy);
+     padding:2px 0;list-style:none;letter-spacing:.02em;}
+.ql-lm-more > summary::-webkit-details-marker{display:none;}
+.ql-lm-more > summary::marker{content:"";}
+.ql-lm-more > summary::before{content:"\25B8  ";color:var(--muted);}
+.ql-lm-more[open] > summary::before{content:"\25BE  ";color:var(--navy);}
+.ql-lm-more-body{padding:5px 4px 2px;}
+.ql-lm-sub{font-size:10px;color:var(--muted);font-weight:700;letter-spacing:.05em;
+     text-transform:uppercase;margin-bottom:2px;}
 /* .funnel / .fstep / .farrow / .f-cand / .f-focus removed Phase A #3
    alongside _build_reviewer_mode_details() — the pre-reframe funnel bar
    was 568 -> 0 -> 0 -> 5 -> 0 (depressing without being informative). */
@@ -4098,13 +4123,55 @@ def _ql_empty_state_html(f, tier, non_api):
             '</div>')
     return ""
 
+def _ql_learn_more_html(f, non_api):
+    """Beginner-UX pass commit #4: a single prominent copy-command button that
+    combines the two most common actions (fetch metadata + peek at data) into
+    one no-sequencing-confusion invocation. Sits at the top of the drill-down.
+    For non-API products the combined command still works cleanly - --probe
+    runs, --sample no-ops with the 'data not available via the API' message -
+    but we add a subtle note so the reader isn't surprised."""
+    path = f["path"]
+    combo_cmd = f'python tools/product_scope.py --probe {path} --sample {path} --open'
+    probe_only  = f'python tools/product_scope.py --probe {path}'
+    sample_only = f'python tools/product_scope.py --sample {path}'
+    non_api_note = ('<div class="ql-lm-note">(data peek not available &mdash; '
+                    'this product isn\'t available via the Census API)</div>'
+                    if non_api else "")
+    return ('<div class="ql-lm-wrap">'
+            '<div class="ql-lm-row">'
+            '<button class="ql-lm-btn" type="button" '
+            f'data-copy="{_esc(combo_cmd)}" '
+            f'title="Copies: {_esc(combo_cmd)}">'
+            'Learn more about this product (1 command)'
+            '</button>'
+            f'{non_api_note}'
+            '</div>'
+            '<details class="ql-lm-more">'
+            '<summary>More options for advanced users</summary>'
+            '<div class="ql-lm-more-body">'
+            '<div class="ql-lm-sub">Fetch metadata only:</div>'
+            '<div class="ql-d-cmd"><span class="copy-cmd light">'
+            f'<code>{_esc(probe_only)}</code>'
+            f'<button data-copy="{_esc(probe_only)}">Copy</button></span></div>'
+            '<div class="ql-lm-sub" style="margin-top:6px">Peek at data only:</div>'
+            '<div class="ql-d-cmd"><span class="copy-cmd light">'
+            f'<code>{_esc(sample_only)}</code>'
+            f'<button data-copy="{_esc(sample_only)}">Copy</button></span></div>'
+            '</div>'
+            '</details>'
+            '</div>')
+
 def _ql_details_html(f, probe_entry, cache_entry, tier, non_api, insights=None,
                      uncertainty_metrics=""):
     """Assemble the expanded (behind-the-toggle) content for one card. Order
     of blocks matches the TL;DR tier order so the reader can follow the
-    thread: Tier 0 context, Tier 1 probe detail, Tier 2 full EDA tables,
-    Phase 5 #6 full insights feed, empty-state affordance last."""
+    thread: (NEW commit #4) Learn-more one-command button, Tier 0 context,
+    Tier 1 probe detail, Tier 2 full EDA tables, Phase 5 #6 full insights
+    feed, empty-state affordance last."""
     parts = []
+    # Beginner-UX pass commit #4: single "Learn more" button pinned to top so
+    # the reader's default next-step is one click, not a sequence.
+    parts.append(_ql_learn_more_html(f, non_api))
     cat = _ql_catalog_detail_html(f, non_api, uncertainty_metrics=uncertainty_metrics)
     if cat:
         parts.append('<div class="ql-d-block ql-d-t0">' + cat + '</div>')
@@ -4122,9 +4189,15 @@ def _ql_details_html(f, probe_entry, cache_entry, tier, non_api, insights=None,
     # the drill-down is a superset of the TL;DR (spec: "full chronological
     # feed of all insights"). No insights -> a small empty state.
     parts.append(_ql_insights_drill_html(insights or [], f["path"]))
-    empty = _ql_empty_state_html(f, tier, non_api)
-    if empty:
-        parts.append('<div class="ql-d-block ql-d-empty-wrap">' + empty + '</div>')
+    # Beginner-UX pass commit #4: the pre-#4 empty-state block (which showed
+    # separate probe/sample copy commands) is now redundant - the Learn-more
+    # button at the top of the drill-down covers both. We still render an
+    # empty-state banner for non-API products so the reader knows why the
+    # data-peek half of the combined command will no-op; otherwise drop it.
+    if non_api:
+        empty = _ql_empty_state_html(f, tier, non_api)
+        if empty:
+            parts.append('<div class="ql-d-block ql-d-empty-wrap">' + empty + '</div>')
     return "".join(parts)
 
 # ---- Phase 5 #6: insights render in Quick Look TL;DR + drill-down -----------
