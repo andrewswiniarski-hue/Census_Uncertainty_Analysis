@@ -49,7 +49,7 @@
     "insights": [],
     "note": "",
     "stage": "cataloged",
-    "uncertainty_metrics": ""
+    "uncertainty_metrics": "1-year ACS estimates, published only for geographies with 65,000+ residents. Sampling noise dominates and runs materially larger than acs/acs5 (fewer sampled households per estimate); CV follows the same 1/sqrt(N) law. [Source: findings report Section 2 vocabulary + general methodology - needs mentor review]"
   },
   "acs/acs1/cprofile": {
     "insights": [],
@@ -67,7 +67,7 @@
     "insights": [],
     "note": "",
     "stage": "cataloged",
-    "uncertainty_metrics": ""
+    "uncertainty_metrics": "1-year Public-Use Microdata. No per-estimate MOE; ships with 80 replicate weights, analyst computes SEs. Smaller sample than acs/acs5/pums. [general methodology - needs mentor review]"
   },
   "acs/acs1/pumspr": {
     "insights": [],
@@ -91,7 +91,7 @@
     "insights": [],
     "note": "",
     "stage": "cataloged",
-    "uncertainty_metrics": ""
+    "uncertainty_metrics": "Same 1-year sampling regime as acs/acs1 with subject-table cell definitions. Smaller sample vs. acs/acs5/subject means wider MOEs and higher CVs at every geography level. [general methodology - needs mentor review]"
   },
   "acs/acs3": {
     "insights": [],
@@ -211,7 +211,7 @@
     "note": "",
     "sample_config": "always",
     "stage": "focus",
-    "uncertainty_metrics": ""
+    "uncertainty_metrics": "90% margin of error ships with every published estimate; CVs run ~1% at county, ~13% at tract, ~20% at block group for median income - and can exceed 1.0 for small subgroup counts (Findings 1-2). Allocation rates carry no MOE of their own and are statistically independent of the MOE (Findings 8-9). [Source: findings report Sections 3 + 5]"
   },
   "acs/acs5/aian": {
     "insights": [],
@@ -229,7 +229,7 @@
     "insights": [],
     "note": "",
     "stage": "cataloged",
-    "uncertainty_metrics": ""
+    "uncertainty_metrics": "Comparison profile tables (year-over-year change) derived from ACS 5-year. Change estimates carry their own MOEs computed from both endpoint MOEs; two overlapping 5-year windows share ~4 of 5 sample years, so change MOEs are wider than either endpoint. [general methodology - needs mentor review]"
   },
   "acs/acs5/eeo": {
     "insights": [],
@@ -241,13 +241,13 @@
     "insights": [],
     "note": "",
     "stage": "cataloged",
-    "uncertainty_metrics": ""
+    "uncertainty_metrics": "Pre-computed profile tables derived from acs/acs5 detailed tables. Inherits ACS 5-year sampling noise: MOEs ship on every cell, CV scales as 1/sqrt(N behind the estimate). [general methodology - needs mentor review]"
   },
   "acs/acs5/pums": {
     "insights": [],
     "note": "",
     "stage": "cataloged",
-    "uncertainty_metrics": ""
+    "uncertainty_metrics": "Public-Use Microdata Sample. No per-estimate MOE published; 80 replicate weights ship with the file and the analyst computes their own standard errors via successive-difference replication. [general methodology - needs mentor review]"
   },
   "acs/acs5/pumspr": {
     "insights": [],
@@ -282,7 +282,7 @@
     "last_reviewed_date": "2026-07-25",
     "note": "",
     "stage": "focus",
-    "uncertainty_metrics": ""
+    "uncertainty_metrics": "Same sampling-noise regime as acs/acs5. Subject tables include poverty (B17001) - typical tract CV ~0.38 - and small-subgroup cells (e.g., Black 65+ at ~0.89), which the findings report shows can be tamed via aggregation using the Bureau MOE-combination formula. [Source: findings report Section 3, Finding 2]"
   },
   "acs/acsse": {
     "insights": [],
@@ -342,7 +342,7 @@
     "insights": [],
     "note": "",
     "stage": "cataloged",
-    "uncertainty_metrics": ""
+    "uncertainty_metrics": "County Business Patterns - administrative-record establishment counts + payroll + employment. Suppressed cells are flagged; the file uses \"noise infusion\" (multiplicative perturbation) on employment to protect small-cell confidentiality. Noise flags on each cell indicate low/moderate/high perturbation. [general methodology - needs mentor review]"
   },
   "cfsarea": {
     "insights": [],
@@ -702,7 +702,7 @@
     "insights": [],
     "note": "",
     "stage": "cataloged",
-    "uncertainty_metrics": ""
+    "uncertainty_metrics": "Community Resilience Estimates - modeled tract-level social-vulnerability indicators built from ACS microdata via small-area estimation. Publishes MOEs computed from replicate-weight variance of the underlying microdata. [general methodology - needs mentor review]"
   },
   "crepuertorico": {
     "insights": [],
@@ -879,7 +879,7 @@
     "last_reviewed_date": "",
     "note": "",
     "stage": "cataloged",
-    "uncertainty_metrics": ""
+    "uncertainty_metrics": "DAS demonstration data: 2010 confidential counts republished with 2020 DAS noise applied so researchers can measure the noise directly. Must NEVER be read as real 2010 population - it exists only for evaluating the privacy system. [Source: findings report Section 4]"
   },
   "dec/ddhca": {
     "insights": [],
@@ -938,7 +938,7 @@
     "last_reviewed_date": "2026-07-25",
     "note": "",
     "stage": "focus",
-    "uncertainty_metrics": ""
+    "uncertainty_metrics": "Full-count 2020 Decennial data protected by the Disclosure Avoidance System (differential privacy). Noise is a near-fixed absolute cost per place - small relative impact at county level, but overwhelming at block level (Finding 4). Geography TYPE matters: block groups carry ~9x tract noise for the same population (Finding 5). [Source: findings report Section 4]"
   },
   "dec/dhcas": {
     "insights": [],
@@ -989,7 +989,7 @@
     "last_reviewed_date": "",
     "note": "",
     "stage": "cataloged",
-    "uncertainty_metrics": ""
+    "uncertainty_metrics": "Demographic Profile - subset of DHC tables (age, sex, race, Hispanic origin, housing). Same 2020 DAS privacy noise as dec/dhc; the same fixed-absolute-cost pattern applies. [general methodology - needs mentor review]"
   },
   "dec/dpas": {
     "insights": [],
@@ -1043,13 +1043,13 @@
     "insights": [],
     "note": "",
     "stage": "cataloged",
-    "uncertainty_metrics": ""
+    "uncertainty_metrics": "Post-Enumeration Survey - a sample-based coverage-error study of the 2020 Decennial. Publishes net-coverage estimates with standard errors and confidence intervals; the uncertainty surface is completely different from the DHC full-count-with-DP-noise story. [general methodology - needs mentor review]"
   },
   "dec/pl": {
     "insights": [],
     "note": "",
     "stage": "cataloged",
-    "uncertainty_metrics": ""
+    "uncertainty_metrics": "PL 94-171 Redistricting file. Full count for total population + voting-age counts by race/Hispanic origin; protected by the 2020 DAS with a privacy-loss budget tuned to hit official state-population targets exactly. [general methodology - needs mentor review]"
   },
   "dec/plnat": {
     "insights": [],
@@ -1126,7 +1126,7 @@
     "last_reviewed_date": "2026-07-25",
     "note": "",
     "stage": "focus",
-    "uncertainty_metrics": ""
+    "uncertainty_metrics": "2010 Decennial Summary File 1. Full count protected by the older \"swapping\" method (not the 2020 DP system). Used as the noise-free reference against which our EDA 04 measured 2020 DAS noise. Not privacy-noise-free in an absolute sense: swapping leaves a residue documented by the Bureau. [Source: findings report Section 4]"
   },
   "dec/sf2": {
     "insights": [],
@@ -1725,7 +1725,7 @@
     "last_reviewed_date": "2026-07-25",
     "note": "",
     "stage": "focus",
-    "uncertainty_metrics": ""
+    "uncertainty_metrics": "TIGER / Line + cartographic boundary geometry. No statistical uncertainty in a sampling / DP-noise sense; positional accuracy is documented per file (roughly meter-scale for cartographic boundaries, coarser for generalized files). Vintage-to-vintage geometry changes (annexations, redistricting) are the main gotcha. [general methodology - needs mentor review]"
   },
   "geoinfo": {
     "insights": [],
@@ -1755,7 +1755,7 @@
     "insights": [],
     "note": "",
     "stage": "cataloged",
-    "uncertainty_metrics": ""
+    "uncertainty_metrics": "Planning Database - pre-computed operational metrics (mail-return rates, hard-to-count indicators) built from ACS 5-year + prior Decennial. Uncertainty inherits from the source estimates; the PDB itself does not publish new MOEs. [general methodology - needs mentor review]"
   },
   "pdb/statecounty": {
     "insights": [],
@@ -1839,7 +1839,7 @@
     "insights": [],
     "note": "",
     "stage": "cataloged",
-    "uncertainty_metrics": ""
+    "uncertainty_metrics": "Housing Unit Estimates - modeled annual housing-unit counts using building-permit inputs plus estimates of losses. No published MOE; revised annually with the rest of PEP. [general methodology - needs mentor review]"
   },
   "pep/int_charage": {
     "insights": [],
@@ -1923,7 +1923,7 @@
     "insights": [],
     "note": "",
     "stage": "cataloged",
-    "uncertainty_metrics": ""
+    "uncertainty_metrics": "Population Estimates Program - modeled annual population counts built forward from the last Decennial using vital records, migration, and administrative data. No published MOE; \"uncertainty\" is revealed via the annual Vintage revisions (each new vintage restates prior years). [general methodology - needs mentor review]"
   },
   "pep/prcagesex": {
     "insights": [],
@@ -2031,7 +2031,7 @@
     "insights": [],
     "note": "",
     "stage": "cataloged",
-    "uncertainty_metrics": ""
+    "uncertainty_metrics": "Population Projections - model-based projections of the U.S. population by age/sex/race/origin decades forward. No MOE; the Bureau publishes alternative scenarios (main / high-immigration / low-immigration / zero-immigration) to bracket assumption uncertainty. [general methodology - needs mentor review]"
   },
   "pubschlfin": {
     "insights": [],
@@ -2067,7 +2067,7 @@
     "insights": [],
     "note": "",
     "stage": "cataloged",
-    "uncertainty_metrics": ""
+    "uncertainty_metrics": "Survey of Income and Program Participation - longitudinal household panel. No per-estimate MOE published in most tables; replicate weights ship with the microdata for user-computed SEs. [general methodology - needs mentor review]"
   },
   "sipp/benefit/1990panel": {
     "insights": [],
