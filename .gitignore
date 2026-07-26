@@ -60,3 +60,8 @@ scope_data_cache.json
 # ingestion flow. The dev container can't unlink these files, so this pattern
 # keeps them out of the commit while leaving them harmless on disk.
 notes/ingested/test_beginner_ux_flow*
+# Phase A 2026-07-26 commit #2: Bureau press-release mini-feed cache.
+# Refreshed every 24h on regen from https://www.census.gov/newsroom/press-releases.xml.
+# Local-only; regen fetches fresh copy so caching another teammate's cache adds
+# no value and would just churn.
+.census_press_cache.json

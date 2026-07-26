@@ -2645,6 +2645,47 @@ table.rep td{border-bottom:1px solid var(--ice);padding:7px 9px;vertical-align:t
      margin-top:0;}
 .wwl-tail b{color:var(--navy);font-weight:var(--w-head);}
 .wwl-tail a{color:#3A4890;text-decoration:none;border-bottom:1px dotted #8FA8D8;}
+/* Bureau press-release mini-feed (Phase A 2026-07-26 commit #2). Compact
+   5-item list showing the newest census.gov press releases so a reader has
+   external "what did the Bureau publish this week?" recency signal alongside
+   the internal team feed. Sits directly above the What-we've-learned feed
+   on Home so both activity feeds visually cluster. */
+.cpress-section{margin:0 0 20px;max-width:1020px;
+    border:1px solid var(--line);border-radius:8px;
+    background:linear-gradient(180deg,#F7FAFC 0%,#FDFEFF 100%);
+    padding:14px 18px;}
+.cpress-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;
+    margin-bottom:6px;}
+.cpress-head h3{font-family:var(--f-display);font-size:var(--fs-3);
+    color:var(--navy);margin:0;font-weight:var(--w-head);
+    letter-spacing:var(--lsp-tight);}
+.cpress-source{font-family:var(--f-mono);font-size:var(--fs-1);
+    color:#3A4890;text-decoration:none;
+    border-bottom:1px dotted #8FA8D8;}
+.cpress-source:hover{color:var(--navy);}
+.cpress-tag{display:inline-block;padding:1px 8px;border-radius:8px;
+    font-size:var(--fs-1);font-weight:var(--w-head);
+    letter-spacing:.03em;text-transform:uppercase;}
+.cpress-tag.fresh{background:#D6EDD9;color:#1F5A2E;}
+.cpress-tag.stale{background:#FCEBCE;color:#8A5A16;}
+.cpress-tag.miss{background:#F5D9D5;color:#8A2A1D;}
+.cpress-caption{font-size:var(--fs-1);color:var(--muted);margin:0 0 8px;
+    line-height:1.4;}
+.cpress-list{list-style:none;padding:0;margin:0;
+    border-top:1px solid var(--ice);}
+.cpress-list li{padding:7px 0;border-bottom:1px solid var(--ice);
+    display:flex;gap:12px;align-items:baseline;font-size:var(--fs-2);
+    line-height:1.4;flex-wrap:wrap;}
+.cpress-list li:last-child{border-bottom:0;}
+.cpress-date{font-family:var(--f-mono);font-size:var(--fs-1);color:var(--muted);
+    flex:0 0 82px;letter-spacing:.02em;}
+.cpress-title{color:var(--ink);flex:1;min-width:200px;text-decoration:none;
+    border-bottom:1px dotted transparent;}
+.cpress-title:hover{color:var(--navy);border-bottom-color:#8FA8D8;}
+.cpress-empty{font-size:var(--fs-2);color:var(--muted);font-style:italic;
+    padding:8px 0;}
+.cpress-empty a{color:#3A4890;text-decoration:none;
+    border-bottom:1px dotted #8FA8D8;}
 /* Start-here curriculum (UX pass 2026-07-26 commit #4).
    Five-item ordered list that walks a first-time reader through the four
    uncertainty mechanisms via the products that illustrate them best. Sits
@@ -6431,6 +6472,223 @@ def build_where_team_is(fams, review, work, probes, data_cache, git, repo):
     return "".join(parts)
 
 # ============================================================================
+# HOME TAB "THIS WEEK FROM CENSUS" MINI-FEED  (Phase A 2026-07-26 commit #2)
+# ============================================================================
+# Small always-visible slice of the census.gov press-release RSS feed. Adds
+# external recency signal to Home - one of the axes the tool scored 5/10 on
+# in the census.gov head-to-head audit. Fetched at regen time with graceful
+# fallback:
+#   (1) fresh cache (< 24h old)                -> use cache silently
+#   (2) network fetch (5s timeout, stdlib xml) -> parse, cache, use
+#   (3) stale cache (>= 24h old) after fetch fail -> show cache + "may be
+#       outdated" tag so a reader knows the numbers aren't live
+#   (4) no cache at all + fetch fail           -> render empty state with a
+#       direct census.gov/newsroom link
+# Zero new dependencies (urllib + xml.etree from stdlib). Cache file is
+# gitignored (regenerable on demand).
+
+CENSUS_PRESS_URL      = "https://www.census.gov/newsroom/press-releases.xml"
+CENSUS_PRESS_CACHE    = ".census_press_cache.json"
+CENSUS_PRESS_TTL_SEC  = 24 * 3600     # 24-hour cache TTL
+CENSUS_PRESS_TIMEOUT  = 5             # seconds - hard cap so a slow fetch
+                                      # never delays regen more than a beat
+CENSUS_PRESS_LIMIT    = 5             # items rendered
+CENSUS_PRESS_FALLBACK = "https://www.census.gov/newsroom.html"
+
+def _load_press_cache(cache_path):
+    """Return (items, fetched_at_str) tuple or (None, None) on any parse
+    failure. Cache format is {"fetched_at": <iso>, "items": [...]}."""
+    if not cache_path.exists():
+        return None, None
+    try:
+        data = json.loads(cache_path.read_text(encoding="utf-8"))
+        items = data.get("items") or []
+        fetched_at = data.get("fetched_at") or ""
+        return items, fetched_at
+    except Exception:
+        return None, None
+
+def _cache_is_fresh(fetched_at_iso, ttl_sec):
+    """True if `fetched_at_iso` is within the TTL window."""
+    when = _iso_to_dt(fetched_at_iso)
+    if not when:
+        return False
+    now = datetime.datetime.now(datetime.timezone.utc)
+    return (now - when).total_seconds() < ttl_sec
+
+def _parse_press_xml(xml_bytes, limit=CENSUS_PRESS_LIMIT):
+    """Parse a Census press-release RSS/ATOM feed with stdlib xml.etree.
+    Returns list of dicts: {title, link, date_iso, date_display}. Handles both
+    RSS 2.0 (<item>) and Atom (<entry>) shapes since census.gov has been known
+    to change the feed engine between refreshes."""
+    import xml.etree.ElementTree as ET
+    items = []
+    try:
+        root = ET.fromstring(xml_bytes)
+    except ET.ParseError:
+        return []
+    # RSS 2.0: <rss><channel><item>...
+    for el in root.iter():
+        # Strip any XML namespace from the tag for a friendlier match.
+        tag = el.tag.rsplit("}", 1)[-1] if "}" in el.tag else el.tag
+        if tag not in ("item", "entry"):
+            continue
+        title, link, date_raw = "", "", ""
+        for child in el:
+            ctag = child.tag.rsplit("}", 1)[-1] if "}" in child.tag else child.tag
+            text = (child.text or "").strip()
+            if ctag == "title" and text and not title:
+                title = text
+            elif ctag == "link":
+                # RSS: <link>URL</link>; Atom: <link href="URL"/>
+                if text:
+                    link = text
+                elif child.get("href"):
+                    link = child.get("href")
+            elif ctag in ("pubDate", "published", "updated", "date") and text:
+                date_raw = text
+        if not title:
+            continue
+        # Try to parse the date to an ISO string + a compact display.
+        date_iso, date_display = "", date_raw[:16]
+        d = _parse_press_date(date_raw)
+        if d:
+            date_iso = d.isoformat()
+            date_display = d.strftime("%b %d")
+        items.append({"title": title, "link": link,
+                      "date_iso": date_iso, "date_display": date_display})
+        if len(items) >= limit:
+            break
+    return items
+
+def _parse_press_date(raw):
+    """Best-effort date parser for RSS/Atom timestamps. Handles the common
+    RFC-822 (`Mon, 21 Jul 2026 12:00:00 GMT`) and ISO 8601 (`2026-07-21T...`)
+    forms without a 3rd-party dep. Returns tz-aware UTC datetime or None."""
+    if not raw: return None
+    raw = raw.strip()
+    # RFC-822 style (pubDate on RSS 2.0).
+    try:
+        from email.utils import parsedate_to_datetime
+        d = parsedate_to_datetime(raw)
+        if d.tzinfo is None:
+            d = d.replace(tzinfo=datetime.timezone.utc)
+        return d.astimezone(datetime.timezone.utc)
+    except Exception:
+        pass
+    # ISO 8601 (Atom published/updated).
+    d = _iso_to_dt(raw)
+    if d: return d
+    return None
+
+def fetch_census_press_releases(cache_path):
+    """Return (items, status) tuple.
+
+    status ∈ {"fresh", "cached", "stale", "empty"}:
+      fresh  - network fetch just succeeded (cache updated)
+      cached - fresh cache hit (< TTL), no network call needed
+      stale  - fetch failed but a stale cache is available
+      empty  - no cache and fetch failed - caller renders an empty state
+    """
+    # (1) Fresh cache? Use it, skip network entirely.
+    items, fetched_at = _load_press_cache(cache_path)
+    if items is not None and _cache_is_fresh(fetched_at, CENSUS_PRESS_TTL_SEC):
+        return items, "cached"
+
+    # (2) Try to fetch. 5-second timeout - if census.gov is slow or blocked,
+    #     we degrade to the stale-cache path below.
+    try:
+        req = urllib.request.Request(
+            CENSUS_PRESS_URL,
+            headers={"Accept": "application/rss+xml, application/xml, "
+                               "application/atom+xml, text/xml, */*",
+                     "User-Agent": "Census-Uncertainty-Analysis/1.0 "
+                                   "(product_scope.py; capstone research tool)"})
+        with urllib.request.urlopen(req, timeout=CENSUS_PRESS_TIMEOUT) as r:
+            xml_bytes = r.read()
+        parsed = _parse_press_xml(xml_bytes, CENSUS_PRESS_LIMIT)
+        if parsed:
+            now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            payload = {"fetched_at": now_iso, "url": CENSUS_PRESS_URL,
+                       "items": parsed}
+            try:
+                cache_path.write_text(json.dumps(payload, indent=2),
+                                       encoding="utf-8")
+            except OSError:
+                pass   # cache write failed; still return fresh items
+            return parsed, "fresh"
+        # Fetch worked but parse produced nothing - treat like a failure.
+    except Exception:
+        pass
+
+    # (3) Stale cache fallback.
+    if items:
+        return items, "stale"
+
+    # (4) No cache at all + network failed.
+    return [], "empty"
+
+def build_census_press_feed(cache_path):
+    """Return an HTML fragment for the Bureau press-release mini-feed. Always
+    renders SOMETHING - fresh feed, cached feed with a `may be outdated` tag,
+    or an empty state with a direct link to census.gov/newsroom - so the
+    section never silently disappears. Called from build_home()."""
+    items, status = fetch_census_press_releases(cache_path)
+
+    # Empty state - no cache and fetch failed.
+    if status == "empty":
+        return (
+            '<div class="cpress-section" role="region" '
+            'aria-label="Bureau press releases feed (unavailable)">'
+            '<div class="cpress-head">'
+            '<h3>This week from Census</h3>'
+            '<span class="cpress-tag miss">unavailable</span>'
+            '</div>'
+            '<div class="cpress-empty">'
+            'Bureau feed unavailable - check '
+            f'<a href="{_esc(CENSUS_PRESS_FALLBACK)}" target="_blank" '
+            f'rel="noopener">census.gov/newsroom</a> for the latest releases.'
+            '</div>'
+            '</div>')
+
+    tag_class, tag_text = {
+        "fresh":  ("fresh",  "live"),
+        "cached": ("fresh",  "cached"),
+        "stale":  ("stale",  "may be outdated"),
+    }.get(status, ("stale", ""))
+
+    lis = []
+    for it in items[:CENSUS_PRESS_LIMIT]:
+        title = it.get("title") or "(untitled)"
+        link = it.get("link") or CENSUS_PRESS_FALLBACK
+        date_display = it.get("date_display") or ""
+        lis.append(
+            '<li>'
+            f'<span class="cpress-date">{_esc(date_display)}</span>'
+            f'<a class="cpress-title" href="{_esc(link)}" '
+            f'target="_blank" rel="noopener">{_esc(title)}</a>'
+            '</li>')
+
+    return (
+        '<div class="cpress-section" role="region" '
+        'aria-label="This week from Census - recent Bureau press releases">'
+        '<div class="cpress-head">'
+        '<h3>This week from Census</h3>'
+        + (f'<span class="cpress-tag {tag_class}">{_esc(tag_text)}</span>'
+           if tag_text else "")
+        + '<a class="cpress-source" '
+          f'href="{_esc(CENSUS_PRESS_FALLBACK)}" '
+          'target="_blank" rel="noopener">census.gov/newsroom &rarr;</a>'
+        '</div>'
+        '<div class="cpress-caption">The Bureau&rsquo;s most recent public '
+        'releases &mdash; useful for spotting new products or policy changes '
+        'while the team is heads-down on the analysis.</div>'
+        '<ul class="cpress-list">'
+        + "".join(lis) +
+        '</ul>'
+        '</div>')
+
+# ============================================================================
 # HOME TAB "WHAT WE'VE LEARNED" SECTION (reframe pass commit #2)
 # ============================================================================
 # First place in the tool where every insight source lands in one feed:
@@ -7652,6 +7910,12 @@ def build_home(fams, review, work, counts, worklog, notebooks, probes, git=None,
     # Primary framing: where we are + recently touched.
     h.append(build_where_team_is(fams, review, work, probes, data_cache or {},
                                   git, repo))
+    # Phase A 2026-07-26 commit #2: Bureau press-release mini-feed. Sits
+    # directly above "What we've learned" so external (Bureau) and internal
+    # (team) activity feeds visually cluster. Graceful fallback if fetch
+    # blocked - see build_census_press_feed() for the empty-state branch.
+    if repo is not None:
+        h.append(build_census_press_feed(repo / CENSUS_PRESS_CACHE))
     # Aggregated feed: curated + WORKLOG + human + auto insights.
     h.append(build_what_learned(fams, review, worklog, git))
     # UX pass 2026-07-26 commit #3: Sankey research-pipeline flow.
