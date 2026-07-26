@@ -1927,6 +1927,43 @@ header p{color:#CADCFC;font-size:13px;max-width:940px;}
      font-size:10px;background:var(--ice);color:var(--navy);border:1px solid var(--line);
      border-radius:3px;box-shadow:inset 0 -1px 0 #CADCFC;font-weight:700;line-height:14px;
      margin:0 1px;}
+/* Beginner-UX pass commit #2. First-visit "Start here" banner: dismissible via
+   localStorage. Sits between the freshness bar and the tab panels. Renders on
+   every page but hides itself once dismissed on this machine. */
+.starthere{background:#FBF8EC;border:1px solid var(--gold);border-radius:8px;
+     padding:12px 46px 12px 16px;margin:14px 44px 0;max-width:1300px;
+     position:relative;font-size:13px;color:#4E3E11;line-height:1.55;}
+.starthere.dismissed{display:none;}
+.starthere .sh-title{font-family:Georgia,serif;color:var(--navy);font-size:15.5px;
+     font-weight:700;margin:0 0 5px;letter-spacing:.005em;}
+.starthere ol{margin:2px 0 0 22px;padding:0;}
+.starthere li{margin:3px 0;padding-left:2px;}
+.starthere .sh-dismiss{position:absolute;top:8px;right:10px;background:transparent;
+     border:0;color:var(--muted);font-size:16px;line-height:1;cursor:pointer;
+     padding:4px 6px;border-radius:4px;font-family:inherit;}
+.starthere .sh-dismiss:hover{background:var(--ice);color:var(--navy);}
+/* Beginner-UX pass commit #2. Inline glossary tooltip. Circle-question after a
+   term; hover reveals the definition. Pure CSS (no JS needed). ::after tooltip
+   positions above the ? and pointer-events:none so it can't intercept clicks.
+   Falls back to native title= attribute in browsers without :hover (touch). */
+.gloss{display:inline-block;width:14px;height:14px;line-height:14px;text-align:center;
+     background:var(--ice);color:var(--navy);border:1px solid var(--line);
+     border-radius:50%;font-size:9.5px;font-weight:700;font-style:normal;
+     cursor:help;margin:0 3px;position:relative;vertical-align:2px;
+     font-family:"Segoe UI",system-ui,sans-serif;}
+.gloss:hover{background:var(--gold);color:#16204A;border-color:var(--gold);}
+.gloss::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 6px);
+     left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;
+     font-size:11px;font-weight:400;text-align:left;line-height:1.4;
+     padding:7px 10px;border-radius:5px;width:max-content;max-width:280px;
+     white-space:normal;box-shadow:0 3px 12px rgba(0,0,0,.24);z-index:20;
+     opacity:0;pointer-events:none;transition:opacity .14s ease-in .04s;}
+.gloss::before{content:"";position:absolute;bottom:calc(100% + 1px);left:50%;
+     transform:translateX(-50%);border:5px solid transparent;
+     border-top-color:var(--navy);opacity:0;pointer-events:none;
+     transition:opacity .14s ease-in .04s;}
+.gloss:hover::after,.gloss:hover::before,.gloss:focus::after,.gloss:focus::before{
+     opacity:1;}
 /* .funnel / .fstep / .farrow / .f-cand / .f-focus removed Phase A #3
    alongside _build_reviewer_mode_details() — the pre-reframe funnel bar
    was 568 -> 0 -> 0 -> 5 -> 0 (depressing without being informative). */
@@ -2419,6 +2456,15 @@ body:not(.am-reviewer) .panel.panel-am{display:none;}
   <span class="sha" title="HEAD SHA at generation time">__HEAD_SHORT__ &bull; __BRANCH__</span>
   <span class="kbd-hint" title="Press E on any product card to open or close its drill-down">Press <kbd>E</kbd> on a card to toggle details</span>
 </div>
+<div id="starthere" class="starthere" role="note">
+  <button type="button" class="sh-dismiss" id="sh-dismiss" title="Hide this on this machine" aria-label="Dismiss the Start here banner">&times;</button>
+  <div class="sh-title">&#128075; First time here? Start with these 3 things:</div>
+  <ol>
+    <li>Scroll to <b>"The Census data landscape"</b> &mdash; the treemap below shows all 573 Census data products, sized by count. Click any box to drill in.</li>
+    <li>Any card's <b>"More details &#9656;"</b> toggle opens what's inside that dataset.</li>
+    <li>Every card has a <b>copyable command</b> that runs in PowerShell to fetch more data or record a note.</li>
+  </ol>
+</div>
 <div class="wrap">__PANELS__</div>
 <script>
 /* --- Click-to-copy (reused by freshness bar, per-card action prompts, etc.) --- */
@@ -2443,6 +2489,26 @@ document.addEventListener('click', function(e){
   e.preventDefault(); e.stopPropagation();
   _copyText(b.getAttribute('data-copy'), b);
 });
+/* --- Beginner-UX pass commit #2. Start-here banner dismissal.
+   Reads localStorage on load; if set, hides the banner. Click the &times;
+   button to dismiss (writes the key). If localStorage isn't available (private
+   mode), the banner still renders and dismissal is best-effort. */
+(function(){
+  var STORE_KEY = 'product_scope:start_here_dismissed';
+  var el = document.getElementById('starthere');
+  if(!el) return;
+  try {
+    if (window.localStorage && window.localStorage.getItem(STORE_KEY) === '1') {
+      el.classList.add('dismissed');
+    }
+  } catch(_){ /* private mode / storage disabled: leave banner visible */ }
+  var btn = document.getElementById('sh-dismiss');
+  if (btn) btn.addEventListener('click', function(){
+    el.classList.add('dismissed');
+    try { window.localStorage && window.localStorage.setItem(STORE_KEY, '1'); }
+    catch(_){}
+  });
+})();
 /* --- Freshness pill: computes age from data-generated-at on every load --- */
 (function(){
   var bar = document.querySelector('.freshbar'); if(!bar) return;
@@ -3130,6 +3196,48 @@ by the team in product_review.json &bull; work depth and work-log findings are r
 def _esc(s):
     return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
+# ---- Beginner-UX pass commit #2: inline glossary tooltip helpers ------------
+# Small `?` badge decorators for the first visible occurrence of terms a
+# non-technical reader wouldn't know. Tracked by a per-render set so we don't
+# sprinkle 500 tooltips on the same page - render() clears the set at the top
+# of every regen. The tooltip content is a plain-English one-liner; CSS handles
+# hover via .gloss::after (see the stylesheet above).
+GLOSSARY = {
+    "probe":              "Fetch the list of variables and geographies this "
+                          "product publishes from the Census API. Doesn't "
+                          "download any actual data - just describes what's "
+                          "in the product.",
+    "sample":             "Peek at actual data rows (default 100) and run a "
+                          "quick summary - column types, missing values, top "
+                          "values.",
+    "cataloged":          "Listed in the Census catalog but the team hasn't "
+                          "looked at it yet.",
+    "actively managed":   "Products the team has flagged as focus areas "
+                          "(currently 5).",
+    "vintages":           "Years or time periods this product covers.",
+    "kind":               "Type of dataset - aggregate tables, microdata "
+                          "(individual records), time series, or "
+                          "uncategorized.",
+}
+_GLOSS_SEEN = set()
+
+def _gloss_reset():
+    """Clear the per-render 'already decorated' set. Called at the top of
+    render() so every regen gets a fresh first-occurrence assignment."""
+    _GLOSS_SEEN.clear()
+
+def gloss(term):
+    """Return an HTML `?` tooltip for `term` on its first occurrence in the
+    render, else "". Term lookup is case-insensitive against GLOSSARY."""
+    key = (term or "").strip().lower()
+    if key not in GLOSSARY: return ""
+    if key in _GLOSS_SEEN: return ""
+    _GLOSS_SEEN.add(key)
+    tip = GLOSSARY[key]
+    return (f' <span class="gloss" tabindex="0" role="button" '
+            f'aria-label="Glossary: {_esc(term)}" '
+            f'data-tip="{_esc(tip)}" title="{_esc(tip)}">?</span>')
+
 def _vint(f):
     v = f["vintages"]
     if len(v) > 1: return f"{v[0]}–{v[-1]}"
@@ -3677,10 +3785,12 @@ def _ql_what_it_is(f):
         bits.append(f'<span class="ql-k">Family</span> {_esc(fam)}')
     kind = f.get("kind") or ""
     if kind:
-        bits.append(f'<span class="ql-k">Kind</span> {_esc(kind)}')
+        # Beginner-UX pass commit #2: `?` glossary tooltip on first appearance
+        # of the term. gloss() is a no-op after first call per render.
+        bits.append(f'<span class="ql-k">Kind{gloss("kind")}</span> {_esc(kind)}')
     v = f.get("vintages") or []
     if v:
-        bits.append(f'<span class="ql-k">Vintages</span> {_esc(_vint(f))}')
+        bits.append(f'<span class="ql-k">Vintages{gloss("vintages")}</span> {_esc(_vint(f))}')
     spatial = sorted(f.get("spatial") or [])
     if spatial:
         # First entry is enough - the catalog usually lists one spatial coverage
@@ -4499,10 +4609,14 @@ def build_facet_sidebar(prods, review, work, probes, top_families, data_cache=No
         for v in ordered:
             n = vals[v]
             lbl = FACET_VALUE_LABELS.get(key, {}).get(v, v)
+            # Beginner-UX pass commit #2: gloss() tooltip on first occurrence
+            # of glossary-tracked value labels (e.g. Cataloged in the STAGE
+            # facet). No-op after first call per render.
+            gloss_html = gloss(lbl) if key == "stage" else ""
             items.append(
                 f'<li data-v="{_esc(v)}"><label>'
                 f'<input type="checkbox" data-f="{_esc(key)}" value="{_esc(v)}"> '
-                f'<span class="lbl">{_esc(lbl)}</span>'
+                f'<span class="lbl">{_esc(lbl)}{gloss_html}</span>'
                 f'<span class="cnt">{n}</span></label></li>')
         note = ""
         if key == "role" and set(vals.keys()) == {"(unset)"}:
@@ -4784,13 +4898,15 @@ def build_where_team_is(fams, review, work, probes, data_cache, git, repo):
     """
     cov = _evidence_coverage(fams, work, probes, data_cache)
     total = cov["total"] or 1  # avoid div-by-zero if catalog is empty
-    def _bar(label, n):
+    def _bar(label_html, n):
+        # label_html is already-escaped HTML (may include a gloss `?` span);
+        # every current caller passes safe text or _esc-safe strings.
         pct = 100.0 * n / total
         tone = _coverage_tone(pct)
         # Minimum sliver width so 0-count bars aren't invisible.
         w = max(1.5, min(100.0, pct))
         return ('<div class="wti-cov-row">'
-                f'<div class="wti-cov-label">{_esc(label)}</div>'
+                f'<div class="wti-cov-label">{label_html}</div>'
                 f'<div class="wti-cov-bar" title="{n} of {cov["total"]}">'
                 f'<div class="wti-cov-bar-fill {tone}" '
                 f'style="width:{w:.2f}%"></div></div>'
@@ -4804,8 +4920,10 @@ def build_where_team_is(fams, review, work, probes, data_cache, git, repo):
              'products we are actually working with today.</div>',
              '<div class="wti-cov-list">',
              _bar("Has repo evidence", cov["evidence"]),
-             _bar("Probed (API metadata)", cov["probed"]),
-             _bar("Sampled (actual data)", cov["sampled"]),
+             # Beginner-UX pass commit #2: `?` glossary tooltip after the first
+             # visible appearance of the jargon term (probed / sampled).
+             _bar("Probed (API metadata)" + gloss("probe"), cov["probed"]),
+             _bar("Sampled (actual data)" + gloss("sample"), cov["sampled"]),
              '</div>']
 
     signals = _recency_signals(fams, review, work, probes, data_cache, repo)
@@ -5636,6 +5754,9 @@ def export_xlsx(rows, out_path):
 def render(fams, review, work, worklog, notebooks, probes, repo_name, catnote, out_path, git,
            snapshot=None, diff=None, data_cache=None, eda_diffs=None):
     eda_diffs = eda_diffs or {}
+    # Beginner-UX pass commit #2: reset the glossary first-occurrence tracker
+    # so every regen decorates the same first appearance of each term.
+    _gloss_reset()
     counts = {s: 0 for s in STAGES}
     for path in fams:
         counts[review.get(path, {}).get("stage", "cataloged")] += 1
@@ -5662,7 +5783,11 @@ def render(fams, review, work, worklog, notebooks, probes, repo_name, catnote, o
     n_am = sum(1 for f in fams.values()
                if _is_actively_managed(f, review.get(f["path"], {})))
     if n_am:
+        # Beginner-UX pass commit #2: gloss() tooltip on first "Actively managed"
+        # appearance. Post-#3 rename, the visible text becomes plain English but
+        # the tooltip machinery keeps working via a lookup-key alias.
         tabs.append(f'<button class="tab tab-am" data-k="am">Actively managed'
+                    f'{gloss("actively managed")}'
                     f'<span class="n">{n_am}</span></button>')
         panels.append('<div class="panel panel-am" id="panel-am">'
                       + build_am_panel(fams, review, work, probes, git, snapshot,
