@@ -34,7 +34,7 @@ Usage:
 Output: product_report.html (self-contained, no CDN, no storage APIs).
 """
 
-import argparse, ast, json, os, re, subprocess, sys, datetime, urllib.request
+import argparse, json, os, re, subprocess, sys, datetime, urllib.request
 from pathlib import Path
 
 try:
@@ -319,8 +319,8 @@ PRODUCT_MATCH = {
     # Our own analysis modules - not Census products, but tracked here so their
     # evidence surfaces in the Home tab "What is in the repo" table. They will
     # not appear on any catalog family card because no family maps to them.
-    # composite.py / alloc.py / cv_model.py live on the unmerged JL_Work_Tree
-    # branch today; notebooks 06 and 07 already import them, so evidence exists.
+    # composite.py / alloc.py / cv_model.py live on an unmerged branch today;
+    # notebooks 06 and 07 already import them, so evidence exists.
     "Composite prototype": [r"composite\.py\b", r"analysis[/\\.]composite\b",
                             r"pull_composite"],
     "Allocation analysis": [r"alloc\.py\b", r"analysis[/\\.]alloc\b",
@@ -736,58 +736,30 @@ def _summarize_eda_changes(changes):
     return "Sample refreshed. " + "; ".join(changes) + "."
 
 # ---- Source C: auto:divergence ----------------------------------------------
-# Piggyback on Phase 2's divergence detection. Fire only when the state
-# CHANGES vs. the previous snapshot - steady-state divergence is already the
-# amber card banner, and re-emitting it every regen would flood the feed.
+# Fire an insight when a product's composite_role STATE CHANGES vs. the
+# previous snapshot (declared or removed). Steady-state emits nothing so the
+# feed doesn't get re-flooded every regen. Compared to the pre-audit version,
+# this collector no longer cross-checks role against AST-parsed composite code
+# refs (the JL_Work_Tree code-refs feature was removed in the audit-simplify
+# pass); the emit trigger is now purely a role state transition.
 
-def collect_auto_divergence_insights(fams, review, jl_refs, snapshot_prev):
+def collect_auto_divergence_insights(fams, review, snapshot_prev):
     """Return (path, source, text, when, who) tuples for products whose
-    divergence state changed since the previous snapshot.
-
-    Divergence state per product is a pair (has_role, has_refs). A transition
-    on either axis is an emit-worthy event; the message says what happened
-    and points at the code (if any).
+    composite_role changed since the previous snapshot (added or removed).
     """
     tuples = []
     prev_prods = ((snapshot_prev or {}).get("products") or {})
     for path, f in fams.items():
         r = review.get(path, {}) or {}
         role = effective_role(r)
-        refs = _card_jl_refs_for(f, jl_refs)
-        cur_state = (bool(role), bool(refs))
-        prev_row = prev_prods.get(path, {}) or {}
-        prev_role = bool((prev_row.get("composite_role") or ""))
-        # We do NOT store previous refs in the snapshot (Phase 2 didn't need
-        # them). Approximation: the ref-count axis change is inferred from
-        # whether we transitioned between "referenced without role" and
-        # "role without reference" states. Steady-state (both true or both
-        # false, unchanged) emits nothing.
-        prev_state = (prev_role, prev_role)  # baseline seed - see below
-        # Better: use the snapshot only for the role axis (known), and use
-        # the current refs vs. the current role to decide whether we're
-        # crossing an interesting boundary now.
-        if prev_role == cur_state[0]:
-            # Role axis unchanged - only fire if the ref axis becomes newly
-            # relevant (role declared for the first time and refs happen to
-            # already point at code). Skip: steady-state.
-            continue
-        # Role just changed. Emit a message describing the new state.
-        ref_files = sorted({x["file"] for x in refs}) if refs else []
-        if cur_state[0]:  # role newly declared
-            if refs:
-                text = (f"{role} role declared with note. AST confirms "
-                        + ", ".join(f"{x['file']}:{x['line']}" for x in refs[:3])
-                        + " references this product.")
-            else:
-                text = (f"{role} role declared with note. No composite code "
-                        "references this product yet.")
-        else:  # role newly removed
-            if refs:
-                text = ("Role removed; still referenced in "
-                        + ", ".join(f"{x['file']}:{x['line']}" for x in refs[:3])
-                        + ".")
-            else:
-                text = "Role removed. No composite code references this product."
+        cur_role = bool(role)
+        prev_role = bool((prev_prods.get(path, {}) or {}).get("composite_role") or "")
+        if prev_role == cur_role:
+            continue  # steady-state; nothing to emit
+        if cur_role:
+            text = f"{role} role declared with note."
+        else:
+            text = "Composite role removed."
         tuples.append((path, INSIGHT_AUTO_DIVERGENCE, text, None, "auto"))
     return tuples
 
@@ -1992,25 +1964,6 @@ table.rep td{border-bottom:1px solid var(--ice);padding:7px 9px;vertical-align:t
 .diff-list li{padding:2px 0;color:var(--muted);font-size:11.5px;line-height:1.5;border-bottom:1px solid #E1E7F0;}
 .diff-list code{font-family:ui-monospace,Consolas,monospace;font-size:11px;background:#fff;
      padding:1px 5px;border-radius:3px;color:var(--navy);}
-/* Composite code references (JL_Work_Tree AST hits). */
-.jl-refs{list-style:none;padding:0;margin:0;font-size:11px;line-height:1.5;}
-.jl-refs li{padding:2px 0;border-bottom:1px dotted #E1E7F0;}
-.jl-refs li:last-child{border-bottom:0;}
-.jl-sym{font-family:ui-monospace,Consolas,monospace;color:var(--navy);}
-.jl-kind{color:var(--muted);font-size:10px;}
-.jl-src{font-family:"Segoe UI",sans-serif;font-weight:400;color:var(--muted);font-size:10.5px;
-     text-transform:none;letter-spacing:0;margin-left:6px;}
-.jl-parse-err{font-size:10.5px;color:#8a4d1c;font-style:italic;margin-top:5px;}
-/* Divergences (Home tab) - composite code vs. declared role reconciliation. */
-.div-block{background:#FBF0D6;border-left:4px solid var(--gold);border-radius:6px;
-     padding:10px 15px;margin:8px 0;max-width:1020px;}
-.div-head{font-size:12.5px;font-weight:700;color:#6E4E11;margin-bottom:5px;}
-.div-head code{background:#F1E7C8;color:#6B4E11;padding:0 4px;border-radius:3px;
-     font-family:ui-monospace,Consolas,monospace;font-size:11.5px;}
-.div-list{list-style:none;padding:0;margin:0;font-size:11.5px;line-height:1.55;color:var(--ink);}
-.div-list li{padding:2px 0;}
-.div-list code{background:#fff;padding:1px 5px;border-radius:3px;
-     font-family:ui-monospace,Consolas,monospace;font-size:11px;color:var(--navy);}
 .meta{font-size:11px;color:var(--muted);margin-top:3px;}
 .tk{border-left:3px solid var(--line);padding:4px 8px;margin:5px 0;}
 .tk.odd{border-left-color:var(--gold);}
@@ -2581,186 +2534,6 @@ FACET_VALUE_LABELS = {
 }
 
 SNAPSHOT_FILE = ".product_scope_last_run.json"
-
-# ============================================================================
-# COMPOSITE CODE REFERENCES (feature #6)
-# ============================================================================
-# The three composite/allocation/cv-model modules live only on the unmerged
-# origin/JL_Work_Tree branch today. We AST-parse them straight out of that
-# branch (git show, no worktree, no checkout) to surface, per product, the
-# exact file:line where the composite code references it.
-#
-# Machine-derived only. This does not assign composite_role - a human does
-# that, in product_review.json (feature #7).
-
-JL_BRANCH = "origin/JL_Work_Tree"
-JL_FILES  = ["analysis/composite.py", "analysis/cv_model.py", "analysis/alloc.py"]
-
-# Which composite/analysis symbols map to which tracked products. Kept
-# separate from PRODUCT_MATCH so the composite-refs pass never widens
-# ordinary evidence detection.
-COMPOSITE_REF_MAP = [
-    (re.compile(r"^analysis\.acs\b"),        "ACS 5-year"),
-    (re.compile(r"^analysis\.alloc\b"),      "Allocation analysis"),
-    (re.compile(r"^analysis\.cv_model\b"),   "CV driver model"),
-    (re.compile(r"^analysis\.composite\b"),  "Composite prototype"),
-    (re.compile(r"^analysis\.dhc\b"),        "2020 DHC"),
-]
-
-CENSUS_PATH_RE = re.compile(r"^[a-z]+/[a-z0-9_]+$")
-
-def fetch_jl_file(repo: Path, path: str):
-    """git show origin/JL_Work_Tree:<path>. Returns str, or None if the branch
-    is missing / the file doesn't exist on it (silent - the tool must still run
-    in a clone that only has main)."""
-    try:
-        r = subprocess.run(["git", "-C", str(repo), "show", f"{JL_BRANCH}:{path}"],
-                           capture_output=True, text=True, timeout=15)
-        if r.returncode == 0:
-            return r.stdout
-    except Exception:
-        pass
-    return None
-
-def _collect_ast_symbols(src):
-    """Walk one file's AST. Returns list of (symbol, lineno, kind) tuples,
-    or None on syntax error. Kinds: 'import', 'call', 'string'."""
-    try:
-        tree = ast.parse(src)
-    except SyntaxError:
-        return None
-    syms = []
-    for n in ast.walk(tree):
-        if isinstance(n, ast.Import):
-            for a in n.names: syms.append((a.name, n.lineno, "import"))
-        elif isinstance(n, ast.ImportFrom):
-            base = n.module or ""
-            for a in n.names:
-                nm = f"{base}.{a.name}" if base else a.name
-                syms.append((nm, n.lineno, "import"))
-        elif isinstance(n, ast.Call):
-            fn = n.func
-            nm = (fn.attr if isinstance(fn, ast.Attribute) else
-                  fn.id  if isinstance(fn, ast.Name)      else "")
-            if nm: syms.append((nm, getattr(n, "lineno", 0), "call"))
-        elif isinstance(n, ast.Constant) and isinstance(n.value, str):
-            v = n.value
-            if v and len(v) < 200:
-                syms.append((v, getattr(n, "lineno", 0), "string"))
-    return syms
-
-def build_jl_refs(repo: Path, fams):
-    """Parse composite/cv_model/alloc from origin/JL_Work_Tree. Returns
-       ({key: [refs]}, {file: error_msg}).
-
-    Keys are either:
-      - a catalog path (like 'acs/acs5') for a direct string-literal match
-      - a tracked product name (like 'CV driver model') for a symbol match
-        via COMPOSITE_REF_MAP
-
-    Each ref is {"file","path","line","symbol","kind"}. Rendering code merges
-    both keying styles when populating a single card.
-    """
-    refs = {}
-    errors = {}
-    catalog_paths = set(fams.keys())
-    files_ok = 0
-    for jl_path in JL_FILES:
-        src = fetch_jl_file(repo, jl_path)
-        if src is None:
-            errors[jl_path] = f"unavailable (branch {JL_BRANCH!r} not fetched or file missing)"
-            continue
-        syms = _collect_ast_symbols(src)
-        if syms is None:
-            errors[jl_path] = "AST parse failed (WIP syntax?)"
-            print(f"  jl-refs: WARNING - could not parse {jl_path} (skipped)", file=sys.stderr)
-            continue
-        files_ok += 1
-        basename = jl_path.rsplit("/", 1)[-1]
-        for sym, ln, kind in syms:
-            # (a) direct string literal that IS a catalog path
-            if kind == "string" and CENSUS_PATH_RE.match(sym) and sym in catalog_paths:
-                refs.setdefault(sym, []).append({
-                    "file": basename, "path": jl_path, "line": ln,
-                    "symbol": sym, "kind": kind})
-                continue
-            # (b) tracked-product match via COMPOSITE_REF_MAP
-            for pat, prod in COMPOSITE_REF_MAP:
-                if pat.search(sym):
-                    refs.setdefault(prod, []).append({
-                        "file": basename, "path": jl_path, "line": ln,
-                        "symbol": sym, "kind": kind})
-                    break
-    # Dedup by (file, line) per key so an `from X import A, B` (both firing
-    # the same product match at the same lineno) collapses to one visible ref.
-    # First occurrence wins; sort by file then line for stable rendering.
-    for key, hits in refs.items():
-        seen = set(); uniq = []
-        for h in hits:
-            k = (h["file"], h["line"])
-            if k in seen: continue
-            seen.add(k); uniq.append(h)
-        uniq.sort(key=lambda h: (h["file"], h["line"]))
-        refs[key] = uniq
-    if files_ok:
-        print(f"  jl-refs: parsed {files_ok}/{len(JL_FILES)} composite modules; "
-              f"{len(refs)} product(s)/family(ies) referenced")
-    return refs, errors
-
-def _card_jl_refs_for(f, jl_refs):
-    """Merge string-literal (catalog-path) hits and symbol (product) hits for
-    one product card. Returns a list of refs (possibly empty)."""
-    out = list(jl_refs.get(f["path"], []))
-    if f.get("product"):
-        out += jl_refs.get(f["product"], [])
-    return out
-
-# ============================================================================
-# DIVERGENCE FLAG (feature #8)
-# ============================================================================
-# Cross-references machine-derived composite code refs (#6) against the
-# human-declared composite_role (#7). Two failure modes:
-#   - code references a product but no role is declared for it
-#   - a role is declared but the code doesn't reference the product
-# Both surface on the affected card AND on a Home-tab summary so the team
-# sees the full list in one place.
-
-def compute_divergences(fams, review, jl_refs):
-    """Returns two lists of dicts:
-       referenced_no_role: [{path, ref_count, ref_files}]
-       role_no_reference:  [{path, role, note}]
-    """
-    ref_no_role = []
-    role_no_ref = []
-    for path, f in sorted(fams.items()):
-        r = review.get(path, {}) or {}
-        role = effective_role(r)
-        refs = _card_jl_refs_for(f, jl_refs)
-        if refs and not role:
-            files = sorted({x["file"] for x in refs})
-            ref_no_role.append({"path": path, "ref_count": len(refs), "ref_files": files})
-        elif role and not refs:
-            role_no_ref.append({"path": path, "role": role,
-                                "note": (r.get("composite_role_note") or "").strip()})
-    return {"referenced_no_role": ref_no_role, "role_no_reference": role_no_ref}
-
-def card_divergence_banners(f, r, jl_refs):
-    """Return card-level divergence affordances (same shape as _affordances)."""
-    out = []
-    role = effective_role(r)
-    refs = _card_jl_refs_for(f, jl_refs)
-    if refs and not role:
-        files = sorted({x["file"] for x in refs})
-        out.append({"tone": "amber",
-                    "text": f"Referenced in composite code ({', '.join(files)}) but no "
-                            f"composite_role declared. Set one in product_review.json:",
-                    "cmd":  None})
-    elif role and not refs:
-        out.append({"tone": "amber",
-                    "text": f"Declared as {role!r} but not referenced in any composite module. "
-                            "Either the role is stale or the composite hasn't wired this product yet.",
-                    "cmd":  None})
-    return out
 
 def load_snapshot(repo: Path):
     """Read the previous run's snapshot if it exists (written by feature #5).
@@ -3623,8 +3396,6 @@ def product_row(f, review, work, probes, ctx=None):
     top_families = ctx.get("top_families", set())
     git = ctx.get("git") or {}
     snapshot = ctx.get("snapshot")
-    jl_refs = ctx.get("jl_refs") or {}
-    jl_errors = ctx.get("jl_errors") or {}
     facets = product_facet_values(f, review, work, probes, top_families,
                                     ctx.get("data_cache"))
     r = review.get(f["path"], {})
@@ -3669,7 +3440,6 @@ def product_row(f, review, work, probes, ctx=None):
     # the API says it publishes, and a sample reports what the data looks like.
     has_eda = bool(_data_cache.get(f["path"]))
     banners = _affordances(f, r, ws, has_probe, git, snapshot, has_eda)
-    banners += card_divergence_banners(f, r, jl_refs)
     aff = _affordance_html(banners)
     if aff: branches.append(aff)
     unc = r.get("uncertainty_metrics", "")
@@ -3745,31 +3515,6 @@ def product_row(f, review, work, probes, ctx=None):
     # the sampling logic (fetch_sample, compute_eda, scope_data_cache.json) is
     # untouched, and the eda_diffs dump still feeds the Home-tab drift banner.
 
-    # Composite code references (feature #6) - AST-derived hits from JL_Work_Tree.
-    card_refs = _card_jl_refs_for(f, jl_refs)
-    if card_refs:
-        rows = []
-        for ref in card_refs[:12]:
-            url_r = {"path": ref["path"], "line": ref["line"], "file": ref["file"], "kind": "analysis"}
-            url = receipt_url(url_r, {"github_slug": (git.get("github_slug") if git else ""),
-                                       "branch": JL_BRANCH.split("/")[-1],
-                                       "repo_abs": (git.get("repo_abs") if git else "")})
-            lbl = f'{ref["file"]}:{ref["line"]}'
-            symlbl = (ref["symbol"][:60] + ("..." if len(ref["symbol"]) > 60 else ""))
-            link = (f'<a class="receipt-link" href="{_esc(url)}" target="_blank" rel="noopener">{_esc(lbl)}</a>'
-                    if url else _esc(lbl))
-            rows.append(f'<li>{link} — <span class="jl-sym">{_esc(symlbl)}</span> '
-                        f'<span class="jl-kind">({ref["kind"]})</span></li>')
-        note = ""
-        if jl_errors:
-            note = ('<div class="jl-parse-err">' +
-                    "; ".join(f"parse error in {_esc(fp)} - try regenerating after next JL_Work_Tree update"
-                              for fp in jl_errors) + '</div>')
-        branches.append(
-            '<div class="branch"><div class="bcard"><div class="blabel">Composite code references '
-            '<span class="jl-src">(from JL_Work_Tree)</span></div>'
-            f'<ul class="jl-refs">{"".join(rows)}</ul>{note}</div></div>')
-
     if finds:
         cards = "".join(
             '<div class="tk' + (" odd" if x["kind"] == "oddity" else "") + '">'
@@ -3840,14 +3585,13 @@ def build_facet_sidebar(prods, review, work, probes, top_families, data_cache=No
             '</div>' + "".join(blocks) + '</aside>')
 
 def build_kind_panel(kind, fams, review, work, probes, git=None, snapshot=None,
-                     jl_refs=None, jl_errors=None, data_cache=None, eda_diffs=None):
+                     data_cache=None, eda_diffs=None):
     prods = [f for f in fams.values() if f["kind"] == kind]
     # Compute per-panel "top families" bucket for the Family facet.
     fam_counts = {}
     for f in prods: fam_counts[f["group"]] = fam_counts.get(f["group"], 0) + 1
     top_families = set(sorted(fam_counts, key=lambda g: -fam_counts[g])[:12])
     ctx = {"top_families": top_families, "git": git or {}, "snapshot": snapshot,
-           "jl_refs": jl_refs or {}, "jl_errors": jl_errors or {},
            "data_cache": data_cache or {}, "eda_diffs": eda_diffs or {}}
 
     groups = {}
@@ -3878,40 +3622,8 @@ def build_kind_panel(kind, fams, review, work, probes, git=None, snapshot=None,
     return ('<div class="products-shell">' + sidebar
             + f'<div class="products-main">{body}</div></div>')
 
-def build_divergence_section(divergences):
-    """Home-tab summary of composite-code vs composite_role mismatches (feature #8)."""
-    a = divergences.get("referenced_no_role", [])
-    b = divergences.get("role_no_reference",  [])
-    if not a and not b:
-        return ('<h2>Divergences <span style="font-size:12px;color:var(--muted);'
-                'font-weight:400">(composite code vs. declared role)</span></h2>'
-                '<div class="sub">Every product referenced by composite code has a declared '
-                '<code>composite_role</code>, and every declared role points at code the '
-                'composite actually touches. Nothing to reconcile.</div>')
-    parts = ['<h2>Divergences <span style="font-size:12px;color:var(--muted);font-weight:400">'
-             '(composite code vs. declared role)</span></h2>'
-             '<div class="sub">Where machine-derived composite references (from JL_Work_Tree) '
-             'and human-declared <code>composite_role</code> disagree. Reconcile in '
-             '<code>product_review.json</code>, then regenerate.</div>']
-    if a:
-        parts.append('<div class="div-block"><div class="div-head">Referenced in composite code '
-                     'but no <code>composite_role</code> declared</div><ul class="div-list">')
-        for d in a:
-            files = ", ".join(d["ref_files"])
-            parts.append(f'<li><code>{_esc(d["path"])}</code> — {d["ref_count"]} hit(s) in {_esc(files)}</li>')
-        parts.append('</ul></div>')
-    if b:
-        parts.append('<div class="div-block"><div class="div-head">Role declared but not '
-                     'referenced in composite code</div><ul class="div-list">')
-        for d in b:
-            note = (" — " + d["note"]) if d["note"] else ""
-            parts.append(f'<li><code>{_esc(d["path"])}</code> — declared as '
-                         f'<b>{_esc(d["role"])}</b>{_esc(note)}</li>')
-        parts.append('</ul></div>')
-    return "".join(parts)
-
 def build_home(fams, review, work, counts, worklog, notebooks, probes, git=None,
-               diff=None, jl_refs=None, jl_errors=None, divergences=None, eda_diffs=None):
+               diff=None, eda_diffs=None):
     h = []
     if diff is not None:
         h.append(build_diff_banner(diff, eda_diffs))
@@ -3951,41 +3663,6 @@ def build_home(fams, review, work, counts, worklog, notebooks, probes, git=None,
         h.append("</table>")
     else:
         h.append('<div class="nowork">No repo evidence found.</div>')
-
-    if jl_refs or jl_errors:
-        gh = (git or {}).get("github_slug") or ""
-        h.append('<h2>Composite code references '
-                 '<span style="font-size:12px;color:var(--muted);font-weight:400">(from JL_Work_Tree)</span></h2>'
-                 '<div class="sub">AST-derived from the three composite/allocation/CV-model modules '
-                 f"on <code>{_esc(JL_BRANCH)}</code>. Every hit is a line the composite code touches "
-                 "a product we're tracking; use this to sanity-check which products the composite "
-                 "actually depends on. Not merged to main yet.</div>")
-        if jl_errors:
-            errs = "; ".join(f"<code>{_esc(fp)}</code>: {_esc(m)}" for fp, m in jl_errors.items())
-            h.append(f'<div class="unc todo" style="max-width:1020px">Parse issues: {errs}</div>')
-        if jl_refs:
-            h.append("<table class='rep'><tr><th>Referenced product / family</th>"
-                     "<th>Hits</th><th>Locations</th></tr>")
-            for key in sorted(jl_refs, key=lambda k: (-len(jl_refs[k]), k)):
-                hits = jl_refs[key][:8]
-                links = []
-                for ref in hits:
-                    url_r = {"path": ref["path"], "line": ref["line"], "file": ref["file"], "kind": "analysis"}
-                    url = receipt_url(url_r, {"github_slug": gh,
-                                               "branch": JL_BRANCH.split("/")[-1],
-                                               "repo_abs": (git or {}).get("repo_abs", "")})
-                    lbl = f'{ref["file"]}:{ref["line"]}'
-                    if url:
-                        links.append(f'<a class="receipt-link" href="{_esc(url)}" target="_blank" rel="noopener">{_esc(lbl)}</a>')
-                    else:
-                        links.append(_esc(lbl))
-                h.append(f'<tr><td><b>{_esc(key)}</b></td>'
-                         f'<td>{len(jl_refs[key])}</td>'
-                         f'<td class="mono">{" &bull; ".join(links)}</td></tr>')
-            h.append("</table>")
-
-    if divergences is not None:
-        h.append(build_divergence_section(divergences))
 
     if notebooks:
         h.append('<h2>Notebook health</h2><div class="sub">Read from the committed notebooks: whether execution '
@@ -4142,8 +3819,7 @@ def export_xlsx(rows, out_path):
 
 
 def render(fams, review, work, worklog, notebooks, probes, repo_name, catnote, out_path, git,
-           snapshot=None, diff=None, jl_refs=None, jl_errors=None, divergences=None,
-           data_cache=None, eda_diffs=None):
+           snapshot=None, diff=None, data_cache=None, eda_diffs=None):
     eda_diffs = eda_diffs or {}
     counts = {s: 0 for s in STAGES}
     for path in fams:
@@ -4152,13 +3828,13 @@ def render(fams, review, work, worklog, notebooks, probes, repo_name, catnote, o
     kinds_present = [k for k in KINDS if any(f["kind"] == k for f in fams.values())]
     tabs = ['<button class="tab on" data-k="home">Home</button>']
     panels = ['<div class="panel on" id="panel-home">'
-              + build_home(fams, review, work, counts, worklog, notebooks, probes, git, diff, jl_refs, jl_errors, divergences, eda_diffs) + '</div>']
+              + build_home(fams, review, work, counts, worklog, notebooks, probes, git, diff, eda_diffs) + '</div>']
     for i, k in enumerate(kinds_present):
         n = sum(1 for f in fams.values() if f["kind"] == k)
         tabs.append(f'<button class="tab" data-k="k{i}">{_esc(k)}<span class="n">{n}</span></button>')
         panels.append(f'<div class="panel" id="panel-k{i}">'
                       + build_kind_panel(k, fams, review, work, probes, git, snapshot,
-                                          jl_refs, jl_errors, data_cache, eda_diffs)
+                                          data_cache, eda_diffs)
                       + '</div>')
 
     gen_iso = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -4320,17 +3996,13 @@ def main():
     current_snap  = build_snapshot(fams, review, work, probes, git)
     diff          = compute_diff(snapshot_prev, current_snap)
     save_snapshot(repo, current_snap)
-    jl_refs, jl_errors = build_jl_refs(repo, fams)
-    divergences = compute_divergences(fams, review, jl_refs)
-    dsum = (len(divergences["referenced_no_role"]), len(divergences["role_no_reference"]))
-    if any(dsum):
-        print(f"  divergences: {dsum[0]} referenced-without-role, {dsum[1]} role-without-reference")
 
     # Phase 5 #2 - auto-insight collection. Two sources (cache-diff drift,
-    # divergence state changes) share _append_insight() which handles dedup
-    # + file locking. Runs BEFORE render so the freshly appended insights
-    # land on the cards in the same regen. (auto:repo dropped in audit cut 2.)
-    ai_div  = collect_auto_divergence_insights(fams, review, jl_refs, snapshot_prev)
+    # role-state transitions) share _append_insight() which handles dedup +
+    # file locking. Runs BEFORE render so the freshly appended insights land
+    # on the cards in the same regen. (auto:repo dropped in audit cut 2;
+    # JL_Work_Tree cross-check dropped in audit simplify 1.)
+    ai_div = collect_auto_divergence_insights(fams, review, snapshot_prev)
     if diff.get("is_baseline"):
         print(f"  snapshot: baseline recorded to {SNAPSHOT_FILE} (diff will appear on next run)")
     else:
@@ -4351,7 +4023,7 @@ def main():
     emit_auto_insights(repo, review, ai_div + ai_cache_diff,
                        log_prefix="auto-insight/regen")
     counts = render(fams, review, work, worklog, notebooks, probes, repo.name, catnote, out, git,
-                    snapshot_prev, diff, jl_refs, jl_errors, divergences, data_cache, eda_diffs)
+                    snapshot_prev, diff, data_cache, eda_diffs)
     print("  funnel: " + " -> ".join(f"{STAGE_LABELS[s]} {counts.get(s, 0)}" for s in STAGES))
     print(f"Report written to {out}")
 
