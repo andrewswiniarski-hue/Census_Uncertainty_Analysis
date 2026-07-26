@@ -382,6 +382,53 @@ WL_STAT  = re.compile(
 _YEAR = re.compile(r"^(19|20)\d\d$")
 _UNIT = re.compile(r"[%×x≈ρ]|R²|\.\d|/")
 
+# --- Phase A ceiling-push #3: stat-carrying heuristics for WORKLOG mining ---
+# Historical (pre-#3) behaviour: mine_worklog() extracted every sub-clause in
+# a Findings block indiscriminately, feeding 158 items into the What-we've-
+# learned aggregator. Most were pure process notes ("regen'd HTML", "added
+# WORKLOG entry") that flooded the Show-all drawer and hid the actual
+# statistics-carrying findings. This pass scores each mined item by how many
+# stat-shaped signals it carries; zero-score items drop entirely, and the
+# aggregator caps Show-all at 30 mined+auto items to keep the drawer scannable.
+#
+# The scoring is deliberately additive rather than a single regex-OR so a row
+# with three signals ("median CV rose 12% at n=42, p<0.01") ranks above a
+# row with only one; ties break by timestamp (newest first).
+
+# Numbers with an inline unit or an equation operator. Rows scoring
+# 1 for each match, capped at +3 to prevent a single sentence with
+# dozens of numbers from dominating.
+WL_NUM_UNITS = re.compile(
+    r"(?:\bρ\s*=|\bR\s*[²2]|\br\s*=|\bn\s*=|\bN\s*=|σ|\bp\s*<)|"
+    r"\d[\d,.]*\s*(?:%|×|\bx\b|/|→|to\s+\d)|"
+    r"\b\d+\.\d+\b"
+)
+# Statistics vocabulary. One point per unique term (case-insensitive).
+WL_STAT_VOCAB = re.compile(
+    r"\b(?:median|mean|share|count|correlation|spike|drops?|jumps?|ratio|"
+    r"distribution|outlier|variance|stddev|std\s*dev|moe|"
+    r"95\s*%?\s*ci|confidence\s+interval|"
+    r"skew|kurtosis|percentile|quartile|"
+    r"significant|significance)\b",
+    re.I,
+)
+# Finding-shaped verbs at the start of the row (or near-start after markdown).
+WL_STAT_LEADS = re.compile(
+    r"^\s*(?:\*\*)?(?:found|observed|shows?|showed|reveals?|revealed|"
+    r"indicates?|suggests?|confirms?|proves?)\b",
+    re.I,
+)
+# Explicit process-note markers (down-weight, never elevate). A row that
+# EXCLUSIVELY talks about the tool/regen/commit ships to the demoted tail.
+WL_PROCESS_MARKERS = re.compile(
+    r"\b(?:regen(?:'?d)?|regenerated|committed|commit\s+hash|"
+    r"loc\s*(?:on|line)|"
+    r"added?\s+(?:file|entry|worklog)|"
+    r"scan(?:ned)?|before/after\s+measurements|baseline\s+vs|"
+    r"grep\s+audit|help\s+line\s+count)\b",
+    re.I,
+)
+
 def _strip_md(s):
     s = re.sub(r"\*\*(.+?)\*\*", r"\1", s)
     s = re.sub(r"(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)", r"\1", s)
@@ -400,7 +447,35 @@ def _stat_of(txt):
         if _UNIT.search(s): return s
     return ""
 
+def _wl_score(text):
+    """Rank a mined WORKLOG row by how stat-carrying it is.
+
+    Signals (each contributes to the score):
+      + up to +3 for number-with-unit matches (%, ×, /, ρ=, n=, decimals...)
+      + +1 per unique statistics-vocab term
+      + +2 for a finding-shaped leading verb (found / observed / shows...)
+      + -2 penalty if the row looks like a pure process note (regen /
+        committed / grep audit / LOC delta) so it drops to the tail.
+
+    Zero-or-negative score returned by callers as "drop from mining".
+    The scoring is intentionally simple and additive so the ranking is
+    inspectable in-place; see the module comment above for the design
+    rationale."""
+    if not text:
+        return 0
+    n_units = min(3, len(WL_NUM_UNITS.findall(text)))
+    vocab_terms = set(m.group(0).lower() for m in WL_STAT_VOCAB.finditer(text))
+    n_vocab = len(vocab_terms)
+    n_leads = 2 if WL_STAT_LEADS.search(text) else 0
+    penalty = -2 if WL_PROCESS_MARKERS.search(text) else 0
+    return n_units + n_vocab + n_leads + penalty
+
 def mine_worklog(repo: Path):
+    """Extract mined-findings rows from WORKLOG.md, scored by stat-carrying
+    heuristic. Returns list-of-dicts (same shape as before, plus a `score`
+    field on each item and a `max_score` on each entry) so downstream
+    build_what_learned() can rank + cap; readers that ignore `score` still
+    work as they did pre-#3."""
     wl = repo / "WORKLOG.md"
     if not wl.exists(): return []
     text = wl.read_text(encoding="utf-8", errors="ignore")
@@ -414,12 +489,17 @@ def mine_worklog(repo: Path):
         for p in re.split(r"\(\d+\)\s*", " ".join(m.group(1).split())):
             t = _strip_md(p)
             if len(t) < 25: continue
-            items.append({"stat": _stat_of(t), "text": t})
+            score = _wl_score(t)
+            # Drop zero-or-negative rows entirely: they're process chatter
+            # (regen'd HTML, committed X) with no statistical payload.
+            if score <= 0: continue
+            items.append({"stat": _stat_of(t), "text": t, "score": score})
         if not items: continue
         nb = re.search(r"EDA (\d\d?)", h.group(3))
         out.append({"date": h.group(1), "author": h.group(2).strip(),
                     "title": _strip_md(h.group(3)), "nb": nb.group(1) if nb else "",
-                    "items": items})
+                    "items": items,
+                    "max_score": max(i["score"] for i in items)})
     out.sort(key=lambda e: e["date"], reverse=True)
     return out
 
@@ -2015,6 +2095,14 @@ table.rep td{border-bottom:1px solid var(--ice);padding:7px 9px;vertical-align:t
 .wwl-more > summary::marker{content:"";}
 .wwl-more > summary:before{content:"\25B8  ";}
 .wwl-more[open] > summary:before{content:"\25BE  ";}
+/* Phase A ceiling-push #3: footer inside the Show-all drawer telling the
+   reader how many mined items were dropped by the 30-cap, with a link
+   into the raw WORKLOG for the full record. Sits below the last <li>. */
+.wwl-tail{padding:9px 10px;font-size:11px;color:var(--muted);line-height:1.5;
+     background:#F6F7FA;border-top:1px solid var(--ice);border-radius:0 0 5px 5px;
+     margin-top:0;}
+.wwl-tail b{color:var(--navy);font-weight:700;}
+.wwl-tail a{color:#3A4890;text-decoration:none;border-bottom:1px dotted #8FA8D8;}
 /* "Census data landscape" viz (Phase A ceiling-push #1). SVG squarified
    treemap: Kind (outer 4-way partition) -> Program (inner partition), area
    proportional to product count, color shaded by max team-reach tier.
@@ -4868,13 +4956,15 @@ def build_what_learned(fams, review, worklog, git):
                 "sort_key": (sort_group, -_iso_to_ord(when), path),
             })
 
-    # WORKLOG-mined findings, in reverse-chronological order (worklog is
-    # already sorted newest-first by mine_worklog).
+    # WORKLOG-mined findings. Post-#3 the mine_worklog rows come pre-scored
+    # by the stat-carrying heuristic; sort tiebreak by score desc so a row
+    # with three stats floats above a row with one, all else equal.
     wl_url = _worklog_url(git)
     for e in worklog:
         for item in e.get("items", []):
             text = item.get("text") or ""
             stat = item.get("stat") or ""
+            score = int(item.get("score", 0))
             headline = (f"{stat} - " if stat else "") + \
                        (text if len(text) <= 140 else text[:137].rstrip() + "...")
             entries.append({
@@ -4885,15 +4975,18 @@ def build_what_learned(fams, review, worklog, git):
                 "product":  "",   # WORKLOG doesn't record catalog paths
                 "when_iso": (e.get("date") or "") + "T00:00:00Z",
                 "who":      e.get("author") or "",
+                "score":    score,
                 "meta_tail": f'<a href="{_esc(wl_url)}" target="_blank" rel="noopener">'
                              f'{_esc(e.get("title", "")[:70])}</a>',
-                "sort_key": (4, -_iso_to_ord((e.get("date") or "") + "T00:00:00Z"),
+                # Rank by (group, -score, -timestamp, text) so within the
+                # worklog group the highest-scoring rows come first.
+                "sort_key": (4, -score,
+                             -_iso_to_ord((e.get("date") or "") + "T00:00:00Z"),
                              text),
             })
 
     # Sort by the sort_key tuples; deterministic across runs.
     entries.sort(key=lambda x: x["sort_key"])
-    total = len(entries)
 
     # Human-insights empty-state prompt (per spec).
     n_human = sum(1 for e in entries if e["kind"] == "human")
@@ -4937,8 +5030,31 @@ def build_what_learned(fams, review, worklog, git):
                 (f'<div class="wwl-meta">{meta_html}</div>' if meta_html else "")
                 + '</div></li>')
 
+    # Phase A ceiling-push #3: cap the Show-all render at 30 mined+auto items
+    # so the drawer stays scannable. Curated findings never drop from view -
+    # they're editorial synthesis (small count of ~12) and always sort first.
+    # The 30 cap applies only to sort_group > 0 (human / auto:* / worklog).
+    SHOWALL_CAP = 30
+    curated = [e for e in entries if e["kind"] == "curated"]
+    non_curated = [e for e in entries if e["kind"] != "curated"]
+    # Top-of-fold: first 15 across all entries (curated ranked first by
+    # sort_key group=0, so this preserves the pre-#3 top-of-fold behavior).
     visible = entries[:15]
     hidden = entries[15:]
+    # Split hidden into curated-hidden vs non-curated-hidden (should be
+    # empty for curated since all 12 fit in the first 15 slots), then cap
+    # non-curated at SHOWALL_CAP.
+    hidden_curated = [e for e in hidden if e["kind"] == "curated"]
+    hidden_non_curated = [e for e in hidden if e["kind"] != "curated"]
+    n_non_curated_total = len(non_curated)
+    kept_non_curated = hidden_non_curated[:max(0, SHOWALL_CAP - (
+        len(non_curated) - len(hidden_non_curated)))]
+    # kept_non_curated is the tail of hidden non-curated after capping. The
+    # rendered Show-all drawer will contain: hidden_curated + kept_non_curated,
+    # totaling at most SHOWALL_CAP + len(hidden_curated) entries.
+    dropped_non_curated = len(hidden_non_curated) - len(kept_non_curated)
+    hidden_render = hidden_curated + kept_non_curated
+    total_rendered = len(visible) + len(hidden_render)
     parts.append('<ul class="wwl-list">')
     if not entries:
         parts.append('<li><div class="wwl-body"><div class="wwl-head" '
@@ -4947,12 +5063,21 @@ def build_what_learned(fams, review, worklog, git):
     else:
         parts.extend(_row(e) for e in visible)
     parts.append('</ul>')
-    if hidden:
-        parts.append(f'<details class="wwl-more"><summary>Show all '
-                     f'{total} findings ({len(hidden)} more)</summary>'
+    if hidden_render or dropped_non_curated:
+        summary = (f'Show all {total_rendered} findings '
+                   f'({len(hidden_render)} more)')
+        parts.append(f'<details class="wwl-more"><summary>{summary}</summary>'
                      '<ul class="wwl-list" style="border-top:1px solid var(--ice)">')
-        parts.extend(_row(e) for e in hidden)
-        parts.append('</ul></details>')
+        parts.extend(_row(e) for e in hidden_render)
+        parts.append('</ul>')
+        if dropped_non_curated > 0:
+            parts.append(f'<div class="wwl-tail">'
+                         f'<b>{dropped_non_curated} more not shown</b> '
+                         f'(mined + auto items ranked by stat-carrying '
+                         f'signal; see <a href="{_esc(wl_url)}" target="_blank" '
+                         f'rel="noopener">WORKLOG.md</a> for the full record).'
+                         f'</div>')
+        parts.append('</details>')
     parts.append('</div>')
     return "".join(parts)
 
