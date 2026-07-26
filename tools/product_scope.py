@@ -4770,6 +4770,14 @@ def build_landscape_viz(fams, work, probes, data_cache):
                      f'{"s" if len(prog_names) != 1 else ""}</span>'
                      '</div>')
         parts.append('<div class="lscape-progs">')
+        # Compute size scaling for this kind's programs. Phase A #6
+        # (2026-07-26): use CSS clamp() with a multiplier tuned so the
+        # biggest program in each kind visibly dominates (hits or approaches
+        # the 400px ceiling) while the smallest programs stay at the 60px
+        # legibility floor. Multiplier of 10 means a program that owns 40%
+        # of its kind's product count draws at ~400px, and one at 1% draws
+        # at ~60px, giving a ~6.7x width ratio between biggest and smallest -
+        # what "treemap" should look like at a glance.
         for pname in prog_names:
             items = progs[pname]
             n = len(items)
@@ -4780,19 +4788,19 @@ def build_landscape_viz(fams, work, probes, data_cache):
                               (f.get("product") and
                                (work or {}).get(f.get("product"), {}).get("status", 0) > 0))
             sampled = sum(1 for f in items if (data_cache or {}).get(f["path"]))
-            # Size proportional to product count with a floor so the smallest
-            # programs stay clickable. Percent of the total-in-kind so the row
-            # of programs fills the kind box regardless of overall counts.
+            # Percent of the total-in-kind so the row of programs scales
+            # relative to its neighbours, not to the whole catalog.
             pct = 100.0 * n / total_in_kind if total_in_kind else 0
-            # Convert to a flex-basis proportional value; add a min-width from
-            # the CSS so tiny slices are still legible.
-            basis = max(60, min(360, int(pct * 6.4)))
+            # Weighted flex-basis passed to CSS clamp() so the browser
+            # enforces the min/max at layout time - lets us keep the
+            # scaling literal and readable in the inline style.
+            weighted_px = int(pct * 10)
             tooltip = (f"{_esc(pname)} - {n} product"
                        f"{'s' if n != 1 else ''}, {reached} touched, "
                        f"{sampled} sampled")
             parts.append(
                 f'<div class="lscape-prog tier-{tier}" '
-                f'style="flex:0 0 {basis}px" '
+                f'style="flex:0 0 clamp(60px, {weighted_px}px, 400px)" '
                 f'title="{tooltip}" data-landscape-prog="{_esc(pname)}">'
                 f'<span class="lscape-prog-name">{_esc(pname)}</span>'
                 f'<span class="lscape-prog-cnt">{n} '
