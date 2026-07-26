@@ -26,9 +26,11 @@ python tools\product_scope.py --sample acs/acs5     # fetches actual data rows +
 python tools\product_scope.py --review acs/acs5 --insight "This looks like it covers X well"
 ```
 
-`--repo` defaults to the current directory, so run these from the repo root and the tool finds itself.
+Any `--review` write automatically regenerates `product_report.html` when it's done, so a run like the one above finishes with a fresh report on disk. Add `--open` to any command in this file to launch `product_report.html` in your browser as soon as it finishes writing.
 
-The review workflow — marking products as candidates or FOCUS, assigning composite roles, filtering the sidebar by review status — lives in the "Reviewer mode" toggle on any Products tab. Toggle it on to see only the actively-managed cards; leave it off (the default) to browse the whole catalog.
+`--repo` auto-detects the repo root by walking up from wherever you invoked the tool until it hits a `.git` marker, so any working directory inside the repo works. Pass `--repo <path>` only to point at a different clone.
+
+The review workflow — marking products as candidates or FOCUS, filtering the sidebar by review status — lives in the "Reviewer mode" toggle on any Products tab. Toggle it on to see only the actively-managed cards; leave it off (the default) to browse the whole catalog. Composite-role metadata still round-trips in `product_review.json` for the seeded FOCUS entries and shows up in their card drill-downs, but the CLI helper no longer sets it — hand-edit the JSON if you need to touch a role.
 
 ---
 
@@ -67,7 +69,7 @@ python tools\product_scope.py
 start product_report.html
 ```
 
-That's the routine run — it uses the cached catalog, so it takes a couple of seconds. `--repo` defaults to the current directory; pass `--repo <path>` only if you're running from somewhere else.
+That's the routine run — it uses the cached catalog, so it takes a couple of seconds. `--repo` auto-detects the repo root from your working directory; pass `--repo <path>` only if you want to point at a different clone. Add `--open` to have the tool launch `product_report.html` in your default browser as soon as it finishes writing.
 
 **To refresh the catalog** (new products get published; do this occasionally and before a milestone):
 
@@ -95,6 +97,21 @@ Skips the HTML report and writes only the export. Same catalog + review + eviden
 **Tabs** come from the Bureau's own dataset flags: **Aggregate tables** (published estimate tables — where margins of error live), **Microdata** (record-level files with replicate weights and no published per-estimate uncertainty), **Time series**, **Uncategorized** (tool fallback bucket for records that carry none of the three Bureau flags). This split is not our opinion; it is `c_isAggregate` / `c_isMicrodata` / `c_isTimeseries` straight from the catalog, and it is the single most important distinction for this project.
 
 Inside a tab: **program → subject → products**. The subject level only appears where a program spans more than one topic — Decennial opens as a flat list, ACS splits four ways. The filter box searches path, title, subject and program, and reaches through every level.
+
+---
+
+## Keyboard shortcuts and shareable views
+
+The report is browsable by keyboard once it's loaded. All of these are progressive enhancements — the report still works with JavaScript off, you just lose the shortcuts.
+
+| Key | Effect |
+|---|---|
+| `/` | Focus the active panel's filter input (jump straight into typing without reaching for the mouse). |
+| `j` / `k` | Move focus down / up through the currently visible product cards, with wrap-around. |
+| `Enter` | Toggle the focused card's Quick Look drill-down open or closed. |
+| `E` | Toggle the "More Details" section inside an open drill-down. |
+
+**Shareable URLs.** The active tab, filter query, per-facet selections, and the actively-managed toggle serialize into the URL hash as you interact with the report (`#tab=k0&q=income&f_kind=Aggregate&am=1`). Copy the URL from your browser and send it to a teammate — opening it drops them straight into the same view. On load, hash state overrides whatever the browser had cached in localStorage, so a link always wins.
 
 ---
 
@@ -210,7 +227,7 @@ To review a product, edit its entry in `product_review.json`:
 
 ## Recording insights and reviews — the `--review` CLI helper
 
-Hand-editing `product_review.json` with a text editor works fine for one-off changes. When you're logging what you found on a card, moving a product through the funnel, or dictating a role, use the `--review` subcommand — it validates the input, stamps `last_reviewed_by` + `last_reviewed_date`, and appends insights with a UTC timestamp and author. Every write is atomic (single lock cycle, no half-applied entries) and produces a minimal git diff.
+Hand-editing `product_review.json` with a text editor works fine for one-off changes. When you're logging what you found on a card or moving a product through the funnel, use the `--review` subcommand — it validates the input, stamps `last_reviewed_by` + `last_reviewed_date`, and appends insights with a UTC timestamp and author. Every write is atomic (single lock cycle, no half-applied entries) and produces a minimal git diff. When the write finishes, the tool automatically regenerates `product_report.html` — pass `--no-regen` to skip that (useful when batching writes from a shell loop and you only want the report rebuilt once at the end), and pass `--open` to have the fresh report opened in your browser.
 
 ```powershell
 # Append a human insight (source='human'); who = your git config user.name
@@ -219,30 +236,32 @@ python tools\product_scope.py --review acs/acs5 --insight "Confirmed replicate w
 # Set stage; case-insensitive input, canonical lowercase on disk
 python tools\product_scope.py --review acs/acs5 --status FOCUS
 
-# Declare a composite role — REQUIRES --note on the same command
-python tools\product_scope.py --review acs/acs5 --role cv_source --note "primary CV source across every geography"
+# Set the free-text note field
+python tools\product_scope.py --review acs/acs5 --notes "our primary product"
 
-# Multiple actions atomically in one write
-python tools\product_scope.py --review dec/dhc --status Candidate --insight "Set as Candidate; DHC exposes DP noise magnitudes that feed the composite reliability score"
+# Multiple actions atomically in one write, and open the regenerated report
+python tools\product_scope.py --review dec/dhc --status Candidate --insight "DHC exposes DP noise magnitudes we want in the composite" --open
 
-# Override the git-derived attribution (e.g. logging insight from a mentor)
-python tools\product_scope.py --review acs/acs5 --author "Andrew" --insight "Mentor confirmed the B98/B99 allocation tables ship separately from the estimate MOEs"
+# Batch several writes without regenerating between them
+python tools\product_scope.py --review acs/acs5 --status FOCUS --no-regen
+python tools\product_scope.py --review dec/dhc  --status Candidate --no-regen
+python tools\product_scope.py --review dec/sf1  --status Candidate            # this one triggers the single regen
 ```
 
 **Available action flags** (at least one required per invocation):
 
 | Flag | Effect | Validation |
 |---|---|---|
-| `--insight TEXT` | Append a human insight to the entry's `insights` list. `source="human"`, `when` = current UTC ISO, `who` = `--author` or `git config user.name`. | Text must be non-empty. |
+| `--insight TEXT` | Append a human insight to the entry's `insights` list. `source="human"`, `when` = current UTC ISO, `who` = `git config user.name` (falls back to `"unknown"` if git has no name set). | Text must be non-empty. |
 | `--status VALUE` | Set the entry's `stage`. | One of `cataloged / reviewed / candidate / focus / set-aside`; case-insensitive on input, stored lowercase. |
-| `--role VALUE` | Set the entry's `composite_role`. | One of `cv_source / allocation_source / privacy_noise / geometry / benchmark / unused`. Also requires `--note` on the same invocation UNLESS the entry already carries a non-empty `composite_role_note`. |
-| `--note TEXT` | Set the entry's `composite_role_note`. | Standalone `--note` (no `--role`) is only accepted if the entry already declares a role to justify. |
 | `--notes TEXT` | Set the entry's free-text `note` field. | No validation. |
-| `--author NAME` | Override the git-derived attribution. Applies to both `last_reviewed_by` AND any `--insight`'s `who`. | Optional. |
+| `--no-regen` | Skip the post-write HTML regen. Use when scripting many writes in a row so only the last one rebuilds the report. | Optional. |
 
-**How attribution works.** If you pass `--author "Name"`, that name lands on `last_reviewed_by` and on any insight's `who`. If you don't, the tool runs `git config user.name` in the repo and uses that. If git isn't configured either, the tool falls back to `"unknown"`. On a Windows machine with the standard project setup, this means: with `user.name` set to `Garrett Spangler` in `~/.gitconfig`, running `--review acs/acs5 --insight "..."` will attribute the insight to `Garrett Spangler` automatically — no need to type your name every time.
+**How attribution works.** The tool reads `git config user.name` from the repo and stamps that on `last_reviewed_by` and on the `who` field of any `--insight`. If git isn't configured, it falls back to `"unknown"`. On a Windows machine with the standard project setup — `user.name = Garrett Spangler` in `~/.gitconfig` — every `--review` write attributes to `Garrett Spangler` automatically, no flag required. If you need to log an insight on behalf of someone else (a mentor, a teammate whose machine isn't handy), quote them in the insight text and note the source there.
 
-**Exit codes.** `0` = success, `2` = usage / validation error (e.g. bad `--status` value, `--role` without `--note`), `1` = other error (unknown product id, JSON parse failure, file write failure). Failed writes make **no changes** — the tool validates every flag before touching disk, so a mid-invocation reject leaves the file exactly as it was.
+**Composite roles are set by hand.** The old `--role` / `--note` / `--author` flags were removed when the tool shifted to a discovery-first surface. The `composite_role` and `composite_role_note` fields still exist in the schema, still round-trip cleanly for the seeded FOCUS entries, and still render as chips in card drill-downs — but if you need to declare or change a role, edit `product_review.json` directly.
+
+**Exit codes.** `0` = success, `2` = usage / validation error (e.g. bad `--status` value, empty `--insight`), `1` = other error (unknown product id, JSON parse failure, file write failure). Failed writes make **no changes** — the tool validates every flag before touching disk, so a mid-invocation reject leaves the file exactly as it was.
 
 **How writes appear in git diffs.** The review file is serialized with `sort_keys=True`, so a single `--review` write shows up as just the added insight lines + the two `last_reviewed_*` fields. Every other entry stays byte-identical. The first `--review` (or regen) after upgrading to this version does a one-time key-order normalization — expect a big diff that pass, then clean diffs from then on.
 
@@ -284,11 +303,15 @@ Subject and program affect **display order only**. They say nothing about a prod
 | File | Committed? | Why |
 |---|---|---|
 | `tools/product_scope.py`, `tools/scope_evidence.py` | **yes** | the tool |
-| `product_review.json` | **yes** | our scope decisions and review notes |
-| `product_probes.json` | **yes** | what the API told us; probe once, share with the team |
+| `product_review.json` | **yes** | team-shared scope decisions, human insights, `last_reviewed_*` stamps |
+| `product_probes.json` | **yes** by intent | what the API told us about each product; probe once, share the metadata with the team. The file isn't in `.gitignore` — if it's absent locally, it means no probes have been recorded yet on this clone (fresh checkout). Commit it as soon as you run your first probe. |
 | `product_report.html` | no | regenerated every run |
 | `scope_field_cache.json` | no | ~4 MB API catalog cache, regenerable with `--online` |
 | `scope_data_cache.json` | no | Phase 3 sample cache: EDA on actual API-fetched rows, regenerable with `--sample`. Local-only because it's a moment-in-time slice against a rate-limited endpoint — probes report facts about an endpoint, samples report facts about one download. |
+| `.product_scope_last_run.json` | no | Per-product state snapshot written at the end of every regen. The next run reads it to compute the "since last regeneration" divergence signals that surface in the "What we've learned" feed. Local-only because divergence is relative to *your* previous run. |
+| `.scope_last_eda_diff.json` | no | Written by `--sample --refresh`, consumed by the next regen so the per-card amber drift banners survive a session restart. |
+| `.product_scope_last_regen.json` | no | Timestamp of the previous regen, used to scope the auto-insight collector's `git log --since=<T>` window. |
+| `.product_review.json.lock`, `.product_review.json.tmp.*` | no | Advisory-lock target + atomic-rename staging files that serialize `--review` writes and regen writes against `product_review.json`. Only the exclusive-lock byte matters; content is empty. |
 
 ---
 
@@ -297,4 +320,5 @@ Subject and program affect **display order only**. They say nothing about a prod
 - **The geography grid is inferred, not verified.** The five level boxes come from searching our files for the words "state", "county", "tract", "block". It is a rough indicator of where *we* have worked, not a record. **A probe is the verified version** — it reports the levels the Bureau says the product supports. Where the two disagree, trust the probe.
 - **`2020 DHC` can't register progress.** Its evidence matcher looks for the string `dec/dhc`, which appears nowhere in our code, so it reads `Not started` regardless. Fix the matcher in `PRODUCT_MATCH` when we start on DHC.
 - **Work depth can't see a missing import.** A notebook committed with clean outputs reads as `Validated` even if it won't run in a fresh clone.
+- **Non-API products are cataloged but can't be `--sample`d.** DAS demonstration files, TIGER/Line shapefiles, and anything else without a queryable `variables.json` endpoint appear in the catalog and get their own cards, but batch `--sample` skips them with a clear `not sample-able via API` message rather than erroring out. If you want the raw files, go straight to `census.gov` and use the dedicated ingestion scripts under `/ingestion`.
 - **Requires Python 3.11+.** Developed on 3.12.
