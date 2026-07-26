@@ -3692,9 +3692,14 @@ document.addEventListener('click', function(e){
   var n = e.target.closest && e.target.closest('.sankey-node[data-pipeline-stage]');
   if(!n) return;
   e.preventDefault();
-  // Focus the first Products tab (first non-home tab); fall through to home if none.
-  var first = document.querySelector('.tab.tab-am') ||
-              document.querySelector('.tab.tab-kind');
+  // Focus a Products tab that is VISIBLE in the current mode (bug fix
+  // 2026-07-26): the AM tab is CSS-hidden outside reviewer mode, and
+  // clicking it left every panel invisible.
+  var first = document.body.classList.contains('am-reviewer')
+              ? document.querySelector('.tab.tab-am')
+              : document.querySelector('.tab.tab-kind');
+  if(!first){ first = document.querySelector('.tab.tab-am') ||
+                      document.querySelector('.tab.tab-kind'); }
   if(first){ first.click(); }
   // Keep the reader roughly where they were - scroll the panel container into
   // view. Native anchor scrolling would jump past the freshbar.
@@ -4255,9 +4260,11 @@ document.querySelectorAll('.filter input').forEach(function(inp){
         cb.dispatchEvent(new Event('change', {bubbles: true})); }
     }
     /* Prefer whichever kind panel actually contains this program's cards.
-       If several panels contain matches (unlikely - a program almost always
-       maps to a single kind), pick the first non-empty one. */
-    var panels = document.querySelectorAll('.panel.panel-kind, .panel.panel-am');
+       Kind panels ONLY (bug fix 2026-07-26): #panel-am sits first in the
+       DOM but is CSS-hidden outside reviewer mode, and the drill just
+       flipped reviewer mode off above - landing there showed nothing.
+       Every product has a kind-panel copy, so nothing is unreachable. */
+    var panels = document.querySelectorAll('.panel.panel-kind');
     var target = null;
     for (var i = 0; i < panels.length; i++){
       var p = panels[i];
@@ -4300,25 +4307,49 @@ document.querySelectorAll('.filter input').forEach(function(inp){
     _drill(box);
   });
 })();
-/* --- Reframe pass commit #1 - Home tab "Recently touched" jump handler ---
-   Each list item on Home carries data-jump-path="<catalog path>" pointing at
-   a product card in one of the Products tabs. Clicking:
-     1. Locates the .prod card by data-path.
-     2. Ensures the panel containing it is the active tab.
-     3. If the card is currently hidden by the actively-managed default
-        (data-actively-managed missing on a non-AM product), flips the
-        show-all toggle on so the reader lands on a visible card.
-     4. Unfolds any collapsed program/subject scaffolding above the card.
-     5. Scrolls the card into view with a mild top offset.
-   Anchor fallback works when JS is disabled: id="prod-<path>" is set at
-   render time so the browser jumps to the DOM node directly, though panel
-   visibility can't be flipped without JS. */
+/* --- Home -> card jump (bug-fixed 2026-07-26 after Garrett's live test) ---
+   Every Home element that names a product (curriculum "Open card", search
+   results, Up-next queue, Recently touched, What-we've-learned chips)
+   carries data-jump-path="<catalog path>" and shares this ONE code path.
+
+   ROOT CAUSE of the "opens to nothing" bug: actively-managed products render
+   TWICE - once in #panel-am (which sits FIRST in the DOM) and once in their
+   kind panel. querySelector() therefore returned the #panel-am copy, and the
+   handler clicked the hidden AM tab. In the default show-all mode the CSS
+   rule `body:not(.am-reviewer) .panel.panel-am{display:none}` kept that
+   panel invisible even with .on, so the click hid the Home panel and showed
+   nothing at all. Since every curriculum product IS actively managed, every
+   curriculum link hit this path.
+
+   The fix: pick the copy whose panel is visible in the CURRENT mode
+   (reviewer mode -> #panel-am copy, show-all mode -> kind-panel copy), then
+   tab-switch, unfold the card ITSELF (not just its .gsec/.psec ancestors -
+   a folded card previously read as "nothing happened"), clear any facet /
+   text filter hiding it, scroll, and pulse-highlight. Exposed as
+   window.__jumpToCard(path) so future sources can call it directly. */
 (function(){
-  function _findCard(path){
-    return document.querySelector('.prod[data-path="' + CSS.escape(path) + '"]');
+  function _pick(path){
+    /* All rendered copies of this product's card, DOM order. */
+    var cards = document.querySelectorAll(
+      '.prod[data-path="' + CSS.escape(path) + '"]');
+    if (!cards.length) return null;
+    var reviewer = document.body.classList.contains('am-reviewer');
+    var fallback = null;
+    for (var i = 0; i < cards.length; i++){
+      var p = cards[i].closest('.panel');
+      if (!p) continue;
+      var inAm = p.classList.contains('panel-am');
+      /* Mode-visible copy: AM-panel copy in reviewer mode, kind-panel copy
+         in show-all mode. */
+      if (reviewer === inAm) return {card: cards[i], panel: p};
+      if (!fallback) fallback = {card: cards[i], panel: p};
+    }
+    return fallback;
   }
-  function _ensureVisible(card){
-    /* Unfold every ancestor .psec / .gsec so the card can be reached. */
+  function _unfold(card){
+    /* The card itself may be collapsed (server renders non-FOCUS cards
+       .folded); open it AND every ancestor .gsec/.psec scaffold. */
+    card.classList.remove('folded');
     var el = card.parentElement;
     while (el){
       if (el.classList){
@@ -4328,34 +4359,35 @@ document.querySelectorAll('.filter input').forEach(function(inp){
       el = el.parentElement;
     }
   }
-  document.addEventListener('click', function(e){
-    /* UX pass 2026-07-26 commit #4: broaden the selector so the curriculum
-       'Open card' CTAs (class .curriculum-cta) also participate. Anything
-       carrying data-jump-path is eligible. */
-    var a = e.target.closest && e.target.closest('[data-jump-path]');
-    if (!a) return;
-    e.preventDefault();
-    var path = a.getAttribute('data-jump-path');
-    var card = _findCard(path);
-    if (!card) return;
-    /* Which panel is this card in? */
-    var panel = card.closest('.panel');
-    if (panel){
-      /* If card isn't actively-managed and body is in reviewer mode, flip
-         reviewer mode off so the target card becomes visible. */
-      var isAM = card.dataset.activelyManaged === 'true';
-      if (!isAM && document.body.classList.contains('am-reviewer')){
-        var cb = document.querySelector('.am-cb');
-        if (cb){ cb.checked = false;
-          cb.dispatchEvent(new Event('change', {bubbles: true})); }
-      }
-      /* Switch to the panel's tab. */
-      var pid = panel.id; var key = pid.replace(/^panel-/, '');
-      var tab = document.querySelector('.tab[data-k="' + key + '"]');
-      if (tab && !tab.classList.contains('on')) tab.click();
+  window.__jumpToCard = function(path){
+    var hit = _pick(path);
+    if (!hit) return false;
+    /* Non-AM product only exists in a kind panel; if reviewer mode is
+       hiding kind panels, flip it off (the checkbox change handler does the
+       re-filter + tab swap), then re-pick under the new mode. */
+    if (document.body.classList.contains('am-reviewer') &&
+        !hit.panel.classList.contains('panel-am')){
+      var cb = document.querySelector('.am-cb');
+      if (cb){ cb.checked = false;
+        cb.dispatchEvent(new Event('change', {bubbles: true})); }
+      hit = _pick(path) || hit;
     }
-    _ensureVisible(card);
-    /* Scroll after the layout settles (tab switch may have hidden/shown). */
+    var card = hit.card, panel = hit.panel;
+    var key = panel.id.replace(/^panel-/, '');
+    var tab = document.querySelector('.tab[data-k="' + CSS.escape(key) + '"]');
+    if (tab && !tab.classList.contains('on')) tab.click();
+    _unfold(card);
+    /* A leftover facet or text filter can hide the card via inline
+       display:none (_applyFacets). The reader explicitly asked for THIS
+       card, so clear the panel's filters and re-apply. */
+    if (card.style.display === 'none'){
+      panel.querySelectorAll('.facet input:checked').forEach(
+        function(x){ x.checked = false; });
+      var inp = panel.querySelector('.filter input');
+      if (inp) inp.value = '';
+      if (typeof _applyFacets === 'function') _applyFacets(panel);
+    }
+    /* Scroll after the layout settles (tab switch just toggled display). */
     setTimeout(function(){
       var y = card.getBoundingClientRect().top + window.pageYOffset - 40;
       window.scrollTo({top: y, behavior: 'smooth'});
@@ -4363,7 +4395,14 @@ document.querySelectorAll('.filter input').forEach(function(inp){
       var prev = card.style.backgroundColor;
       card.style.backgroundColor = '#FBF6E7';
       setTimeout(function(){ card.style.backgroundColor = prev; }, 1600);
-    }, 30);
+    }, 50);
+    return true;
+  };
+  document.addEventListener('click', function(e){
+    var a = e.target.closest && e.target.closest('[data-jump-path]');
+    if (!a) return;
+    e.preventDefault();
+    window.__jumpToCard(a.getAttribute('data-jump-path'));
   });
 })();
 /* --- Phase 5 #6 - Quick Look TL;DR "N more" button opens the sibling
@@ -9530,9 +9569,14 @@ def build_home_search(fams, review):
         '    if (hits.length > TOP_N){',
         # Show-all deep-link: pre-fills the Products-tab filter via existing hash keys.
         '      var params = new URLSearchParams();',
-        # Pick a Products tab that actually exists. tab-am if present, else first kind tab.
-        '      var tabEl = document.querySelector(".tab.tab-am") || ',
-        '                  document.querySelector(".tab.tab-kind");',
+        # Pick a Products tab that is VISIBLE in the current mode (bug fix
+        # 2026-07-26): tab-am is CSS-hidden outside reviewer mode, so a
+        # deep-link that targeted it landed on an invisible panel.
+        '      var tabEl = document.body.classList.contains("am-reviewer")',
+        '        ? document.querySelector(".tab.tab-am")',
+        '        : document.querySelector(".tab.tab-kind");',
+        '      if (!tabEl) tabEl = document.querySelector(".tab.tab-am") || ',
+        '                          document.querySelector(".tab.tab-kind");',
         '      var tabKey = tabEl ? tabEl.dataset.k : "";',
         '      if (tabKey) params.set("tab", tabKey);',
         '      if (q) params.set("q", q);',
