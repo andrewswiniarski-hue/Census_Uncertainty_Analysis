@@ -1834,13 +1834,9 @@ header p{color:#CADCFC;font-size:13px;max-width:940px;}
 .filter{margin:0 0 14px;}
 .filter input{width:340px;padding:7px 11px;border:1px solid var(--line);border-radius:7px;font:inherit;font-size:13px;}
 .filter span{font-size:11.5px;color:var(--muted);margin-left:10px;}
-.funnel{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 18px;}
-.fstep{border:1px solid var(--line);border-radius:10px;padding:8px 15px;text-align:center;background:var(--ice);}
-.fstep b{font-family:Georgia,serif;font-size:22px;color:var(--navy);display:block;}
-.fstep span{font-size:10px;color:var(--muted);line-height:1.25;display:block;}
-.f-focus{background:var(--navy);} .f-focus b{color:#F5D77A;} .f-focus span{color:#CADCFC;}
-.f-cand{background:#FBF6E7;border-color:var(--gold);}
-.farrow{color:var(--muted);font-size:17px;}
+/* .funnel / .fstep / .farrow / .f-cand / .f-focus removed Phase A #3
+   alongside _build_reviewer_mode_details() — the pre-reframe funnel bar
+   was 568 -> 0 -> 0 -> 5 -> 0 (depressing without being informative). */
 h2{font-family:Georgia,serif;color:var(--navy);font-size:20px;margin:26px 0 4px;}
 .sub{font-size:12px;color:var(--muted);margin-bottom:10px;max-width:900px;}
 table.rep{border-collapse:collapse;width:100%;max-width:1020px;font-size:13px;margin-bottom:6px;}
@@ -2044,21 +2040,10 @@ table.rep td{border-bottom:1px solid var(--ice);padding:7px 9px;vertical-align:t
 .lscape-legend .lscape-swatch.tier-0{background:#EDF0F7;border-color:#D6DBE8;}
 .lscape-legend .lscape-swatch.tier-1{background:#DCE7FA;border-color:#8FA8D8;}
 .lscape-legend .lscape-swatch.tier-2{background:#D6EDD9;border-color:#7ABF89;}
-/* Reviewer-mode data collapse: quietly demotes the funnel + composite-role
-   scaffolding from the primary Home surface. The reviewer flow is still one
-   click away and the CLI paths that write it (--review) are untouched. */
-.rev-mode-details{margin-top:34px;padding-top:14px;border-top:1px solid var(--ice);
-       max-width:1020px;}
-.rev-mode-details > summary{cursor:pointer;font-size:11px;color:var(--muted);
-       font-weight:700;letter-spacing:.09em;text-transform:uppercase;padding:6px 0;
-       list-style:none;}
-.rev-mode-details > summary::-webkit-details-marker{display:none;}
-.rev-mode-details > summary::marker{content:"";}
-.rev-mode-details > summary:before{content:"\25B8  ";color:var(--muted);}
-.rev-mode-details[open] > summary:before{content:"\25BE  ";color:var(--navy);}
-.rev-mode-details[open] > summary{color:var(--navy);}
-.rev-mode-details > summary:hover{color:var(--navy);}
-.rev-mode-body{margin-top:12px;}
+/* .rev-mode-details / .rev-mode-body removed Phase A #3 (2026-07-26) - the
+   Home tab no longer carries a collapsed 'Reviewer mode data' block; the
+   funnel + inventory + work-depth table + notebook-health it contained were
+   ~13 KB of dead scaffolding after the reframe. */
 .nohit{display:none;font-size:12.5px;color:var(--muted);font-style:italic;padding:10px 0;}
 footer{padding:22px 44px;color:var(--muted);font-size:11.5px;}
 /* Freshness pill bar (shown on every page - reads data-generated-at at page load). */
@@ -4773,100 +4758,30 @@ def _iso_to_ord(when):
     d = _iso_to_dt(when)
     return d.timestamp() if d else 0.0
 
-def _build_reviewer_mode_details(fams, review, work, counts, worklog,
-                                  notebooks, git=None):
-    """Reviewer-mode data block, collapsed behind a <details> toggle at the
-    bottom of Home. Holds the pre-reframe funnel + inventory + work-depth
-    table + notebook health so the composite/scope-decision machinery is not
-    destroyed - just quietly demoted. Curated findings and WORKLOG headline
-    do NOT live here after commit #2 (they promote into 'What we've learned');
-    for this commit they stay put so the tool renders cleanly at every step."""
-    h = []
-    h.append('<div class="funnel">'
-             f'<div class="fstep"><b>{counts["cataloged"]}</b><span>cataloged<br>(the wide start)</span></div><div class="farrow">&rarr;</div>'
-             f'<div class="fstep"><b>{counts["reviewed"]}</b><span>reviewed<br>(uncertainty documented)</span></div><div class="farrow">&rarr;</div>'
-             f'<div class="fstep f-cand"><b>{counts["candidate"]}</b><span>candidates</span></div><div class="farrow">&rarr;</div>'
-             f'<div class="fstep f-focus"><b>{counts["focus"]}</b><span>FOCUS</span></div>'
-             f'<div class="fstep" style="margin-left:12px"><b>{counts["set-aside"]}</b><span>set aside</span></div></div>')
-
-    kc = {}
-    for f in fams.values(): kc[f["kind"]] = kc.get(f["kind"], 0) + 1
-    h.append('<h2>The inventory</h2><div class="sub">Product families in the Census API catalog, split by the '
-             "Bureau's own dataset flags. The split matters: published uncertainty exists on aggregate tables "
-             "and does not exist on microdata.</div>"
-             "<table class='rep'><tr><th>Type</th><th>Families</th><th>What that means here</th></tr>")
-    for k in KINDS:
-        if kc.get(k):
-            h.append(f'<tr><td><b>{k}</b></td><td>{kc[k]}</td>'
-                     f'<td>{_esc(KIND_BLURB.get(k, ""))}</td></tr>')
-    h.append("</table>")
-
-    h.append('<h2>What is in the repo</h2><div class="sub">Recomputed from the code and notebooks on every run, '
-             "with receipts naming the file and cell or line. Never hand-set.</div>")
-    if work:
-        h.append("<table class='rep'><tr><th>Product</th><th>Work depth</th><th>Receipts</th></tr>")
-        for prod in sorted(work, key=lambda p: (-work[p]["status"], p)):
-            w = work[prod]
-            rc_parts = []
-            for r in w["receipts"]:
-                lbl = receipt_label(r); url = receipt_url(r, git or {})
-                if url: rc_parts.append(f'<a class="receipt-link" href="{_esc(url)}" target="_blank" rel="noopener">{_esc(lbl)}</a>')
-                else:   rc_parts.append(_esc(lbl))
-            h.append(f'<tr><td><b>{_esc(prod)}</b></td>'
-                     f'<td><span class="workchip w{w["status"]}">{STATUS_LABELS[w["status"]]}</span></td>'
-                     f'<td class="mono">{"<br>".join(rc_parts)}</td></tr>')
-        h.append("</table>")
-    else:
-        h.append('<div class="nowork">No repo evidence found.</div>')
-
-    if notebooks:
-        h.append('<h2>Notebook health</h2><div class="sub">Read from the committed notebooks: whether execution '
-                 "counts run in order, whether any cell stored an error, and how many assert statements the code "
-                 "contains. This is what earns a Validated depth.</div>"
-                 "<table class='rep'><tr><th>Notebook</th><th>Code cells</th><th>Ran in order</th>"
-                 "<th>Errors</th><th>Asserts</th></tr>")
-        for n in sorted(notebooks, key=lambda x: x["file"]):
-            hh = n["health"]
-            h.append(f'<tr><td class="mono">{_esc(n["file"])}</td><td>{hh["code_cells"]}</td>'
-                     f'<td>{"yes" if hh["mono"] else "no"}</td><td>{hh["errors"]}</td>'
-                     f'<td>{hh["asserts"]}</td></tr>')
-        h.append("</table>")
-
-    # Note: FINDINGS + WORKLOG headline used to render here in the pre-reframe
-    # Home tab. They now aggregate into build_what_learned() at the top of the
-    # tab as part of the unified insights feed (reframe pass commit #2). This
-    # block keeps the funnel + inventory + work depth + notebook health only.
-    return "".join(h)
-
 def build_home(fams, review, work, counts, worklog, notebooks, probes, git=None,
                diff=None, eda_diffs=None, data_cache=None, repo=None):
-    """Home tab. Reframe pass commit #1: leads with 'Where the team is' -
-    coverage bars + Recently touched list. The prior funnel + inventory +
-    work-depth + notebook health + WORKLOG headline block collapses behind a
-    <details> at the bottom labelled 'Reviewer mode data'. The diff banner
-    (contextual 'since last regeneration' surface) stays at the very top
-    because it's about the pending session, not the reframe. `data_cache`
-    and `repo` are new parameters used by the reach signals; both default
-    to None so any external caller keeps working."""
+    """Home tab. Post-reframe structure: diff banner (session-scoped) -> Where
+    the team is (coverage + recently touched) -> What we've learned (feed) ->
+    Census landscape viz. The pre-Phase-A `Reviewer mode data` <details>
+    block (funnel + inventory + work-depth + notebook-health) has been
+    removed - the funnel numbers were '568 -> 0 -> 0 -> 5 -> 0' which is
+    depressing without being informative, and work-depth / inventory
+    duplicated signals already carried elsewhere. `data_cache` and `repo`
+    are threaded through for the reach signals; both default to None so any
+    external caller keeps working. `notebooks` and `counts` are still
+    accepted for signature stability (used downstream in render()) even
+    though the Home tab no longer surfaces them directly.
+    """
     h = []
     if diff is not None:
         h.append(build_diff_banner(diff, eda_diffs))
     # Primary framing: where we are + recently touched.
     h.append(build_where_team_is(fams, review, work, probes, data_cache or {},
                                   git, repo))
-    # Aggregated feed: curated + WORKLOG + human + auto insights (commit #2).
+    # Aggregated feed: curated + WORKLOG + human + auto insights.
     h.append(build_what_learned(fams, review, worklog, git))
-    # Landscape viz: hierarchical Kind -> Program treemap (commit #3).
+    # Landscape viz: hierarchical Kind -> Program treemap.
     h.append(build_landscape_viz(fams, work, probes, data_cache or {}))
-    # Everything else demoted behind a details toggle.
-    rev_body = _build_reviewer_mode_details(fams, review, work, counts,
-                                              worklog, notebooks, git)
-    h.append('<details class="rev-mode-details">'
-             '<summary>Reviewer mode data '
-             '<span style="font-weight:400;text-transform:none;letter-spacing:0">'
-             '(funnel, inventory, work depth, notebook health, findings, WORKLOG)'
-             '</span></summary>'
-             '<div class="rev-mode-body">' + rev_body + '</div></details>')
     return "".join(h)
 
 # ============================================================================
