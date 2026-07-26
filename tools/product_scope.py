@@ -900,6 +900,42 @@ def cli_review_action(repo: Path, args):
     if "notes" in passed:
         patch["note"] = str(passed["notes"] or "")
 
+    # ---- Interactive TTY prompt for --role missing --note (UX pass #5) ------
+    # If the caller passed --role but not --note AND they're in an interactive
+    # shell AND the entry doesn't already carry a note, prompt for one inline
+    # instead of erroring out. Kept out of the file lock: input() would hold
+    # the flock while waiting for a human, and the prompt is a UX affordance
+    # for interactive users, not a schema thing. In a non-TTY context (pipes,
+    # scripts, CI) we do nothing here and let write-time enforcement fail as
+    # before, so anything that expected exit 2 keeps getting exit 2.
+    if ("role" in passed and "note" not in passed
+        and str(passed.get("role") or "").strip()
+        and sys.stdin.isatty()):
+        # Cheap peek at the file (outside the lock) - if the entry already has
+        # a note, no prompt needed. Best-effort: any read failure -> prompt.
+        prompt_needed = True
+        try:
+            p = repo / "product_review.json"
+            if p.exists():
+                data = json.loads(p.read_text(encoding="utf-8"))
+                existing_note = ((data.get(product_id) or {})
+                                    .get("composite_role_note") or "").strip()
+                if existing_note:
+                    prompt_needed = False
+        except Exception:
+            pass
+        if prompt_needed:
+            try:
+                entered = input("Composite role requires a note. Enter "
+                                "note (or blank to abort): ").strip()
+            except (EOFError, KeyboardInterrupt):
+                print("\naborted (no note provided)", file=sys.stderr)
+                return 2
+            if not entered:
+                print("aborted (no note provided)", file=sys.stderr)
+                return 2
+            patch["composite_role_note"] = entered
+
     # ---- Atomic read-modify-write under the review lock ---------------------
     outcome = {"code": 0, "err": None, "summary": []}
 
