@@ -3847,24 +3847,34 @@ def render_quick_look(f, probe_entry, cache_entry, insights=None,
 
     # More-details toggle. Native <details>/<summary> - works without JS.
     tier_slug = {0: "ql-d-tier0", 1: "ql-d-tier1", 2: "ql-d-tier2"}[tier]
-    # Drill-down now carries the demoted reviewer chips as a small header.
+    # Drill-down carries the demoted reviewer chips as a small header - but
+    # only when there's actually a review signal to show. Phase A #4
+    # (2026-07-26): the row was rendering for all 573 cards, showing
+    # "Review status: Cataloged" 568x times. Skip the row entirely when the
+    # product is (still) at stage=cataloged AND has no composite_role - i.e.
+    # nobody has touched the review workflow on it yet. Reviewed / Candidate
+    # / FOCUS / Set-aside products, or any product carrying a declared role,
+    # keep the header so the reviewer signal stays surfaced.
     r = review_entry or {}
     st = r.get("stage", "cataloged")
     role = effective_role(r)
-    demoted_chips = []
-    stage_chip_color = "#F5D77A" if st == "focus" else "#1F2A5C"
-    demoted_chips.append(f'<span class="stagechip" '
-                         f'style="background:{STAGE_COLORS[st]};'
-                         f'color:{stage_chip_color}">'
-                         f'{STAGE_LABELS[st]}</span>')
-    if role:
-        role_lbl = COMPOSITE_ROLE_LABELS.get(role, role)
-        note = r.get("composite_role_note", "")
-        demoted_chips.append(
-            f'<span class="rolechip" title="{_esc(note)}">{_esc(role_lbl)}</span>')
-    drill_header = ('<div class="ql-d-reviewer">'
-                    '<span class="ql-d-cap" style="margin-right:8px">Review status</span>'
-                    + "".join(demoted_chips) + '</div>')
+    show_reviewer_header = (st != "cataloged") or bool(role)
+    drill_header = ""
+    if show_reviewer_header:
+        demoted_chips = []
+        stage_chip_color = "#F5D77A" if st == "focus" else "#1F2A5C"
+        demoted_chips.append(f'<span class="stagechip" '
+                             f'style="background:{STAGE_COLORS[st]};'
+                             f'color:{stage_chip_color}">'
+                             f'{STAGE_LABELS[st]}</span>')
+        if role:
+            role_lbl = COMPOSITE_ROLE_LABELS.get(role, role)
+            note = r.get("composite_role_note", "")
+            demoted_chips.append(
+                f'<span class="rolechip" title="{_esc(note)}">{_esc(role_lbl)}</span>')
+        drill_header = ('<div class="ql-d-reviewer">'
+                        '<span class="ql-d-cap" style="margin-right:8px">Review status</span>'
+                        + "".join(demoted_chips) + '</div>')
     details_body = drill_header + _ql_details_html(
         f, probe_entry, cache_entry, tier, non_api,
         insights=insights, uncertainty_metrics=uncertainty_metrics)
