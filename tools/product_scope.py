@@ -162,6 +162,89 @@ def insight_hash(source, text):
     import hashlib
     return hashlib.sha256((str(source) + str(text)).encode("utf-8")).hexdigest()[:16]
 
+# ---- data.census.gov cross-links (2026-07-26) -------------------------------
+# The Bureau's interactive query tool is the "actually use this product" call
+# to action - filter, preview, download tables + maps in a browser. Every card
+# gets a prominent link so a reviewer opening the tool has a one-click path to
+# real data. Structure of the `all` search page: `d=<Program+Name>` narrows to
+# a program; falling back to `q=<Program+Name>` treats it as a keyword search
+# for the rare cases (e.g. Public Sector split across ~seven `govs*` prefixes)
+# where the program filter isn't a clean match.
+DCGOV_BASE = "https://data.census.gov"
+
+# Explicit path -> canonical URL. Beats the program lookup for non-API
+# products (TIGER shapefiles, DAS demo) that have their own Bureau landing
+# pages and would look wrong on data.census.gov.
+DCGOV_URL_BY_PATH = {
+    "geo/tiger":    "https://www.census.gov/geographies/mapping-files.html",
+    "dec/das-demo": "https://www.census.gov/library/reference/das/2010-2020.html",
+}
+
+# Program-name -> `d=<...>` value on data.census.gov. Names taken from the
+# Bureau's own "Datasets" facet on data.census.gov, spot-checked against the
+# tool that generates it. Missing programs fall back to a keyword search on
+# the program label (see program_dcgov_url below), which still lands on a
+# useful results page rather than an error.
+DCGOV_PROGRAM_D_PARAM = {
+    "American Community Survey":                     "ACS+5-Year+Estimates+Detailed+Tables",
+    "American Community Survey (1-year)":            "ACS+1-Year+Estimates+Detailed+Tables",
+    "Decennial Census":                              "Decennial+Census",
+    "Current Population Survey":                     "Current+Population+Survey",
+    "Survey of Income and Program Participation":    "Survey+of+Income+and+Program+Participation",
+    "Population Estimates":                          "Population+Estimates+Program",
+    "Population Projections":                        "Population+Projections",
+    "Economic Census":                               "Economic+Census",
+    "Annual Business Survey":                        "Annual+Business+Survey",
+    "County Business Patterns":                      "County+Business+Patterns",
+    "ZIP Code Business Patterns":                    "ZIP+Codes+Business+Patterns",
+    "Nonemployer Statistics":                        "Nonemployer+Statistics",
+    "Survey of Business Owners":                     "Survey+of+Business+Owners",
+    "Annual Survey of Entrepreneurs":                "Annual+Survey+of+Entrepreneurs",
+    "Community Resilience Estimates":                "Community+Resilience+Estimates",
+    "Planning Database":                             "Planning+Database",
+    "International Trade":                           "USA+Trade+Online",
+    "Annual Survey of Manufactures":                 "Annual+Survey+of+Manufactures",
+    "Annual Integrated Economic Survey":             "Annual+Integrated+Economic+Survey",
+    "Commodity Flow Survey":                         "Commodity+Flow+Survey",
+    "Commodity Flow Survey PUM":                     "Commodity+Flow+Survey",
+    "Rental Housing Finance Survey":                 "Rental+Housing+Finance+Survey",
+    "Vehicle Inventory and Use Survey":              "Vehicle+Inventory+and+Use+Survey",
+    "Quarterly Workforce Indicators":                "Quarterly+Workforce+Indicators",
+    "Business Dynamics Statistics":                  "Business+Dynamics+Statistics",
+    "Small Area Health Insurance Estimates":         "Small+Area+Health+Insurance+Estimates",
+    "Post-Secondary Employment Outcomes":            "Post-Secondary+Employment+Outcomes",
+    "Household Pulse Survey":                        "Household+Pulse+Survey",
+    "Economic Indicators (EITS)":                    "Economic+Indicators",
+    "International Database":                        "International+Database",
+    "Public sector":                                 "Annual+Survey+of+Public+Employment+and+Payroll",
+    "Poverty (SAIPE / CPS)":                         "Small+Area+Income+and+Poverty+Estimates",
+    "Frequently Occurring Surnames":                 "Frequently+Occurring+Surnames+from+the+Census",
+}
+
+def program_dcgov_url(path):
+    """Return a data.census.gov (or Bureau-page) URL for `path`. Never None -
+    a keyword-search fallback always produces a link the reviewer can click.
+
+    Precedence, from most specific to least:
+      1. DCGOV_URL_BY_PATH  - explicit path override (non-API products, etc.)
+      2. DCGOV_PROGRAM_D_PARAM - program name maps to a `d=` filter value
+      3. keyword-search fallback on the program label (`q=<program>`) - lands
+         on a search results page instead of erroring
+    """
+    if not path:
+        return f"{DCGOV_BASE}/all"
+    if path in DCGOV_URL_BY_PATH:
+        return DCGOV_URL_BY_PATH[path]
+    prog = program_label(path)
+    d = DCGOV_PROGRAM_D_PARAM.get(prog)
+    if d:
+        return f"{DCGOV_BASE}/all?d={d}"
+    # Fallback: keyword search on the program name. Spaces -> +, no escaping of
+    # ASCII program names needed (the Bureau's URL scheme accepts them raw).
+    import urllib.parse
+    q = urllib.parse.quote_plus(prog)
+    return f"{DCGOV_BASE}/all?q={q}"
+
 # ---- Phase-1 findings report anchors (2026-07-26) ---------------------------
 # Repo-relative path to the plain-language Phase 1 findings report. Used both
 # by the Home-tab hero card CTA and by the per-card "Related in the Phase 1
@@ -2169,6 +2252,26 @@ header p{color:#CADCFC;font-size:13px;max-width:940px;}
 .home-hero-p1 .hero-cta .arrow{margin-left:6px;}
 .home-hero-p1 .hero-meta{display:inline-block;margin-left:14px;color:#6B5518;
      font-size:11.5px;font-style:italic;vertical-align:middle;}
+/* "Explore data" primary CTA (2026-07-26). Sits at the top of every card's
+   Quick Look block so it's the first link a reviewer's eye goes to. Warmer
+   than the neutral text around it and heavier than the secondary command
+   copy-buttons - the point is that data.census.gov is what people actually
+   use to look at Census data, and every card should surface that path in
+   one click. */
+.ql-dcgov{background:var(--ice);border:1px solid var(--line);border-radius:6px;
+     padding:8px 12px;margin:0 0 10px;display:flex;align-items:center;
+     gap:12px;flex-wrap:wrap;}
+.ql-dcgov-btn{display:inline-flex;align-items:center;gap:6px;
+     background:var(--navy);color:#fff;text-decoration:none;
+     font-weight:700;font-size:12px;letter-spacing:.02em;
+     padding:6px 12px;border-radius:5px;flex:0 0 auto;
+     transition:background .12s ease-out;}
+.ql-dcgov-btn:hover{background:#0F1740;}
+.ql-dcgov-btn:focus-visible{outline:2px solid var(--gold);outline-offset:2px;}
+.ql-dcgov-btn .arrow{font-weight:400;}
+.ql-dcgov-tag{color:var(--muted);font-size:11.5px;line-height:1.35;flex:1;
+     min-width:220px;}
+.ql-dcgov-tag b{color:var(--navy);font-weight:600;}
 /* Phase-1 report footer link on card drill-downs (2026-07-26). Small tinted
    row anchoring the drill-down back to the report section that covers this
    product. Same gold-family palette as the hero card so the two read as one
@@ -4727,6 +4830,36 @@ def _insight_row_html(ins, kind="drill"):
             f'<div class="ins-text">{_esc(text)}</div>'
             f'</div></li>')
 
+def _ql_dcgov_html(f):
+    """Prominent 'Explore data' primary CTA (2026-07-26). Sits at the very
+    top of every Quick Look block so a reviewer's first-eye path is straight
+    to data.census.gov - the Bureau's interactive query tool for filtering,
+    previewing, and downloading tables + maps. The URL comes from
+    program_dcgov_url(), which cascades path -> program -> keyword-search so
+    every product carries a working link even when we don't have a clean
+    landing page for it. Non-API products (TIGER shapefiles, DAS demo files)
+    override to their Bureau reference pages instead of data.census.gov,
+    since the interactive query tool has no view for them."""
+    url = program_dcgov_url(f.get("path", ""))
+    # Different explanatory text depending on whether we're linking to
+    # data.census.gov (the interactive tool) or a Bureau reference page (for
+    # non-API products where the interactive tool has nothing to show).
+    is_dcgov = url.startswith(DCGOV_BASE)
+    if is_dcgov:
+        label = "Explore data on data.census.gov"
+        tag = ('<b>data.census.gov</b> is the Bureau&rsquo;s interactive query '
+               'tool &mdash; filter, preview, download tables and maps.')
+    else:
+        label = "Open the Bureau reference page"
+        tag = ('This product isn&rsquo;t queryable via data.census.gov &mdash; the '
+               'link opens the Bureau&rsquo;s reference / download page.')
+    return ('<div class="ql-dcgov">'
+            f'<a class="ql-dcgov-btn" href="{_esc(url)}" target="_blank" '
+            f'rel="noopener">{_esc(label)}'
+            f'<span class="arrow" aria-hidden="true">&nbsp;&rarr;</span></a>'
+            f'<span class="ql-dcgov-tag">{tag}</span>'
+            '</div>')
+
 def render_quick_look(f, probe_entry, cache_entry, insights=None,
                        uncertainty_metrics="", review_entry=None):
     """One card's Quick Look branch. Reframe pass commit #5: TL;DR now leads
@@ -4756,6 +4889,12 @@ def render_quick_look(f, probe_entry, cache_entry, insights=None,
     non_api = not f.get("variables_url")
 
     parts = []
+    # "Explore data" primary CTA (2026-07-26). Pinned to the very top of the
+    # card so the first link a reviewer's eye lands on is a one-click path to
+    # actual data on data.census.gov (or the Bureau reference page for
+    # non-API products). Everything else (endpoint URL, Bureau docs, probe /
+    # sample commands) is secondary.
+    parts.append(_ql_dcgov_html(f))
     # Line 1: What it is (catalog facts). Always visible; visual anchor.
     parts.append('<div class="ql-line ql-t0">' + _ql_what_it_is(f) + '</div>')
 
