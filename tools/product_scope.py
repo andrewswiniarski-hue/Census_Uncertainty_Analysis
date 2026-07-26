@@ -2393,6 +2393,33 @@ header p{color:#CADCFC;font-size:var(--fs-2);max-width:940px;}
      transition:opacity .14s ease-in .04s;}
 .gloss:hover::after,.gloss:hover::before,.gloss:focus::after,.gloss:focus::before{
      opacity:1;}
+/* Phase A 2026-07-26 commit #3: inline-body variant of .gloss for auto-
+   tooltipped jargon in body copy. Instead of a standalone ? badge, wraps
+   the term itself with a dotted underline + tiny superscript ? mark so a
+   reader can tell the word is defined without breaking the sentence flow.
+   Shares the .gloss tooltip machinery via a re-used pattern below. */
+.gloss-inline{position:relative;display:inline;cursor:help;
+     border-bottom:1px dotted #8FA8D8;color:inherit;font-style:normal;
+     text-decoration:none;}
+.gloss-inline:hover,.gloss-inline:focus{color:var(--navy);outline:none;
+     border-bottom-style:solid;border-bottom-color:var(--gold);}
+.gloss-inline .gloss-mark{color:var(--muted);font-weight:var(--w-head);
+     font-size:0.72em;margin-left:1px;vertical-align:0.25em;line-height:1;}
+.gloss-inline:hover .gloss-mark,.gloss-inline:focus .gloss-mark{
+     color:var(--navy);}
+.gloss-inline::after{content:attr(data-tip);position:absolute;
+     bottom:calc(100% + 6px);left:0;background:var(--navy);color:#fff;
+     font-size:var(--fs-1);font-weight:400;text-align:left;line-height:1.4;
+     padding:7px 10px;border-radius:5px;width:max-content;max-width:280px;
+     white-space:normal;box-shadow:0 3px 12px rgba(0,0,0,.24);z-index:20;
+     opacity:0;pointer-events:none;
+     transition:opacity .14s ease-in .04s;}
+.gloss-inline::before{content:"";position:absolute;bottom:calc(100% + 1px);
+     left:12px;border:5px solid transparent;border-top-color:var(--navy);
+     opacity:0;pointer-events:none;
+     transition:opacity .14s ease-in .04s;}
+.gloss-inline:hover::after,.gloss-inline:hover::before,
+.gloss-inline:focus::after,.gloss-inline:focus::before{opacity:1;}
 /* Beginner-UX pass commit #4. Single "Learn more" one-command button pinned
    to the top of every card drill-down. Bold gold background so it reads as
    the primary action; keyboard focus ring included. The "More options for
@@ -4298,8 +4325,50 @@ GLOSSARY = {
     "reviewed":           "The team has recorded uncertainty notes for this "
                           "product (its uncertainty_metrics field is filled "
                           "in). The deliverable of the research pipeline.",
+    # Phase A 2026-07-26 commit #3: uncertainty-methodology vocabulary that
+    # shows up in body copy across Home + card drill-downs. Auto-decorated
+    # on first occurrence via `_gloss_body()` at render time so the team
+    # doesn't have to remember to call gloss() manually every time a term
+    # appears in a description. Definitions kept short (~1 sentence) so the
+    # tooltip fits on a line without wrapping oddly.
+    "moe":                "Margin of error: the range around a Census "
+                          "estimate; smaller is more reliable.",
+    "cv":                 "Coefficient of variation: MOE as a fraction of "
+                          "the estimate; CV > 30% flags low reliability.",
+    "dp":                 "Differential privacy: method the Bureau uses to "
+                          "protect confidentiality by adding calibrated "
+                          "noise to counts.",
+    "differential privacy": "Method the Bureau uses to protect "
+                          "confidentiality by adding calibrated noise to "
+                          "counts. Fixed cost per geography, so small "
+                          "places take a bigger relative hit than large ones.",
+    "pums":               "Public Use Microdata Sample: individual "
+                          "anonymized responses instead of aggregated "
+                          "tables. Enables custom cross-tabs the pre-made "
+                          "aggregate tables don't cover.",
+    "allocation":         "When a respondent left a value blank, the "
+                          "Bureau fills it in from statistical models; "
+                          "the allocation rate measures how often.",
+    "swapping":           "Confidentiality method the Bureau used before "
+                          "differential privacy; swaps records between "
+                          "similar geographies to prevent re-identification.",
+    "imputation":         "Filling in missing values with statistical "
+                          "estimates - a form of educated-guess fill-in "
+                          "the Bureau does before publishing.",
+    "variance replicate": "Set of ~80 alternate weightings the Bureau "
+                          "provides so users can compute uncertainty "
+                          "around ACS estimates without inside knowledge "
+                          "of the survey design.",
 }
 _GLOSS_SEEN = set()
+
+# Regex used by `_gloss_body()` for auto-tooltip on jargon. Multi-word terms
+# match first so 'differential privacy' beats 'dp' when both would apply.
+# Ordered by descending length so specific-first matching Just Works.
+_GLOSS_BODY_TERMS = sorted(
+    ["MOE", "CV", "differential privacy", "DP", "PUMS", "allocation",
+     "swapping", "imputation", "variance replicate"],
+    key=lambda t: -len(t))
 
 def _gloss_reset():
     """Clear the per-render 'already decorated' set. Called at the top of
@@ -4317,6 +4386,101 @@ def gloss(term):
     return (f' <span class="gloss" tabindex="0" role="button" '
             f'aria-label="Glossary: {_esc(term)}" '
             f'data-tip="{_esc(tip)}" title="{_esc(tip)}">?</span>')
+
+# --- Phase A 2026-07-26 commit #3: auto-tooltip on jargon in body copy ------
+# The manual `gloss("term")` calls are still the right pattern for a specific
+# jargon-adjacent header word (e.g. "kind" in a facet label). But most body
+# copy - card descriptions, hero blurbs, drill-down explanations - is written
+# in plain sentences with terms like "MOE" or "differential privacy"
+# scattered through. Asking every rendering function to remember to sprinkle
+# `gloss()` around each such term is fragile.
+#
+# `_gloss_body(html)` walks a rendered HTML string, decorates the FIRST
+# occurrence of each glossary term (from the compact list _GLOSS_BODY_TERMS),
+# and leaves later occurrences alone. Sharing the `_GLOSS_SEEN` set with
+# gloss() means a term auto-tooltipped in body copy won't get re-tooltipped
+# in a header the manual gloss() call also produces.
+#
+# Rules:
+#   * TEXT NODES ONLY. HTML tags, attribute values, and existing .gloss
+#     spans are skipped by splitting on <...> and processing only text
+#     between tags.
+#   * <script>, <style>, and <pre>/<code> blocks are skipped in full - we
+#     don't want to tooltip inside a shell command a user is meant to copy.
+#   * Case-insensitive match, word-boundary anchored, so "moe" inside "smoe"
+#     doesn't match. Uppercase acronyms (MOE, CV, DP, PUMS) require an
+#     uppercase match to avoid false positives in ordinary sentences.
+#   * First occurrence per glossary term GLOBALLY per render. Once a term
+#     is tooltipped anywhere on the page, later occurrences pass through.
+
+def _gloss_body(html):
+    """Auto-tooltip the first occurrence of each glossary body term in
+    `html`. Idempotent - safe to call on the same HTML twice; the second
+    pass sees `_GLOSS_SEEN` already populated and no-ops."""
+    if not html: return html
+    # Split on <...> so tag pieces stay separate from text nodes. `re.split`
+    # with a captured group keeps the tags in the result list.
+    pieces = re.split(r"(<[^>]+>)", html)
+    # Track skip zones - once we enter a <script>/<style>/<pre>/<code>,
+    # skip text pieces until the matching close tag.
+    SKIP_STACK_TAGS = {"script", "style", "pre", "code", "textarea"}
+    skip_depth = 0
+    out = []
+    for p in pieces:
+        if p.startswith("<") and p.endswith(">"):
+            # Tag piece. Update skip-depth if we entered/left a skip zone.
+            m = re.match(r"</?([a-zA-Z][a-zA-Z0-9]*)", p)
+            if m:
+                tag = m.group(1).lower()
+                if tag in SKIP_STACK_TAGS:
+                    if p.startswith("</"):
+                        skip_depth = max(0, skip_depth - 1)
+                    elif not p.endswith("/>"):
+                        skip_depth += 1
+            out.append(p)
+            continue
+        # Text piece. If we're inside a skip zone, pass through unchanged.
+        if skip_depth > 0:
+            out.append(p)
+            continue
+        out.append(_gloss_body_text(p))
+    return "".join(out)
+
+def _gloss_body_text(text):
+    """Wrap the first occurrence of each glossary body term in `text`
+    (a text node with no HTML tags). Case rules per _GLOSS_BODY_TERMS
+    docstring above."""
+    if not text or "<" in text:
+        return text
+    for term in _GLOSS_BODY_TERMS:
+        key = term.lower()
+        if key in _GLOSS_SEEN:
+            continue
+        # Uppercase-acronym terms (all caps in the term) require an exact
+        # uppercase match to avoid false positives ('moe' as a name syllable
+        # etc.). Multi-word / lowercase terms are matched case-insensitively.
+        if term.isupper() and len(term) <= 5:
+            pat = r"\b" + re.escape(term) + r"\b"
+            flags = 0
+        else:
+            pat = r"\b" + re.escape(term) + r"\b"
+            flags = re.IGNORECASE
+        m = re.search(pat, text, flags)
+        if not m:
+            continue
+        # Consult GLOSSARY via the same key logic gloss() uses.
+        tip = GLOSSARY.get(key) or ""
+        if not tip:
+            continue
+        _GLOSS_SEEN.add(key)
+        matched = m.group(0)
+        wrapped = (
+            f'<span class="gloss-inline" tabindex="0" role="button" '
+            f'aria-label="Glossary: {_esc(term)}" '
+            f'data-tip="{_esc(tip)}" title="{_esc(tip)}">'
+            f'{_esc(matched)}<sup class="gloss-mark">?</sup></span>')
+        text = text[:m.start()] + wrapped + text[m.end():]
+    return text
 
 def _vint(f):
     v = f["vintages"]
@@ -7929,7 +8093,12 @@ def build_home(fams, review, work, counts, worklog, notebooks, probes, git=None,
     # Landscape viz: hierarchical Kind -> Program treemap.
     h.append(build_landscape_viz(fams, work, probes, data_cache or {},
                                   review=review))
-    return "".join(h)
+    # Phase A 2026-07-26 commit #3: auto-tooltip jargon in the Home body copy
+    # (MOE, CV, DP, PUMS, allocation, swapping, imputation, variance replicate,
+    # differential privacy). Handled as a post-render pass so descriptions and
+    # blurbs don't have to remember to call gloss() manually. First-occurrence
+    # per glossary term shared with the rest of the render via _GLOSS_SEEN.
+    return _gloss_body("".join(h))
 
 # ============================================================================
 # TABULAR EXPORT - one row per product family, for external review workflows
@@ -8056,6 +8225,12 @@ def render(fams, review, work, worklog, notebooks, probes, repo_name, catnote, o
         _repo_for_home = Path(git.get("repo_abs")) if git and git.get("repo_abs") else None
     except Exception:
         _repo_for_home = None
+    # build_home() already runs its own _gloss_body() pass on its output
+    # (see the end of build_home()), so tooltips land on the Home body copy
+    # first. Kind/AM panels are still passed through _gloss_body() below so
+    # a term that wasn't mentioned on Home (unlikely, but possible on a
+    # tool state with no reviewed products) still gets tooltipped on its
+    # first mention in a card description.
     panels = ['<div class="panel on" id="panel-home">'
               + build_home(fams, review, work, counts, worklog, notebooks, probes, git, diff, eda_diffs,
                            data_cache=data_cache, repo=_repo_for_home) + '</div>']
@@ -8077,15 +8252,17 @@ def render(fams, review, work, worklog, notebooks, probes, repo_name, catnote, o
                     f'{gloss("actively managed")}'
                     f'<span class="n">{n_am}</span></button>')
         panels.append('<div class="panel panel-am" id="panel-am">'
-                      + build_am_panel(fams, review, work, probes, git, snapshot,
-                                        data_cache, eda_diffs)
+                      + _gloss_body(
+                          build_am_panel(fams, review, work, probes, git, snapshot,
+                                          data_cache, eda_diffs))
                       + '</div>')
     for i, k in enumerate(kinds_present):
         n = sum(1 for f in fams.values() if f["kind"] == k)
         tabs.append(f'<button class="tab tab-kind" data-k="k{i}">{_esc(k)}<span class="n">{n}</span></button>')
         panels.append(f'<div class="panel panel-kind" id="panel-k{i}">'
-                      + build_kind_panel(k, fams, review, work, probes, git, snapshot,
-                                          data_cache, eda_diffs)
+                      + _gloss_body(
+                          build_kind_panel(k, fams, review, work, probes, git, snapshot,
+                                            data_cache, eda_diffs))
                       + '</div>')
 
     gen_iso = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
