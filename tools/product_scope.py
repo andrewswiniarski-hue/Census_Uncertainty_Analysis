@@ -3427,16 +3427,20 @@ def _quick_look_tier(f, probe_entry, cache_entry):
     return (0, "Cached: catalog", "tier-catalog")
 
 def _ql_what_it_is(f):
-    """Line 1 of the reframed TL;DR (reframe pass commit #5): 'what it is'.
-    Compact one-liner of family, agency, kind, and vintages. Zero API cost -
-    everything comes from the catalog record. Replaces the pre-reframe
-    tier-chip-and-desc header as the visual anchor for a newcomer's first
-    glance ('this product IS X')."""
+    """Line 1 of the reframed TL;DR: 'what it is'. Compact one-liner of
+    family, kind, and vintages. Zero API cost - everything comes from the
+    catalog record. Replaces the pre-reframe tier-chip-and-desc header as
+    the visual anchor for a newcomer's first glance ('this product IS X').
+
+    Post-reframe cut (Phase A #1, 2026-07-26): agency chip removed because
+    every one of the 573 catalog entries is 'U.S. Census Bureau' - the chip
+    was 573x pure noise. The agency stays in the catalog record and is still
+    read via `f["agency"]` where needed; the drill-down / export both still
+    surface it when they carry other agency-adjacent context."""
     bits = []
     fam = f.get("group") or ""
     if fam:
         bits.append(f'<span class="ql-k">Family</span> {_esc(fam)}')
-    bits.append('<span class="ql-k">Agency</span> U.S. Census Bureau')
     kind = f.get("kind") or ""
     if kind:
         bits.append(f'<span class="ql-k">Kind</span> {_esc(kind)}')
