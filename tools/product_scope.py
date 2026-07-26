@@ -2993,6 +2993,20 @@ details.disc[open] > summary .disc-preview{display:none;}
    subtle per-kind tint background, plus an optional <details> spill for
    programs squeezed below the min-legibility floor. */
 .lscape-viz{display:flex;flex-direction:column;gap:10px;margin:6px 0 12px;}
+/* Slim header-only rows for the smaller kinds (condense pass 2026-07-26).
+   Native <details> in the unified disc grammar; the summary mirrors the
+   kind header (name + count + top-3) so the collapsed row still reads. */
+.lscape-kind-details{border:1px solid var(--line);border-radius:10px;
+       background:#FBFCFE;overflow:hidden;}
+.lscape-kind-details > summary{padding:10px 14px;margin-left:0;border-radius:0;}
+details.lscape-kind-details[open]{padding-left:0;}
+.lscape-kind-details > .lscape-kind-row{margin:0 8px 8px;border-radius:8px;}
+.lscape-kind-sum-name{font-family:var(--f-display);color:var(--navy);
+       font-weight:var(--w-head);font-size:var(--fs-3);
+       letter-spacing:var(--lsp-tight);}
+.lscape-kind-sum-count{font-family:var(--f-mono);color:var(--navy);
+       font-weight:var(--w-head);font-variant-numeric:tabular-nums;
+       font-size:var(--fs-3);}
 .lscape-kind-row{border:1px solid var(--line);border-radius:10px;
        overflow:hidden;background:#FFF;
        box-shadow:0 1px 2px rgba(31,42,92,0.05);}
@@ -3954,7 +3968,12 @@ document.querySelectorAll('.filter input').forEach(function(inp){
         b.setAttribute('aria-expanded', open ? 'true' : 'false');
       });
     };
-    var initialOpen = _lsGet(LS_KEY_PREFIX + 'landscape_expanded') === 'true';
+    /* Treemap proportion tuning (condense pass 2026-07-26): the treemap is
+       the chapter's centerpiece visual, so it renders EXPANDED by default
+       (its two smaller kind rows are collapsed server-side instead). The
+       compact text summary is the user-chosen collapsed state, remembered
+       per machine. */
+    var initialOpen = _lsGet(LS_KEY_PREFIX + 'landscape_expanded') !== 'false';
     setLandscapeState(initialOpen);
     lscape.addEventListener('click', function(e){
       var b = e.target.closest && e.target.closest('[data-landscape-toggle]');
@@ -7677,7 +7696,9 @@ LSCAPE_SVG_W = 1000
 LSCAPE_HEADER_H  = 44    # kind header strip (name + count + top-3 line)
 LSCAPE_ROW_PAD   = 8     # inner padding around the program treemap slice
 LSCAPE_ROW_MIN_H = 44    # min treemap-slice height (one MIN_H row + a hair)
-LSCAPE_ROW_MAX_H = 340   # hard cap on treemap-slice height (auto-grow ceiling)
+LSCAPE_ROW_MAX_H = 280   # hard cap on treemap-slice height (auto-grow ceiling)
+                         # (340 -> 280 in the condense pass 2026-07-26 so the
+                         # biggest kind row can't dominate the Home fold)
 LSCAPE_ROW_BASE  = 640   # share * base = initial target inner height
 LSCAPE_MAX_SPILL = 2     # acceptable spilled programs per kind before auto-grow
 
@@ -8386,6 +8407,19 @@ def build_landscape_viz(fams, work, probes, data_cache, review=None):
     row_html_parts = []
     smallest_box = None    # (pname, w*h) - reported in the caption
 
+    # Treemap proportion tuning (condense pass 2026-07-26): only the two
+    # largest kinds (currently Aggregate tables + Microdata, ~84% of all
+    # products) render their treemap slice by default. The remaining kinds
+    # (Time series, Uncategorized) collapse to slim header-only rows -
+    # native <details> in the unified disc grammar, with per-kind
+    # localStorage persistence via data-persist-key - so the default
+    # visible treemap drops from ~1,150px to ~750px while every program
+    # box stays one click away.
+    kind_totals = {k: sum(len(v) for v in by_kind[k].values())
+                   for k in kind_order}
+    always_open_kinds = set(sorted(kind_order,
+                                   key=lambda k: -kind_totals[k])[:2])
+
     for kind in kind_order:
         progs = by_kind[kind]
         total_in_kind = sum(len(v) for v in progs.values())
@@ -8504,12 +8538,34 @@ def build_landscape_viz(fams, work, probes, data_cache, review=None):
 
         # Assemble the row (SVG + optional spill disclosure) inside a
         # per-kind container so CSS can apply the tint border cleanly.
-        row_html_parts.append(
+        row_core = (
             f'<div class="lscape-kind-row" data-kind="{_esc(slug)}" '
             f'style="border-color:{tint["border"]}">'
             + "".join(svg_parts)
             + spill_html
             + '</div>')
+        if kind in always_open_kinds:
+            row_html_parts.append(row_core)
+        else:
+            # Smaller kind: slim header-only row that expands on click.
+            # Summary mirrors the kind header (name + count + top-3 line)
+            # so nothing is lost while collapsed; the .disc-preview span
+            # hides once the row is open (the SVG header repeats it).
+            top3 = sorted(progs.items(),
+                          key=lambda kv: (-len(kv[1]), kv[0]))[:3]
+            top3_text = " &middot; ".join(
+                f'{_esc(pn)} ({len(items)})' for pn, items in top3)
+            top_prefix = "top" if len(prog_names) > 3 else "all"
+            row_html_parts.append(
+                f'<details class="lscape-kind-details disc" '
+                f'data-persist-key="lscape_kind_{_esc(slug)}">'
+                f'<summary>'
+                f'<span class="lscape-kind-sum-name">{_esc(kind)}</span>'
+                f'<span class="lscape-kind-sum-count">{total_in_kind}</span>'
+                f'<span class="disc-preview">{top_prefix}: {top3_text}</span>'
+                f'</summary>'
+                + row_core +
+                f'</details>')
 
     # Legend + counts summary. Phase A #1 consolidation: pulls from the same
     # `_tier_counts()` helper the top-of-Home tier rail and Sankey use, so
@@ -8548,15 +8604,14 @@ def build_landscape_viz(fams, work, probes, data_cache, review=None):
         _, _, sw, sh = smallest_box
         smallest_note = (f'&middot; smallest box {sw:.0f}&times;{sh:.0f} px')
 
-    # Condense-home pass 2026-07-26 commit #2: default-collapse the treemap.
-    # A 1,143-px-tall SVG stack is the single biggest thing on the Home tab
-    # and dominates initial paint. Render a compact summary (kind row headers
-    # + top-3 programs per kind as inline text) as the default view, and
-    # keep the full SVG treemap available behind an "Expand landscape" toggle.
-    # LocalStorage key `product_scope:landscape_expanded` remembers user
-    # preference across reloads. `<details>` is used natively so JS-off users
-    # still get a click-to-expand affordance; the inline JS below layers
-    # persistence on top.
+    # Condense pass 2026-07-26: the treemap renders EXPANDED by default (it
+    # is the chapter's centerpiece visual) but its footprint was tamed two
+    # ways - the per-row height cap dropped 340 -> 280 and the two smaller
+    # kinds collapse to slim header-only rows (see always_open_kinds above),
+    # so the default paint is ~750px instead of ~1,150px. The compact text
+    # summary below remains as the user-chosen COLLAPSED state ("Collapse
+    # landscape" button), remembered per machine via localStorage
+    # `product_scope:landscape_expanded`.
     compact_rows = []
     for kind in kind_order:
         progs = by_kind[kind]
@@ -8595,7 +8650,12 @@ def build_landscape_viz(fams, work, probes, data_cache, review=None):
             'and DAS demonstration files are hand-added where relevant to '
             'our analysis.'
             '</div>'
-            '<div class="lscape-compact" data-landscape-view="compact">'
+            # Default state (condense pass 2026-07-26): treemap EXPANDED -
+            # it is the chapter's centerpiece visual. The compact text
+            # summary below is the user-chosen collapsed state (persisted
+            # via localStorage `product_scope:landscape_expanded`); it ships
+            # `hidden` so JS-off readers get the full visual.
+            '<div class="lscape-compact" data-landscape-view="compact" hidden>'
             '<div class="lscape-compact-caption">'
             f'{len(fams):,} Census products across {len(kind_order)} dataset '
             'kinds. The treemap below shows each program sized by product '
@@ -8613,7 +8673,7 @@ def build_landscape_viz(fams, work, probes, data_cache, review=None):
             '</button>'
             '</div>'
             '<div class="lscape-expanded" id="lscape-expanded-panel" '
-            'data-landscape-view="expanded" hidden>'
+            'data-landscape-view="expanded">'
             f'<div class="lscape-caption">{caption}</div>'
             f'<div class="lscape-viz">'
             + "".join(row_html_parts)
