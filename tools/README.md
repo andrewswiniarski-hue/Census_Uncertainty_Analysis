@@ -135,14 +135,7 @@ acs/acs5  36,144 variables; 12,048 carry an _M margin of error; 3 allocation gro
           county, tract, block group
 ```
 
-**To probe:** tick the `probe` box on any number of product cards. A bar appears bottom-right with a count. Click **Download queue** — it saves `probe_queue.json` to your Downloads. Then:
-
-```powershell
-python tools\product_scope.py --probe-queue "$env:USERPROFILE\Downloads\probe_queue.json"
-python tools\product_scope.py        # rebuild the report to see the results
-```
-
-Or probe one directly, no clicking:
+**To probe:** every card carries a copyable command in its "Suggested next step" panel — copy it, paste into PowerShell (opened in the repo folder), and hit enter. Or invoke one or more directly from the terminal:
 
 ```powershell
 python tools\product_scope.py --probe acs/acs5 --probe dec/dhc

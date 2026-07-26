@@ -1243,7 +1243,7 @@ def run_probe_queue(repo, fams, paths, today):
         print(f"  {path}: {probe_headline(r)}")
     out = repo / "product_probes.json"
     out.write_text(json.dumps(dict(sorted(store.items())), indent=2), encoding="utf-8")
-    print(f"Wrote {out.name} ({len(store)} probed products). Re-run without --probe-queue to rebuild the report.")
+    print(f"Wrote {out.name} ({len(store)} probed products). Re-run without --probe to rebuild the report.")
 
 # ============================================================================
 # SAMPLE / EDA MODE  (Phase 3)
@@ -1963,16 +1963,9 @@ table.rep td{border-bottom:1px solid var(--ice);padding:7px 9px;vertical-align:t
 .pcard .path{font-family:ui-monospace,Consolas,monospace;font-size:12px;font-weight:700;color:var(--navy);word-break:break-all;}
 .pcard .title{font-size:11.5px;color:var(--muted);line-height:1.3;margin-top:1px;}
 .pcard .mini{margin-top:5px;}
-.qbox{float:right;font-size:10px;color:var(--muted);cursor:pointer;user-select:none;
-      border:1px solid var(--line);border-radius:10px;padding:1px 7px;margin-left:6px;}
-.qbox input{vertical-align:-1px;margin:0 3px 0 0;}
-.qbox.probed{border-color:var(--gold);color:#8a6d1c;}
-#qbar{position:fixed;right:22px;bottom:18px;background:var(--navy);color:#fff;border-radius:10px;
-      padding:10px 16px;font-size:12.5px;box-shadow:0 3px 14px rgba(0,0,0,.28);display:none;z-index:9;}
-#qbar b{color:#F5D77A;} #qbar button{margin-left:10px;font:inherit;font-size:12px;border:0;
-      border-radius:6px;padding:5px 11px;cursor:pointer;background:#F5D77A;color:#16204A;font-weight:700;}
-#qbar button.sec{background:#28356B;color:#CADCFC;font-weight:400;}
-#qbar code{background:#16204A;padding:2px 6px;border-radius:4px;display:block;margin-top:7px;font-size:11px;}
+/* .qbox / #qbar (per-card probe checkbox + bottom-right queue slideout) removed
+   in the beginner-UX pass (commit #1). The single-shot `--probe <path>` CLI +
+   the per-card "Suggested next step" copy button are the one true path now. */
 .stagechip,.workchip,.kindchip,.rolechip{display:inline-block;padding:2px 9px;border-radius:10px;font-size:10px;
       font-weight:700;border:1px solid var(--line);margin-right:5px;}
 .workchip{font-weight:600;}
@@ -2427,9 +2420,6 @@ body:not(.am-reviewer) .panel.panel-am{display:none;}
   <span class="kbd-hint" title="Press E on any product card to open or close its drill-down">Press <kbd>E</kbd> on a card to toggle details</span>
 </div>
 <div class="wrap">__PANELS__</div>
-<div id="qbar"><span><b id="qn">0</b> queued for probe</span>
-  <button id="qdl">Download queue</button><button class="sec" id="qcl">Clear</button>
-  <code>python tools\product_scope.py --probe-queue &lt;downloaded file&gt;</code></div>
 <script>
 /* --- Click-to-copy (reused by freshness bar, per-card action prompts, etc.) --- */
 function _copyText(txt, btn){
@@ -2487,33 +2477,9 @@ document.querySelectorAll('.ghead').forEach(function(h){
 document.querySelectorAll('.phead').forEach(function(h){
   h.addEventListener('click', function(e){ e.stopPropagation(); h.closest('.psec').classList.toggle('pfold'); });
 });
-var QUEUE = [];
-function qsync(){
-  document.getElementById('qn').textContent = QUEUE.length;
-  document.getElementById('qbar').style.display = QUEUE.length ? 'block' : 'none';
-}
-document.querySelectorAll('.qbox').forEach(function(l){
-  l.addEventListener('click', function(e){ e.stopPropagation(); });
-});
-document.querySelectorAll('.qbox input').forEach(function(cb){
-  cb.addEventListener('change', function(){
-    var p = cb.dataset.p, i = QUEUE.indexOf(p);
-    if (cb.checked && i === -1) QUEUE.push(p);
-    if (!cb.checked && i !== -1) QUEUE.splice(i, 1);
-    qsync();
-  });
-});
-document.getElementById('qdl').addEventListener('click', function(){
-  var blob = new Blob([JSON.stringify({paths: QUEUE}, null, 2)], {type: 'application/json'});
-  var a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = 'probe_queue.json';
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-});
-document.getElementById('qcl').addEventListener('click', function(){
-  QUEUE = [];
-  document.querySelectorAll('.qbox input').forEach(function(c){ c.checked = false; });
-  qsync();
-});
+/* Per-card probe checkboxes + queue slideout removed in the beginner-UX pass
+   (commit #1). The one true probe path is now: click a card's "Suggested next
+   step" copy button (or a single-shot --probe <path> CLI invocation). */
 /* --- Faceted browsing (Products tabs) ---
    Filters combine as AND across facets, OR within a facet (multi-select). Facet
    counts recompute against the intersection of the OTHER active facets, so the
@@ -3476,11 +3442,14 @@ def _affordances(f, r, ws, has_probe, git, snapshot, has_eda=False):
     regen_cmd  = 'python tools/product_scope.py'
     if ws == 0:
         out.append({"tone": "info",
-                    "text": "No repo evidence yet - ask the API what this product publishes:",
+                    "text": "Ask the Census API what's in this product — copy and "
+                            "paste into your terminal (open PowerShell in the repo folder first):",
                     "cmd":  probe_cmd})
     if stage == "candidate" and not has_probe:
         out.append({"tone": "amber",
-                    "text": "Candidate without a probe. Probe first, then document what it publishes:",
+                    "text": "Candidate without a probe. Ask the Census API what's in "
+                            "this product — copy and paste into your terminal "
+                            "(open PowerShell in the repo folder first):",
                     "cmd":  probe_cmd})
     if stage == "candidate" and not has_eda:
         # Phase 3 #8: candidates need actual data, not just a probe. This is
@@ -3978,8 +3947,9 @@ def _ql_empty_state_html(f, tier, non_api):
     if tier == 0:
         cmd = f'python tools/product_scope.py --probe {f["path"]}'
         return (
-            '<div class="ql-d-empty">Not yet probed - run this to populate '
-            'structural data (variable counts, MOE flags, geography levels):'
+            '<div class="ql-d-empty">Ask the Census API what\'s in this product — '
+            'copy and paste into your terminal (open PowerShell in the repo folder '
+            'first):'
             f'<div class="ql-d-cmd"><span class="copy-cmd light">'
             f'<code>{_esc(cmd)}</code>'
             f'<button data-copy="{_esc(cmd)}">Copy</button></span></div>'
@@ -4340,10 +4310,9 @@ def product_row(f, review, work, probes, ctx=None):
     if finds:
         plural = "s" if len(finds) > 1 else ""
         mini += f'<span class="fcount">{len(finds)} insight{plural}</span>'
-    probed = " probed" if probes.get(f["path"], {}).get("ok") else ""
+    # Per-card probe checkbox removed in the beginner-UX pass (commit #1). The
+    # single-shot copy-command affordance below the card is the one path now.
     node = (f'<div class="pcard" style="border-left-color:{STAGE_COLORS[st]}">'
-            f'<label class="qbox{probed}" title="queue this product for a probe">'
-            f'<input type="checkbox" data-p="{_esc(f["path"])}"> probe</label>'
             f'<div class="path">{_esc(f["path"])}</div>'
             f'<div class="title">{_esc(f["title"][:96])}</div>'
             f'<div class="title" style="opacity:.75">{_esc(f["group"])} &bull; {_vint(f)}</div>'
@@ -5732,8 +5701,6 @@ def main():
     ap.add_argument("--out", default=None,
                     help="default: <repo>/product_report.html (or product_review.<ext> with --export)")
     ap.add_argument("--online", action="store_true")
-    ap.add_argument("--probe-queue", metavar="FILE",
-                    help="probe the products listed in a probe_queue.json downloaded from the report")
     ap.add_argument("--probe", metavar="PATH", action="append",
                     help="probe a single catalog path, e.g. --probe acs/acs5 (repeatable)")
     ap.add_argument("--export", choices=("csv", "xlsx"), default=None,
@@ -5895,11 +5862,6 @@ def _run_report_pipeline(repo, args, out):
 
     probes = load_probes(repo)
     queued = list(args.probe or [])
-    if args.probe_queue:
-        qf = Path(args.probe_queue).expanduser()
-        if not qf.exists(): sys.exit(f"error: queue file not found: {qf}")
-        qdata = json.loads(qf.read_text(encoding="utf-8"))
-        queued += qdata.get("paths", []) if isinstance(qdata, dict) else list(qdata)
     if queued:
         seen, uniq = set(), []
         for x in queued:
