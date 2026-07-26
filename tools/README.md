@@ -1,18 +1,32 @@
 # Product Scope Tracker
 
-Decide whether a Census product belongs in the composite.
+Explore Census data products: see what the team has looked at, what's inside each product, and how the ~573 Census datasets are organized.
 
-## Try it in 3 commands
+## Try it in 2 commands
 
 ```powershell
-python tools\product_scope.py --review acs/acs5 --status focus --role cv_source --note "primary CV source for every ACS geography"
 python tools\product_scope.py
 start product_report.html
 ```
 
-That's the whole verb: review a product, log an insight, see it in the report. Everything below is reference.
+That opens a report showing where the team has explored so far, insights we've collected, and an interactive map of the Census data landscape. Click any product to see what's inside.
+
+## Learn more about a specific product
+
+```powershell
+python tools\product_scope.py --probe acs/acs5      # fetches variable + geography metadata
+python tools\product_scope.py --sample acs/acs5     # fetches actual data rows + runs EDA
+```
+
+## Add a note about a product
+
+```powershell
+python tools\product_scope.py --review acs/acs5 --insight "This looks like it covers X well"
+```
 
 `--repo` defaults to the current directory, so run these from the repo root and the tool finds itself.
+
+The review workflow — marking products as candidates or FOCUS, assigning composite roles, filtering the sidebar by review status — lives in the "Reviewer mode" toggle on any Products tab. Toggle it on to see only the actively-managed cards; leave it off (the default) to browse the whole catalog.
 
 ---
 
