@@ -2176,6 +2176,17 @@ footer{padding:22px 44px;color:var(--muted);font-size:11.5px;}
 .am-hint{font-size:10.5px;color:var(--muted);font-style:italic;margin-top:4px;line-height:1.4;}
 /* Default-hidden cards: only visible when the panel carries the show-all class. */
 .panel:not(.am-showall) .prod:not([data-actively-managed]){display:none;}
+/* Kind-tab collapse (Phase A #2). Default view: the AM tab + panel are
+   visible, the 4 kind tabs + panels are hidden. When the reviewer ticks
+   "Show all products" (the AM toggle), body.am-showall is set: the AM
+   tab/panel disappear and the 4 kind tabs/panels come back. This means
+   the tab bar in the default state carries just Home + one Products
+   tab (labelled "Actively managed"), which is the goal - the 4-way
+   split only appears once someone opts into browsing the full catalog. */
+body:not(.am-showall) .tab.tab-kind,
+body:not(.am-showall) .panel.panel-kind{display:none;}
+body.am-showall .tab.tab-am,
+body.am-showall .panel.panel-am{display:none;}
 .facet .fhint code{font-family:ui-monospace,Consolas,monospace;font-size:10.5px;
      background:var(--ice);color:var(--navy);padding:0 4px;border-radius:3px;font-style:normal;}
 @media(max-width:900px){.products-shell{flex-direction:column;} .facets{position:static;width:100%;flex:none;}}
@@ -2415,15 +2426,34 @@ document.querySelectorAll('.facet input').forEach(function(cb){
   function _lsGet(k){ try { return localStorage.getItem(k); } catch(_){ return null; } }
   function _lsSet(k, v){ try { localStorage.setItem(k, v); } catch(_){} }
   var showAll = _lsGet(LS_KEY) === 'true';
+  /* Phase A #2 - body.am-showall drives the tab-visibility CSS: default
+     (unset) hides the 4 kind tabs and shows the AM tab, set flips it. Keep
+     in sync with the per-panel .am-showall class so the AM-toggle's original
+     per-card filter still works when the reviewer is on a kind tab. */
+  document.body.classList.toggle('am-showall', showAll);
   document.querySelectorAll('.panel').forEach(function(panel){
     if (!panel.querySelector('.am-cb')) return;   /* Home tab has no toggle */
     if (showAll) panel.classList.add('am-showall');
     panel.querySelectorAll('.am-cb').forEach(function(cb){ cb.checked = showAll; });
   });
+  /* If the persisted state says show-all, the server-rendered "on" tab
+     (Home by default) stays put - Home is always visible. But if we ever
+     land with the AM tab pre-activated and the toggle set to show-all, that
+     tab would be display:none. Defensive: pick a visible fallback. */
+  var activeInit = document.querySelector('.tab.on');
+  if (activeInit && showAll && activeInit.classList.contains('tab-am')){
+    var firstKindInit = document.querySelector('.tab.tab-kind');
+    if (firstKindInit) firstKindInit.click();
+  } else if (activeInit && !showAll && activeInit.classList.contains('tab-kind')){
+    var amInit = document.querySelector('.tab.tab-am');
+    if (amInit) amInit.click();
+  }
   document.querySelectorAll('.am-cb').forEach(function(cb){
     cb.addEventListener('change', function(){
       var on = cb.checked;
       _lsSet(LS_KEY, on ? 'true' : 'false');
+      /* Body class first - drives the tab collapse. */
+      document.body.classList.toggle('am-showall', on);
       /* Update every products panel in sync so switching tabs keeps the
          same view. The toggle lives inside each panel's sidebar, but the
          visibility rule is panel-scoped via a CSS class (.am-showall). */
@@ -2433,6 +2463,17 @@ document.querySelectorAll('.facet input').forEach(function(cb){
         panel.querySelectorAll('.am-cb').forEach(function(x){ x.checked = on; });
         _applyFacets(panel);
       });
+      /* Tab-switch if the currently active tab just got hidden. Ticking
+         "Show all" while sitting on the AM tab -> jump to the first kind
+         tab. Unticking while on a kind tab -> jump to the AM tab. */
+      var active = document.querySelector('.tab.on');
+      if (!active) return;
+      var hideActive = (on && active.classList.contains('tab-am')) ||
+                       (!on && active.classList.contains('tab-kind'));
+      if (!hideActive) return;
+      var target = on ? document.querySelector('.tab.tab-kind')
+                      : document.querySelector('.tab.tab-am');
+      if (target) target.click();
     });
   });
   /* Initial pass: recompute facet counts against the toggle's current state
@@ -3659,12 +3700,19 @@ def product_row(f, review, work, probes, ctx=None):
             f'{facet_attrs}{am_attr}><div class="pnode">{node}</div>'
             f'<div class="branches">{"".join(branches)}</div></div>')
 
-def build_facet_sidebar(prods, review, work, probes, top_families, data_cache=None):
+def build_facet_sidebar(prods, review, work, probes, top_families, data_cache=None,
+                        am_view=False, catalog_total=None):
     """Left-column facet blocks for the Products tabs.
 
     For each facet we render every value present in this tab's product set, with
     its (current, unfiltered) count. When the user clicks a value the JS filters
     the cards AND rewrites every other facet's counts to reflect the intersection.
+
+    `am_view=True` marks this sidebar as belonging to the combined "Actively
+    managed" panel (Phase A #2): the toggle then advertises that ticking will
+    reveal the full 4-kind catalog view (not just more cards in this same tab).
+    `catalog_total` overrides the total count shown next to the toggle - used
+    so the AM panel says "5 of 573" (the whole catalog) instead of "5 of 5".
     """
     # ---- Actively-managed toggle (post-audit UX pass #3) --------------------
     # Default on = hide cards that are neither Candidate/Focus nor carry an
@@ -3673,17 +3721,24 @@ def build_facet_sidebar(prods, review, work, probes, top_families, data_cache=No
     # off = show all 573. State is persisted in localStorage so a page reload
     # keeps the reviewer's choice; the JS wires the checkbox to _applyFacets()
     # so the facet-count recomputation on the sidebar respects this too.
-    n_all = len(prods)
+    n_all = catalog_total if catalog_total is not None else len(prods)
     n_am  = sum(1 for f in prods
                  if _is_actively_managed(f, review.get(f["path"], {})))
+    if am_view:
+        hint = (f'Currently viewing the {n_am} actively-managed product'
+                f'{"s" if n_am != 1 else ""} '
+                f'(Candidate / FOCUS / newly-changed). Tick to reveal the '
+                f'full catalog ({n_all} products) split by kind.')
+    else:
+        hint = (f'Default: only Candidate / FOCUS / newly-changed '
+                f'products ({n_am} of {n_all} on this tab). Tick to reveal '
+                f'the rest.')
     am_toggle = (
         '<div class="am-toggle">'
         '<label><input type="checkbox" class="am-cb"> '
         '<span class="lbl">Show all products</span> '
         f'<span class="cnt">({n_all})</span></label>'
-        f'<div class="am-hint">Default: only Candidate / FOCUS / newly-changed '
-        f'products ({n_am} of {n_all} on this tab). Tick to reveal '
-        f'the rest.</div>'
+        f'<div class="am-hint">{hint}</div>'
         '</div>')
     # Collect all facet values across the tab's products.
     rows = [product_facet_values(f, review, work, probes, top_families, data_cache)
@@ -3762,6 +3817,52 @@ def build_kind_panel(kind, fams, review, work, probes, git=None, snapshot=None,
             f'<div class="filter"><input type="text" placeholder="Filter {len(prods)} products '
             f'by path, title, subject or program..."><span class="fcnt">{len(prods)} shown</span></div>'
             '<div class="nohit">Nothing matches that filter.</div>' + "".join(secs))
+    return ('<div class="products-shell">' + sidebar
+            + f'<div class="products-main">{body}</div></div>')
+
+def build_am_panel(fams, review, work, probes, git=None, snapshot=None,
+                   data_cache=None, eda_diffs=None):
+    """Phase A #2 - the combined "Actively managed" panel that replaces the
+    4 kind panels in default view.
+
+    Only the ~5-10 products a reviewer is currently working on (Candidate /
+    FOCUS / carrying an auto:divergence insight) are rendered here, sorted
+    by composite role then path. Cards use the same `product_row()` renderer
+    the kind panels use, so drill-downs, chips, and Quick Look behave identically.
+    No program/subject nesting - it's a flat list, on the theory that at 5-10
+    cards you don't need scaffolding to find the one you want.
+    """
+    am_prods = [f for f in fams.values()
+                if _is_actively_managed(f, review.get(f["path"], {}))]
+    # Sort by composite role (unset last) then by path. Puts recipe ingredients
+    # in a familiar order rather than the alphabetical accident of the paths.
+    role_order = {r: i for i, r in enumerate(COMPOSITE_ROLES)}
+    def _key(f):
+        role = (review.get(f["path"], {}) or {}).get("composite_role") or ""
+        return (role_order.get(role, 99), f["path"])
+    am_prods.sort(key=_key)
+
+    fam_counts = {}
+    for f in am_prods: fam_counts[f["group"]] = fam_counts.get(f["group"], 0) + 1
+    top_families = set(sorted(fam_counts, key=lambda g: -fam_counts[g])[:12])
+    ctx = {"top_families": top_families, "git": git or {}, "snapshot": snapshot,
+           "data_cache": data_cache or {}, "eda_diffs": eda_diffs or {}}
+
+    rows = "".join(product_row(f, review, work, probes, ctx) for f in am_prods)
+    # `catalog_total` = the full 573 so the toggle language reads "of 573"
+    # rather than the misleading "of 5" (which would be the AM panel's own size).
+    sidebar = build_facet_sidebar(am_prods, review, work, probes, top_families,
+                                  data_cache, am_view=True,
+                                  catalog_total=len(fams))
+    n = len(am_prods)
+    blurb = ('Products currently in play: Candidate stage, FOCUS stage, or '
+             'flagged by an auto:divergence insight. Everything else is one '
+             'tick away in the sidebar toggle.')
+    body = (f'<div class="blurb">{blurb}</div>'
+            f'<div class="filter"><input type="text" placeholder="Filter {n} '
+            f'actively-managed product{"s" if n != 1 else ""} by path, title, '
+            f'subject or program..."><span class="fcnt">{n} shown</span></div>'
+            f'<div class="nohit">Nothing matches that filter.</div>{rows}')
     return ('<div class="products-shell">' + sidebar
             + f'<div class="products-main">{body}</div></div>')
 
@@ -3972,10 +4073,25 @@ def render(fams, review, work, worklog, notebooks, probes, repo_name, catnote, o
     tabs = ['<button class="tab on" data-k="home">Home</button>']
     panels = ['<div class="panel on" id="panel-home">'
               + build_home(fams, review, work, counts, worklog, notebooks, probes, git, diff, eda_diffs) + '</div>']
+
+    # Phase A #2 - "Actively managed" tab + panel replaces the 4 kind tabs in
+    # the default view (see the body:not(.am-showall) CSS above). Only emitted
+    # when there IS at least one AM product; otherwise the kind tabs stay as
+    # the sole Products entrypoint so an empty state doesn't dead-end the
+    # reviewer on a blank tab.
+    n_am = sum(1 for f in fams.values()
+               if _is_actively_managed(f, review.get(f["path"], {})))
+    if n_am:
+        tabs.append(f'<button class="tab tab-am" data-k="am">Actively managed'
+                    f'<span class="n">{n_am}</span></button>')
+        panels.append('<div class="panel panel-am" id="panel-am">'
+                      + build_am_panel(fams, review, work, probes, git, snapshot,
+                                        data_cache, eda_diffs)
+                      + '</div>')
     for i, k in enumerate(kinds_present):
         n = sum(1 for f in fams.values() if f["kind"] == k)
-        tabs.append(f'<button class="tab" data-k="k{i}">{_esc(k)}<span class="n">{n}</span></button>')
-        panels.append(f'<div class="panel" id="panel-k{i}">'
+        tabs.append(f'<button class="tab tab-kind" data-k="k{i}">{_esc(k)}<span class="n">{n}</span></button>')
+        panels.append(f'<div class="panel panel-kind" id="panel-k{i}">'
                       + build_kind_panel(k, fams, review, work, probes, git, snapshot,
                                           data_cache, eda_diffs)
                       + '</div>')
