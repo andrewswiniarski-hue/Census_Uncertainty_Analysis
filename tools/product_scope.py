@@ -2820,6 +2820,71 @@ footer{padding:22px 44px;color:var(--muted);font-size:var(--fs-2);}
 .freshbar .pill.old{background:#C0392B;color:#FFF;}
 .freshbar .sha{font-family:var(--f-mono);font-size:var(--fs-1);opacity:.7;}
 .freshbar .kbd-hint{margin-left:auto;font-size:var(--fs-1);opacity:.75;letter-spacing:.01em;}
+/* UX pass 2026-07-26 commit #6 - guided tour launcher + overlay.
+   The launcher sits inside the freshbar; the overlay is a fixed-position
+   div outside the normal flow, revealed only when the tour is running. */
+.tour-launch{background:var(--gold);color:#16204A;border:0;border-radius:6px;
+     padding:5px 12px;font:inherit;font-size:var(--fs-1);font-weight:var(--w-head);
+     cursor:pointer;letter-spacing:.02em;transition:background .12s ease;
+     margin-left:8px;line-height:1.3;}
+.tour-launch:hover{background:#B7912A;color:#fff;}
+.tour-launch:focus-visible{outline:2px solid #fff;outline-offset:2px;}
+.tour-launch.hidden{display:none;}
+.tour-relaunch{background:transparent;color:#F5D77A;border:1px solid #3A4890;
+     border-radius:50%;width:22px;height:22px;padding:0;font:inherit;
+     font-size:var(--fs-1);font-weight:var(--w-head);cursor:pointer;
+     margin-left:8px;line-height:1;display:none;align-items:center;justify-content:center;}
+.tour-relaunch:hover{background:#28356B;color:#fff;}
+.tour-relaunch:focus-visible{outline:2px solid var(--gold);outline-offset:2px;}
+.tour-relaunch.visible{display:inline-flex;}
+.tour-overlay{position:fixed;inset:0;z-index:5000;pointer-events:none;}
+.tour-overlay[hidden]{display:none;}
+.tour-overlay .tour-dim{position:absolute;background:rgba(15,23,56,.55);
+     pointer-events:auto;transition:all .18s ease-out;}
+.tour-halo{position:absolute;border:2px solid var(--gold);border-radius:10px;
+     box-shadow:0 0 0 4px rgba(201,162,39,.25),0 8px 30px rgba(0,0,0,.35);
+     pointer-events:none;transition:all .22s cubic-bezier(.4,.0,.2,1);
+     background:transparent;}
+.tour-callout{position:absolute;width:280px;max-width:calc(100vw - 40px);
+     background:#fff;border-radius:10px;padding:14px 16px 12px;
+     box-shadow:0 12px 32px rgba(0,0,0,.35),0 2px 6px rgba(0,0,0,.15);
+     pointer-events:auto;transition:top .22s cubic-bezier(.4,.0,.2,1),
+                                    left .22s cubic-bezier(.4,.0,.2,1);
+     border:1px solid var(--line);}
+.tour-callout-head{display:flex;align-items:center;justify-content:space-between;
+     margin-bottom:8px;}
+.tour-step-idx{font-family:var(--f-mono);font-size:var(--fs-1);
+     color:var(--gold);font-weight:var(--w-head);letter-spacing:.08em;
+     text-transform:uppercase;}
+.tour-skip{background:transparent;border:0;color:var(--muted);
+     font-size:var(--fs-1);cursor:pointer;padding:2px 6px;border-radius:4px;
+     font-family:inherit;font-weight:var(--w-emph);letter-spacing:.02em;}
+.tour-skip:hover{background:var(--ice);color:var(--navy);}
+.tour-callout-title{font-family:var(--f-display);color:var(--navy);
+     font-size:var(--fs-4);font-weight:var(--w-head);letter-spacing:var(--lsp-tight);
+     line-height:var(--lh-4);margin-bottom:6px;}
+.tour-callout-body{font-size:var(--fs-2);color:var(--ink);
+     line-height:var(--lh-3);margin-bottom:12px;}
+.tour-callout-foot{display:flex;justify-content:space-between;gap:8px;}
+.tour-prev,.tour-next{font:inherit;font-size:var(--fs-2);font-weight:var(--w-emph);
+     padding:6px 12px;border-radius:5px;cursor:pointer;line-height:1.2;
+     letter-spacing:.01em;}
+.tour-prev{background:transparent;color:var(--muted);border:1px solid var(--line);}
+.tour-prev:hover{background:var(--ice);color:var(--navy);border-color:var(--navy);}
+.tour-prev[disabled]{opacity:.35;cursor:not-allowed;}
+.tour-next{background:var(--navy);color:#fff;border:1px solid var(--navy);}
+.tour-next:hover{background:#0F1740;}
+.tour-next:focus-visible,.tour-prev:focus-visible,.tour-skip:focus-visible{
+     outline:2px solid var(--gold);outline-offset:2px;}
+.tour-callout-kbd{margin-top:8px;font-size:var(--fs-1);color:var(--muted);
+     text-align:center;padding-top:8px;border-top:1px dotted var(--line);}
+.tour-callout-kbd kbd{display:inline-block;padding:0 5px;font-family:var(--f-mono);
+     font-size:var(--fs-1);background:var(--ice);color:var(--navy);
+     border:1px solid var(--line);border-radius:3px;font-weight:var(--w-head);
+     margin:0 2px;}
+/* When the tour is running, lift the header/freshbar out of the dimming so
+   they're not confusing dead pixels behind the halo. */
+body.tour-running{overflow:hidden;}
 .freshbar .kbd-hint kbd{display:inline-block;padding:0 5px;margin:0 2px;font-family:var(--f-mono);
      font-size:var(--fs-1);background:#28356B;color:#F5D77A;border:1px solid #3A4890;border-radius:3px;
      box-shadow:inset 0 -1px 0 #0F1738;font-weight:var(--w-head);line-height:14px;}
@@ -3131,7 +3196,39 @@ body:not(.am-reviewer) .panel.panel-am{display:none;}
   <span class="copy-cmd"><code>python tools/product_scope.py</code>
     <button data-copy="python tools/product_scope.py">Copy</button></span>
   <span class="sha" title="HEAD SHA at generation time">__HEAD_SHORT__ &bull; __BRANCH__</span>
+  <!-- UX pass 2026-07-26 commit #6: Guided tour launcher. Hidden by default
+       once the reader has finished the tour once (localStorage flag).
+       The compact ? version stays visible as a re-entry. -->
+  <button type="button" id="tour-launch" class="tour-launch" title="Take the guided tour (~2 min)">Take the tour (2 min)</button>
+  <button type="button" id="tour-relaunch" class="tour-relaunch" title="Take the guided tour again" aria-label="Take the tour again">?</button>
   <span class="kbd-hint" title="Press E on any product card to open or close its drill-down">Press <kbd>E</kbd> on a card to toggle details</span>
+</div>
+<!-- UX pass 2026-07-26 commit #6: Guided tour overlay + callout box. Pure
+     vanilla JS + fixed-position DOM. Hidden until launched; then the overlay
+     dims the page except for a cutout around the current step's target, and
+     the callout box floats near that target with 1-line copy + next/skip. -->
+<div id="tour-overlay" class="tour-overlay" role="dialog" aria-modal="true"
+     aria-labelledby="tour-title" hidden>
+  <div class="tour-dim" data-tour-dim="top"></div>
+  <div class="tour-dim" data-tour-dim="right"></div>
+  <div class="tour-dim" data-tour-dim="bottom"></div>
+  <div class="tour-dim" data-tour-dim="left"></div>
+  <div class="tour-halo" aria-hidden="true"></div>
+  <div class="tour-callout" role="document">
+    <div class="tour-callout-head">
+      <span class="tour-step-idx" id="tour-step-idx">1 / 7</span>
+      <button type="button" class="tour-skip" id="tour-skip" aria-label="Skip the tour">Skip tour</button>
+    </div>
+    <div class="tour-callout-title" id="tour-title">&nbsp;</div>
+    <div class="tour-callout-body" id="tour-body">&nbsp;</div>
+    <div class="tour-callout-foot">
+      <button type="button" class="tour-prev" id="tour-prev" aria-label="Previous step">&larr; Back</button>
+      <button type="button" class="tour-next" id="tour-next" aria-label="Next step">Next &rarr;</button>
+    </div>
+    <div class="tour-callout-kbd">
+      <kbd>&larr;</kbd> / <kbd>&rarr;</kbd> navigate &middot; <kbd>Enter</kbd> next &middot; <kbd>Esc</kbd> exit
+    </div>
+  </div>
 </div>
 <div id="starthere" class="starthere" role="note">
   <button type="button" class="sh-dismiss" id="sh-dismiss" title="Hide this on this machine" aria-label="Dismiss the Start here banner">&times;</button>
@@ -3929,6 +4026,194 @@ document.querySelectorAll('.filter input').forEach(function(inp){
     hint.setAttribute('title', 'Press / anywhere on the page to focus this filter');
     hint.innerHTML = 'Press <kbd>/</kbd> to focus &middot; <kbd>j</kbd>/<kbd>k</kbd> to move between cards &middot; <kbd>Enter</kbd> to open';
     f.appendChild(hint);
+  });
+})();
+/* -------------------------------------------------------------------------
+   UX pass 2026-07-26 commit #6 - Guided tour mode.
+   Walks a first-time reader through Home in 7 stops (~15s each). Overlay
+   dims the page except for a halo around the current step's target; the
+   floating callout box carries the copy + next/back/skip controls.
+   State: localStorage 'product_scope:tour_seen' remembers completion so the
+   launcher hides itself after one full pass (the small "?" re-entry stays).
+   No new deps: pure vanilla JS + the fixed-position DOM added above.
+   -------------------------------------------------------------------------- */
+(function(){
+  var TOUR_SEEN_KEY = 'product_scope:tour_seen';
+  // Seven tour stops in order. Each: {sel, title, body}. sel is a CSS
+  // selector; the FIRST match on the page is highlighted. Home-panel
+  // selectors are guaranteed present (the tour runs on Home).
+  var STOPS = [
+    {sel: '#starthere',
+     title: "Start here",
+     body:  "This small banner is the shortest way in - three bullets that "
+          + "tell you what to do next. Dismiss it when you know your way "
+          + "around."},
+    {sel: '.home-hero-p1',
+     title: "The findings report",
+     body:  "Every mechanism this tool measures - sampling noise, privacy "
+          + "noise, imputation - is explained in plain English in the Phase 1 "
+          + "findings report. Read it first if you have 10 minutes."},
+    {sel: '.curriculum-section',
+     title: "5-product curriculum",
+     body:  "If you'd rather explore in the tool, walk these five products "
+          + "top to bottom. Each one illustrates a single uncertainty "
+          + "mechanism with real Census data."},
+    {sel: '.pipeline-rail',
+     title: "Where the team is",
+     body:  "This rail shows how far along we are on the research pipeline - "
+          + "how many products we've probed, sampled, and reviewed against "
+          + "the full catalog of 573."},
+    {sel: '.wwl-section',
+     title: "What we've learned",
+     body:  "One feed for every insight the team has recorded: curated head-"
+          + "lines, WORKLOG findings, per-product notes, auto-generated "
+          + "signals when data drifts."},
+    {sel: '.sankey-section',
+     title: "The research pipeline",
+     body:  "Same numbers as the rail above, drawn as flows. Ribbon width "
+          + "shows the count that carried forward; shrinking node stacks "
+          + "show what dropped out at each stage."},
+    {sel: '.lscape-section',
+     title: "The Census data landscape",
+     body:  "All 573 product families laid out by type and program. Box size "
+          + "is proportional to product count. You're ready - open the first "
+          + "curriculum product from step 3 and start exploring."}
+  ];
+  var idx = 0;
+  var overlay = document.getElementById('tour-overlay');
+  var dims = overlay ? overlay.querySelectorAll('.tour-dim') : null;
+  var halo = overlay ? overlay.querySelector('.tour-halo') : null;
+  var callout = overlay ? overlay.querySelector('.tour-callout') : null;
+  var launch = document.getElementById('tour-launch');
+  var relaunch = document.getElementById('tour-relaunch');
+  var titleEl = document.getElementById('tour-title');
+  var bodyEl = document.getElementById('tour-body');
+  var idxEl = document.getElementById('tour-step-idx');
+  var prevBtn = document.getElementById('tour-prev');
+  var nextBtn = document.getElementById('tour-next');
+  var skipBtn = document.getElementById('tour-skip');
+  if (!overlay || !launch || !callout || !titleEl) return; /* defensive */
+
+  function _seenAlready(){
+    try { return window.localStorage &&
+           window.localStorage.getItem(TOUR_SEEN_KEY) === '1'; }
+    catch(_){ return false; }
+  }
+  function _markSeen(){
+    try { window.localStorage &&
+          window.localStorage.setItem(TOUR_SEEN_KEY, '1'); }
+    catch(_){}
+    launch.classList.add('hidden');
+    relaunch.classList.add('visible');
+  }
+  if (_seenAlready()){
+    launch.classList.add('hidden');
+    relaunch.classList.add('visible');
+  }
+  function _rectOf(sel){
+    var el = document.querySelector(sel);
+    if (!el) return null;
+    /* Ensure element is in view before measuring. Scroll with instant
+       behavior so we don't race the transition. */
+    var r = el.getBoundingClientRect();
+    if (r.top < 60 || r.bottom > window.innerHeight - 40){
+      var y = r.top + window.pageYOffset - 100;
+      window.scrollTo({top: y, behavior: 'smooth'});
+    }
+    return el.getBoundingClientRect();
+  }
+  function _place(rect){
+    /* Position the four dim panels so their combined absence is a hole
+       around the target rect. */
+    var W = window.innerWidth, H = window.innerHeight;
+    var pad = 8;
+    var rTop = Math.max(0, rect.top - pad);
+    var rLeft = Math.max(0, rect.left - pad);
+    var rBottom = Math.min(H, rect.bottom + pad);
+    var rRight = Math.min(W, rect.right + pad);
+    /* top dim */
+    dims[0].style.top = 0; dims[0].style.left = 0;
+    dims[0].style.width = W + 'px'; dims[0].style.height = rTop + 'px';
+    /* right dim */
+    dims[1].style.top = rTop + 'px'; dims[1].style.left = rRight + 'px';
+    dims[1].style.width = Math.max(0, W - rRight) + 'px';
+    dims[1].style.height = Math.max(0, rBottom - rTop) + 'px';
+    /* bottom dim */
+    dims[2].style.top = rBottom + 'px'; dims[2].style.left = 0;
+    dims[2].style.width = W + 'px'; dims[2].style.height = Math.max(0, H - rBottom) + 'px';
+    /* left dim */
+    dims[3].style.top = rTop + 'px'; dims[3].style.left = 0;
+    dims[3].style.width = rLeft + 'px';
+    dims[3].style.height = Math.max(0, rBottom - rTop) + 'px';
+    /* halo around the target */
+    halo.style.top = rTop + 'px'; halo.style.left = rLeft + 'px';
+    halo.style.width = Math.max(0, rRight - rLeft) + 'px';
+    halo.style.height = Math.max(0, rBottom - rTop) + 'px';
+    /* callout: prefer below the target; if that overflows, above it. */
+    var cw = 296, ch = callout.offsetHeight || 180;
+    var cLeft = Math.min(W - cw - 12, Math.max(12, rect.left + rect.width/2 - cw/2));
+    var cTop = rBottom + 14;
+    if (cTop + ch > H - 12){
+      cTop = Math.max(12, rTop - ch - 14);
+    }
+    callout.style.left = cLeft + 'px';
+    callout.style.top = cTop + 'px';
+  }
+  function _show(i){
+    if (i < 0) i = 0;
+    if (i >= STOPS.length){ _end(); return; }
+    idx = i;
+    var stop = STOPS[idx];
+    /* If the current stop's target is missing entirely, skip it forward. */
+    if (!document.querySelector(stop.sel)){
+      if (idx === STOPS.length - 1) return _end();
+      return _show(idx + 1);
+    }
+    titleEl.textContent = stop.title;
+    bodyEl.textContent = stop.body;
+    idxEl.textContent = (idx + 1) + ' / ' + STOPS.length;
+    prevBtn.disabled = (idx === 0);
+    nextBtn.textContent = (idx === STOPS.length - 1) ? 'Finish' : 'Next →';
+    /* Measure AFTER text swap so callout height is correct. */
+    var rect = _rectOf(stop.sel);
+    if (!rect) return _end();
+    _place(rect);
+  }
+  function _start(){
+    document.body.classList.add('tour-running');
+    overlay.hidden = false;
+    /* Home tab must be active - the stops are Home-only. */
+    var homeTab = document.querySelector('.tab[data-k="home"]');
+    if (homeTab && !homeTab.classList.contains('on')) homeTab.click();
+    idx = 0;
+    /* Give the layout one frame to settle after the tab click, then show. */
+    setTimeout(function(){ _show(0); }, 20);
+    nextBtn.focus();
+  }
+  function _end(){
+    document.body.classList.remove('tour-running');
+    overlay.hidden = true;
+    _markSeen();
+    launch.blur();
+  }
+  launch.addEventListener('click', _start);
+  relaunch.addEventListener('click', _start);
+  nextBtn.addEventListener('click', function(){ _show(idx + 1); });
+  prevBtn.addEventListener('click', function(){ _show(idx - 1); });
+  skipBtn.addEventListener('click', _end);
+  /* Keyboard nav while the tour is running. */
+  document.addEventListener('keydown', function(e){
+    if (overlay.hidden) return;
+    if (e.key === 'Escape'){ e.preventDefault(); _end(); }
+    else if (e.key === 'ArrowRight' || e.key === 'Enter'){ e.preventDefault(); _show(idx + 1); }
+    else if (e.key === 'ArrowLeft'){ e.preventDefault(); _show(idx - 1); }
+  });
+  /* Reflow on resize so the halo tracks the target. */
+  window.addEventListener('resize', function(){
+    if (!overlay.hidden){
+      var r = _rectOf(STOPS[idx].sel);
+      if (r) _place(r);
+    }
   });
 })();
 </script>
