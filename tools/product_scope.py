@@ -92,7 +92,12 @@ STATUS_LABELS = ["Not started", "Identified", "Pulled", "Analyzed", "Validated"]
 GEO_LEVELS = ["state", "county", "tract", "block group", "block"]
 
 STAGES = ["cataloged", "reviewed", "candidate", "focus", "set-aside"]
-STAGE_LABELS = {"cataloged": "Cataloged", "reviewed": "Reviewed", "candidate": "Candidate",
+# Beginner-UX pass commit #3: visible-label rename. Internal enum values in
+# STAGES stay stable (schema, CLI flag values, JSON keys all still speak the
+# enum); only the display labels change. Old label was "Cataloged" (jargon);
+# new label is "Listed only" (plain English: it's in the Census catalog but the
+# team hasn't looked at it yet).
+STAGE_LABELS = {"cataloged": "Listed only", "reviewed": "Reviewed", "candidate": "Candidate",
                 "focus": "FOCUS", "set-aside": "Set aside"}
 STAGE_COLORS = {"cataloged": "#EDF0F7", "reviewed": "#CADCFC", "candidate": "#E9CD7A",
                 "focus": "#1F2A5C", "set-aside": "#F6F7FA"}
@@ -3311,7 +3316,10 @@ FACET_DEFS = [
     ("freq",      "Frequency",           None,     "primary"),
     ("stage",     "Status",              None,     "reviewer"),
     ("evidence",  "Has repo evidence",   None,     "reviewer"),
-    ("probe",     "Has API probe",       None,     "reviewer"),
+    # Beginner-UX pass commit #3: rename visible facet label to plain English
+    # (was "Has API probe" - jargon; the facet key `probe` stays for
+    # backward compat with URL hash state, data-* attributes, and JS).
+    ("probe",     "Metadata fetched",    None,     "reviewer"),
     ("validated", "Notebook validated",  None,     "reviewer"),
 ]
 FACET_ORDER = {
@@ -3581,8 +3589,11 @@ def _affordances(f, r, ws, has_probe, git, snapshot, has_eda=False):
                         "cmd":  regen_cmd})
     if stage == "cataloged":
         # Not a warning - just a nudge with the exact JSON key to open.
+        # Beginner-UX pass commit #3: rename "Still cataloged" -> plain
+        # English "Team hasn't looked at this product yet".
         out.append({"tone": "nudge",
-                    "text": f'Still cataloged. Set a Status by editing product_review.json at key "{path}".',
+                    "text": f'Team hasn\'t looked at this product yet. Set a '
+                            f'Status by editing product_review.json at key "{path}".',
                     "cmd":  None})
     return out
 
@@ -3761,12 +3772,15 @@ def _eda_body_html(cache_entry, diff_note=None):
 
 def _quick_look_tier(f, probe_entry, cache_entry):
     """Highest tier currently cached for one product. Returns (tier, label,
-    class) where class matches the CSS chip variants defined in TEMPLATE."""
+    class) where class matches the CSS chip variants defined in TEMPLATE.
+    Beginner-UX pass commit #3: chip labels renamed from jargon (catalog /
+    probe / sample) to plain English (listed / metadata fetched / data
+    peeked)."""
     if cache_entry:
-        return (2, "Cached: sample", "tier-sample")
+        return (2, "Cached: data peek", "tier-sample")
     if probe_entry and probe_entry.get("ok"):
-        return (1, "Cached: probe", "tier-probe")
-    return (0, "Cached: catalog", "tier-catalog")
+        return (1, "Cached: metadata", "tier-probe")
+    return (0, "Cached: listing only", "tier-catalog")
 
 def _ql_what_it_is(f):
     """Line 1 of the reframed TL;DR: 'what it is'. Compact one-liner of
@@ -3787,10 +3801,14 @@ def _ql_what_it_is(f):
     if kind:
         # Beginner-UX pass commit #2: `?` glossary tooltip on first appearance
         # of the term. gloss() is a no-op after first call per render.
-        bits.append(f'<span class="ql-k">Kind{gloss("kind")}</span> {_esc(kind)}')
+        # Beginner-UX pass commit #3: rename visible label "Kind" -> "Dataset
+        # type"; the internal `kind` key on the fam dict is unchanged.
+        bits.append(f'<span class="ql-k">Dataset type{gloss("kind")}</span> {_esc(kind)}')
     v = f.get("vintages") or []
     if v:
-        bits.append(f'<span class="ql-k">Vintages{gloss("vintages")}</span> {_esc(_vint(f))}')
+        # Beginner-UX pass commit #3: rename visible label "Vintages" ->
+        # "Years published"; the fam dict field name is unchanged.
+        bits.append(f'<span class="ql-k">Years published{gloss("vintages")}</span> {_esc(_vint(f))}')
     spatial = sorted(f.get("spatial") or [])
     if spatial:
         # First entry is enough - the catalog usually lists one spatial coverage
@@ -3828,9 +3846,10 @@ def _ql_what_is_inside(f, probe_entry, cache_entry):
             if len(levels) > 6: preview += " ..."
             bits.append(f'<span class="ql-k">Geography levels</span> {preview}')
     elif f.get("variables_url"):
-        # We know an API endpoint exists but nobody has probed yet.
+        # We know an API endpoint exists but nobody has fetched metadata yet.
+        # Beginner-UX pass commit #3: rename "not yet probed" -> plain English.
         bits.append('<span class="ql-k">Geography</span> '
-                    '<span class="ql-muted">not yet probed</span>')
+                    '<span class="ql-muted">metadata not yet fetched</span>')
     else:
         # Non-API product - no way to enumerate levels without a download.
         bits.append('<span class="ql-k">Geography</span> '
@@ -4019,9 +4038,11 @@ def _ql_catalog_detail_html(f, non_api, uncertainty_metrics=""):
                      f'<a class="ql-d-link" href="{_esc(endpoint)}" target="_blank" '
                      f'rel="noopener">{_esc(base)}</a></div>')
     elif non_api:
+        # Beginner-UX pass commit #3: rename "not sample-able via API" ->
+        # plain-English "data not available via the Census API".
         parts.append('<div class="ql-d-row"><span class="ql-k">Endpoint</span> '
-                     '<span class="ql-muted">not sample-able via API (bulk-download product)'
-                     '</span></div>')
+                     '<span class="ql-muted">data not available via the '
+                     'Census API (bulk-download product)</span></div>')
     doc = f.get("doc") or ""
     if doc:
         parts.append(f'<div class="ql-d-row"><span class="ql-k">Bureau docs</span> '
@@ -4051,9 +4072,10 @@ def _ql_empty_state_html(f, tier, non_api):
     to prompt.
     """
     if non_api:
-        return ('<div class="ql-d-empty">Not sample-able via API - this is a '
-                'bulk-download product (e.g. TIGER shapefiles, DAS demo). '
-                'The catalog record above is all we have.</div>')
+        # Beginner-UX pass commit #3: rename "Not sample-able via API".
+        return ('<div class="ql-d-empty">Data isn\'t available via the Census '
+                'API - this is a bulk-download product (e.g. TIGER shapefiles, '
+                'DAS demo). The catalog record above is all we have.</div>')
     if tier == 0:
         cmd = f'python tools/product_scope.py --probe {f["path"]}'
         return (
@@ -4067,8 +4089,9 @@ def _ql_empty_state_html(f, tier, non_api):
     if tier == 1:
         cmd = f'python tools/product_scope.py --sample {f["path"]}'
         return (
-            '<div class="ql-d-empty">Not yet sampled - run this to fetch a '
-            'data slice and cache canonical EDA:'
+            '<div class="ql-d-empty">Peek at the actual data (a small sample '
+            'plus a quick summary of column types and missing values) — copy '
+            'and paste into your terminal:'
             f'<div class="ql-d-cmd"><span class="copy-cmd light">'
             f'<code>{_esc(cmd)}</code>'
             f'<button data-copy="{_esc(cmd)}">Copy</button></span></div>'
@@ -4325,10 +4348,13 @@ def render_quick_look(f, probe_entry, cache_entry, insights=None,
         parts.append(f'<div class="ql-desc">{desc}</div>')
 
     # Non-API products still get a one-line explanatory note so a reader
-    # doesn't misread "not yet probed" as a missed run.
+    # doesn't misread "metadata not yet fetched" as a missed run.
+    # Beginner-UX pass commit #3: rename "not sample-able via API" ->
+    # plain-English "data isn't available via the API".
     if tier == 0 and non_api:
-        parts.append('<div class="ql-nonapi">Bulk-download product - not '
-                     'sample-able via API (e.g. TIGER shapefiles, DAS demo).</div>')
+        parts.append('<div class="ql-nonapi">Bulk-download product - data '
+                     'isn\'t available via the Census API (e.g. TIGER '
+                     'shapefiles, DAS demo).</div>')
 
     # Insights TL;DR (Phase 5 #6). Unchanged.
     insights = list(insights or [])
@@ -4470,7 +4496,7 @@ def product_row(f, review, work, probes, ctx=None):
                            + ", ".join(pr["queryable_without_parent"][:8]))
         dhtml = ('<div class="meta">' + _esc(" | ".join(det)) + '</div>') if det else ""
         branches.append(
-            '<div class="branch"><div class="bcard"><div class="blabel">What the API reports</div>'
+            '<div class="branch"><div class="bcard"><div class="blabel">What the Census API says is in this product</div>'
             f'<div class="{cls}">{_esc(probe_headline(pr))}</div>{dhtml}'
             f'<div class="inferred" style="color:var(--muted);font-style:normal">Retrieved from '
             f'variables.json and geography.json on {_esc(pr.get("probed", "?"))}. Counts only '
@@ -4570,20 +4596,24 @@ def build_facet_sidebar(prods, review, work, probes, top_families, data_cache=No
     n_all = catalog_total if catalog_total is not None else len(prods)
     n_am  = sum(1 for f in prods
                  if _is_actively_managed(f, review.get(f["path"], {})))
+    # Beginner-UX pass commit #3: hint text + toggle label renamed from
+    # jargon-heavy "actively-managed / reviewer mode" wording to plain English
+    # ("products the team is working on"). Semantics unchanged - ticking still
+    # hides most cards, revealing the 5 the team is focused on.
     if am_view:
-        hint = (f'Currently in reviewer mode: {n_am} actively-managed product'
-                f'{"s" if n_am != 1 else ""} '
+        hint = (f'Currently showing {n_am} product'
+                f'{"s" if n_am != 1 else ""} the team is working on '
                 f'(Candidate / FOCUS / newly-changed). Untick to browse the '
-                f'full catalog ({n_all} products) split by kind.')
+                f'full catalog ({n_all} products) split by dataset type.')
     else:
-        hint = (f'Currently browsing all {n_all} products. Tick to switch to '
-                f'reviewer mode - only the {n_am} actively-managed card'
-                f'{"s" if n_am != 1 else ""} '
+        hint = (f'Currently browsing all {n_all} products. Tick to see only '
+                f'the {n_am} product'
+                f'{"s" if n_am != 1 else ""} the team is working on '
                 f'(Candidate / FOCUS / newly-changed).')
     am_toggle = (
         '<div class="am-toggle">'
         '<label><input type="checkbox" class="am-cb"> '
-        '<span class="lbl">Reviewer mode: only actively-managed products</span> '
+        '<span class="lbl">Filter to only products the team is working on</span> '
         f'<span class="cnt">({n_am} of {n_all})</span></label>'
         f'<div class="am-hint">{hint}</div>'
         '</div>')
@@ -4640,9 +4670,12 @@ def build_facet_sidebar(prods, review, work, probes, top_families, data_cache=No
         # role / Has evidence / Has probe / Notebook validated) collapse behind
         # a details toggle so the sidebar reads as discovery-first. Everything
         # still filters exactly as before once expanded.
+        # Beginner-UX pass commit #3: rename "Reviewer mode facets" summary
+        # to plain-English "More filters" (the internal group name is
+        # still 'reviewer' - see FACET_DEFS).
         reviewer_section = (
             '<details class="facet-reviewer-group">'
-            '<summary>Reviewer mode facets</summary>'
+            '<summary>More filters</summary>'
             '<div class="facet-reviewer-body">' + "".join(reviewer_blocks) + '</div>'
             '</details>')
     return ('<aside class="facets"><div class="facets-head">'
@@ -4723,13 +4756,16 @@ def build_am_panel(fams, review, work, probes, git=None, snapshot=None,
                                   data_cache, am_view=True,
                                   catalog_total=len(fams))
     n = len(am_prods)
-    blurb = ('Products currently in play: Candidate stage, FOCUS stage, or '
-             'flagged by an auto:divergence insight. Everything else is one '
-             'tick away in the sidebar toggle.')
+    # Beginner-UX pass commit #3: rename visible blurb + filter placeholder
+    # from jargon ("actively-managed") to plain English ("the team is
+    # working on"). Same product set, same filter behavior.
+    blurb = ('Products the team is currently working on: Candidate stage, '
+             'FOCUS stage, or flagged by an auto:divergence insight. '
+             'Everything else is one tick away in the sidebar toggle.')
     body = (f'<div class="blurb">{blurb}</div>'
             f'<div class="filter"><input type="text" placeholder="Filter {n} '
-            f'actively-managed product{"s" if n != 1 else ""} by path, title, '
-            f'subject or program..."><span class="fcnt">{n} shown</span></div>'
+            f'product{"s" if n != 1 else ""} the team is working on by path, '
+            f'title, subject or program..."><span class="fcnt">{n} shown</span></div>'
             f'<div class="nohit">Nothing matches that filter.</div>{rows}')
     return ('<div class="products-shell">' + sidebar
             + f'<div class="products-main">{body}</div></div>')
@@ -4936,7 +4972,9 @@ def build_where_team_is(fams, review, work, probes, data_cache, git, repo):
                      'to reach into the first one.</div>')
     else:
         parts.append('<ul class="wti-recent-list">')
-        tier_lbl = {2: "sample", 1: "probe", 0: "repo"}
+        # Beginner-UX pass commit #3: chip labels renamed from jargon
+        # (sample/probe) to plain English (peek/metadata).
+        tier_lbl = {2: "data peek", 1: "metadata", 0: "repo"}
         for s in signals[:10]:
             when_str = _rel_time_str(s["when"]) if s.get("when") else ""
             when_html = (f'<div class="wti-when">{_esc(when_str)}</div>'
@@ -5234,8 +5272,10 @@ LSCAPE_TIER_STROKE = {
 LSCAPE_TIER_LABEL = {
     0: "untouched",
     1: "repo evidence",
-    2: "probed",
-    3: "sampled",
+    # Beginner-UX pass commit #3: rename jargon "probed"/"sampled" -> plain
+    # English "metadata fetched" / "data peeked".
+    2: "metadata fetched",
+    3: "data peeked",
 }
 
 def _prog_tier(fams_in_prog, work, probes, data_cache):
@@ -5471,7 +5511,7 @@ def build_landscape_viz(fams, work, probes, data_cache):
         f'viewBox="0 0 {LSCAPE_SVG_W} {LSCAPE_SVG_H}" '
         f'width="100%" height="{LSCAPE_SVG_H}" role="img" '
         f'aria-label="Squarified treemap of Census products, grouped by '
-        f'kind and program.">',
+        f'dataset type and program.">',
     ]
     fallback_html_parts = []
     prog_boxes_rendered = 0
@@ -5579,10 +5619,11 @@ def build_landscape_viz(fams, work, probes, data_cache):
             f'style="background:{LSCAPE_TIER_FILL[tier]};'
             f'border-color:{LSCAPE_TIER_STROKE[tier]}"></span>'
             f'{LSCAPE_TIER_LABEL[tier]} ({tier_counts[tier]})</span>')
+    # Beginner-UX pass commit #3: rename visible "kind" -> "dataset type".
     caption = ('Every Census product family from the API catalog, grouped by '
-               'kind and program. Rectangle area is proportional to product '
-               'count (squarified treemap - Bruls et al. 2000); color shows '
-               'the deepest team-reach tier anywhere in the slice. '
+               'dataset type and program. Rectangle area is proportional to '
+               'product count (squarified treemap - Bruls et al. 2000); color '
+               'shows the deepest team-reach tier anywhere in the slice. '
                '<b>Click any program to jump to the matching products.</b>')
 
     return ('<div class="lscape-section">'
@@ -5593,8 +5634,9 @@ def build_landscape_viz(fams, work, probes, data_cache):
             + '<div class="lscape-legend">'
             + "".join(legend_bits)
             + f'<span style="margin-left:auto">Team reach: {touched_total} '
-              f'of {len(fams)} products touched &middot; {sampled_total} sampled '
-              f'&middot; {prog_boxes_rendered} program boxes rendered</span>'
+              f'of {len(fams)} products touched &middot; {sampled_total} '
+              f'with a data peek &middot; {prog_boxes_rendered} program '
+              f'boxes rendered</span>'
             '</div></div>')
 
 def _all_flex_fallback(by_kind, kind_order, work, probes, data_cache):
@@ -5783,10 +5825,12 @@ def render(fams, review, work, worklog, notebooks, probes, repo_name, catnote, o
     n_am = sum(1 for f in fams.values()
                if _is_actively_managed(f, review.get(f["path"], {})))
     if n_am:
-        # Beginner-UX pass commit #2: gloss() tooltip on first "Actively managed"
-        # appearance. Post-#3 rename, the visible text becomes plain English but
-        # the tooltip machinery keeps working via a lookup-key alias.
-        tabs.append(f'<button class="tab tab-am" data-k="am">Actively managed'
+        # Beginner-UX pass commit #2 + #3: gloss() tooltip on the first mention;
+        # rename visible tab label from "Actively managed" (jargon) to "Team is
+        # working on" (plain English). Internal data-k="am" and CSS classes
+        # tab-am / panel-am are unchanged so URL hash + CSS visibility rules
+        # keep working.
+        tabs.append(f'<button class="tab tab-am" data-k="am">Team is working on'
                     f'{gloss("actively managed")}'
                     f'<span class="n">{n_am}</span></button>')
         panels.append('<div class="panel panel-am" id="panel-am">'
