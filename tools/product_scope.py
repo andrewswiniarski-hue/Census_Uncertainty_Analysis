@@ -2218,6 +2218,23 @@ footer{padding:22px 44px;color:var(--muted);font-size:11.5px;}
      font-weight:700;margin-right:2px;}
 .ql-sep{color:#B8BFCE;margin:0 2px;}
 .ql-nonapi{font-size:11px;color:#8a4d1c;font-style:italic;margin:4px 0;}
+/* Reframe pass commit #5: reframed TL;DR lines. `.ql-desc` renders the
+   catalog description (moved up from the drill-down); `.ql-inside` styles
+   the "what's inside" line so its trailing tier chip sits flush-right.
+   `.tier-chip.tier-mini` is the shrunken cache-tier marker at the end of
+   the "what's inside" line - readable but not the visual anchor it was
+   pre-reframe. `.ql-d-reviewer` is the stage+role chip row promoted into
+   the drill-down header. */
+.ql-desc{font-size:11.5px;color:var(--muted);line-height:1.45;margin:3px 0 2px;
+     padding:3px 8px;font-style:italic;overflow-wrap:anywhere;}
+.ql-inside{display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
+.ql-tier-tail{margin-left:auto;}
+.tier-chip.tier-mini{font-size:9px;padding:1px 6px;font-weight:600;
+     opacity:0.85;text-transform:lowercase;letter-spacing:.02em;}
+.ql-d-reviewer{display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+     padding:6px 8px;margin:2px 0 6px;background:#F6F7FA;border-radius:5px;
+     border-left:3px solid var(--line);}
+.ql-d-reviewer .ql-d-cap{margin-bottom:0;flex:0 0 auto;}
 /* More-details toggle (Phase 4b #3). Native <details>/<summary>: works with
    JS off; the localStorage persistence in the inline script layers on top.
    Chevron rotates purely in CSS on open. Expanded background is tinted with
@@ -3409,9 +3426,12 @@ def _quick_look_tier(f, probe_entry, cache_entry):
         return (1, "Cached: probe", "tier-probe")
     return (0, "Cached: catalog", "tier-catalog")
 
-def _ql_tier0_line(f):
-    """Tier-0 TL;DR line: catalog-only facts, one compact line. Every card
-    shows this regardless of cache state. Zero API cost."""
+def _ql_what_it_is(f):
+    """Line 1 of the reframed TL;DR (reframe pass commit #5): 'what it is'.
+    Compact one-liner of family, agency, kind, and vintages. Zero API cost -
+    everything comes from the catalog record. Replaces the pre-reframe
+    tier-chip-and-desc header as the visual anchor for a newcomer's first
+    glance ('this product IS X')."""
     bits = []
     fam = f.get("group") or ""
     if fam:
@@ -3430,6 +3450,87 @@ def _ql_tier0_line(f):
         # the More-details block.
         bits.append(f'<span class="ql-k">Spatial</span> {_esc(spatial[0])}')
     return ' <span class="ql-sep">&middot;</span> '.join(bits)
+
+def _ql_what_is_inside(f, probe_entry, cache_entry):
+    """Line 2 of the reframed TL;DR: 'what's inside'. Answers 'what would I
+    find if I opened this product?'. Composition depends on how far the team
+    has reached into the product:
+      * Always: geography link (verified levels if probed; otherwise a
+        placeholder saying we haven't probed yet).
+      * If probed: variable + MOE + allocation counts.
+      * If sampled: rows x cols shape + missingness flag + top numeric range.
+    Falls back gracefully - a non-API product with no probe just says so.
+    """
+    bits = []
+    # Geography: sample counts > declared probe levels > 'not probed' fallback.
+    geo = (cache_entry or {}).get("geography") or {}
+    if geo:
+        entries = sorted(geo.items(),
+                         key=lambda kv: -int(kv[1].get("distinct_populated", 0)))
+        show = entries[:4]
+        parts = [f'{int(v.get("distinct_populated", 0)):,} {_esc(k)}'
+                 for k, v in show]
+        suffix = " ..." if len(entries) > len(show) else ""
+        bits.append('<span class="ql-k">Populated geographies</span> '
+                    + ", ".join(parts) + suffix)
+    elif probe_entry and probe_entry.get("ok"):
+        levels = probe_entry.get("levels") or []
+        if levels:
+            preview = ", ".join(_esc(x) for x in levels[:6])
+            if len(levels) > 6: preview += " ..."
+            bits.append(f'<span class="ql-k">Geography levels</span> {preview}')
+    elif f.get("variables_url"):
+        # We know an API endpoint exists but nobody has probed yet.
+        bits.append('<span class="ql-k">Geography</span> '
+                    '<span class="ql-muted">not yet probed</span>')
+    else:
+        # Non-API product - no way to enumerate levels without a download.
+        bits.append('<span class="ql-k">Geography</span> '
+                    '<span class="ql-muted">bulk-download product</span>')
+    # Probe counts, if we have them.
+    if probe_entry and probe_entry.get("ok"):
+        if probe_entry.get("variables") is not None:
+            bits.append(f'{int(probe_entry["variables"]):,} variables')
+        if probe_entry.get("moe_variables"):
+            bits.append(f'{int(probe_entry["moe_variables"]):,} MOE vars')
+        if probe_entry.get("allocation_group_count"):
+            bits.append(f'{int(probe_entry["allocation_group_count"])} alloc groups')
+    # Sample shape.
+    if cache_entry:
+        shape = cache_entry.get("shape") or [0, 0]
+        rows = int(shape[0]) if shape else 0
+        cols = int(shape[1]) if shape else 0
+        bits.append(f'sample: {rows:,} rows &times; {cols:,} cols')
+        cols_dict = cache_entry.get("columns", {}) or {}
+        over30 = sum(1 for c in cols_dict.values() if c.get("flag_missing_over_30"))
+        if over30:
+            bits.append(f'{over30} col{"s" if over30 != 1 else ""} &gt; 30% missing')
+        top_name, top_num = _ql_top_numeric_col(cache_entry)
+        if top_name and top_num:
+            bits.append(f'<span class="ql-k">{_esc(top_name)}</span> '
+                        f'{_fmt_num(top_num.get("min"))} &ndash; '
+                        f'{_fmt_num(top_num.get("max"))}')
+    return ' <span class="ql-sep">&middot;</span> '.join(bits)
+
+def _ql_description_line(f):
+    """Line 3 of the reframed TL;DR: catalog `description` truncated to fit on
+    one visual line. Many products have a Bureau-written description that
+    reads well as a one-liner; it was buried in the More-details drill-down
+    before the reframe. Returns '' when the catalog carries no description."""
+    desc = (f.get("desc") or "").strip()
+    if not desc: return ""
+    # Truncate at word boundary near 220 chars for one-line readability.
+    if len(desc) > 220:
+        cut = desc[:217]
+        sp = cut.rfind(" ")
+        if sp > 160: cut = cut[:sp]
+        desc = cut.rstrip(".,;: ") + "..."
+    return _esc(desc)
+
+# Kept as a stable back-compat alias - the pre-reframe callers (and any external
+# probe of the module) still see _ql_tier0_line. Semantically identical to the
+# renamed helper above (still catalog-only, one compact line).
+_ql_tier0_line = _ql_what_it_is
 
 def _ql_tier1_line(probe_entry, cache_entry):
     """Tier-1 TL;DR line: probed metadata condensed to one glance.
@@ -3766,76 +3867,89 @@ def _insight_row_html(ins, kind="drill"):
             f'</div></li>')
 
 def render_quick_look(f, probe_entry, cache_entry, insights=None,
-                       uncertainty_metrics=""):
-    """One card's Quick Look branch. Always shows a compact 2-3 line TL;DR:
+                       uncertainty_metrics="", review_entry=None):
+    """One card's Quick Look branch. Reframe pass commit #5: TL;DR now leads
+    with WHAT the product IS and WHAT'S INSIDE - not the tier / stage /
+    composite-role decision chips that dominated pre-reframe.
 
-      * Line 1 (always): tier chip + Tier-0 catalog facts.
-      * Line 2 (if probed): condensed probe metadata.
-      * Line 3 (if sampled): sample shape + missingness + headline numeric.
-      * Line 4 (Phase 5 #6, if any insights): compact top-2 feed with a
-        `<N more →` button that programmatically opens the drill-down when
-        the reader wants the full thread.
+    Line order:
+      1. What it is  - family, agency, kind, vintages (always visible).
+      2. What's inside - geography levels + probe/sample counts if available
+         (always visible; falls back to 'not yet probed' when we haven't
+         reached the product yet). The cache-tier is shown as a small trailing
+         marker on this line - readable but not the visual anchor.
+      3. Description - one-line catalog description (~200 chars), if present.
+         Previously buried in the drill-down.
+      4. Insights TL;DR (Phase 5 #6) - unchanged.
 
-    Below the TL;DR sits a native <details>/<summary> toggle. Collapsed by
-    default so the reader can scan a page of cards without cognitive load;
-    expanding it drills into the full catalog description, probe detail
-    (allocation-group names, replicate groups, all declared geography
-    levels), the sample shape header + full EDA tables (columns, numerics,
-    top categoricals, geography breakdown, sparklines), the FULL insights
-    feed (Phase 5 #6), and - when unavailable - copyable --probe/--sample
-    commands. The toggle shape is intentionally identical regardless of tier
-    so the reader learns "drill is always here" (Phase 4b #6).
+    Below the TL;DR sits the native <details>/<summary> toggle. Now also
+    carries the demoted Stage + Composite-role chips as a small header row
+    at the top of the drill-down, so a reviewer who needs those signals has
+    them one click away without their loudness dominating the browse view.
 
-    insights: list of insight dicts (from review[path]["insights"]).
+    insights:     list of insight dicts (from review[path]["insights"]).
+    review_entry: full review dict for this path; used to pull stage/role
+                   into the drill-down header. Optional for back-compat.
     """
     tier, chip_label, chip_class = _quick_look_tier(f, probe_entry, cache_entry)
     non_api = not f.get("variables_url")
 
-    chip = f'<span class="tier-chip {chip_class}">{_esc(chip_label)}</span>'
-    tier_desc = {
-        0: "catalog record only",
-        1: "API probe results cached",
-        2: "sample fetched and EDA cached",
-    }[tier]
+    parts = []
+    # Line 1: What it is (catalog facts). Always visible; visual anchor.
+    parts.append('<div class="ql-line ql-t0">' + _ql_what_it_is(f) + '</div>')
 
-    parts = [
-        f'<div class="ql-head">{chip}'
-        f'<span class="ql-sub">{_esc(tier_desc)}</span></div>'
-    ]
+    # Line 2: What's inside (geography + counts). Always visible. Tier chip
+    # rides at the end as a subtle marker - keeps the color-tier signal for
+    # readers who've learned it, without leading with it.
+    inside = _ql_what_is_inside(f, probe_entry, cache_entry)
+    tier_marker = (f'<span class="tier-chip tier-mini {chip_class}" '
+                   f'title="{_esc(chip_label)}">'
+                   f'{_esc(chip_label.split(":")[-1].strip())}</span>')
+    tier_line_class = {0: "ql-t0", 1: "ql-t1", 2: "ql-t2"}[tier]
+    parts.append(f'<div class="ql-line {tier_line_class} ql-inside">'
+                 f'{inside} <span class="ql-tier-tail">{tier_marker}</span></div>')
 
-    # Line 1 - always visible.
-    parts.append('<div class="ql-line ql-t0">' + _ql_tier0_line(f) + '</div>')
+    # Line 3: Catalog description (one line, ~200 char cap). Skipped when the
+    # catalog carries no description (rare but possible).
+    desc = _ql_description_line(f)
+    if desc:
+        parts.append(f'<div class="ql-desc">{desc}</div>')
 
-    # Line 2 - only if we have real probe data.
-    t1 = _ql_tier1_line(probe_entry, cache_entry)
-    if t1:
-        parts.append('<div class="ql-line ql-t1">' + t1 + '</div>')
-
-    # Line 3 - only if a sample landed.
-    t2 = _ql_tier2_line(cache_entry)
-    if t2:
-        parts.append('<div class="ql-line ql-t2">' + t2 + '</div>')
-
-    # Non-API products get a one-line 'why there's no probe/sample' note in
-    # the TL;DR - stays compact but tells the reader why the tier is stuck at 0.
+    # Non-API products still get a one-line explanatory note so a reader
+    # doesn't misread "not yet probed" as a missed run.
     if tier == 0 and non_api:
-        parts.append('<div class="ql-nonapi">Not sample-able via API '
-                     '(bulk-download product - e.g. TIGER shapefiles, DAS demo).</div>')
+        parts.append('<div class="ql-nonapi">Bulk-download product - not '
+                     'sample-able via API (e.g. TIGER shapefiles, DAS demo).</div>')
 
-    # Phase 5 #6 - top-2 insights as a compact sub-line at the bottom of the
-    # TL;DR pack. The 'N more' button opens the drill-down.
+    # Insights TL;DR (Phase 5 #6). Unchanged.
     insights = list(insights or [])
     tldr_ins = _ql_insights_tldr_html(insights)
     if tldr_ins:
         parts.append(tldr_ins)
 
     # More-details toggle. Native <details>/<summary> - works without JS.
-    # A tier-flavoured wrapper class shades the expanded background so the
-    # visual link to the TL;DR line's stripe is preserved on drill-in.
     tier_slug = {0: "ql-d-tier0", 1: "ql-d-tier1", 2: "ql-d-tier2"}[tier]
-    details_body = _ql_details_html(f, probe_entry, cache_entry, tier, non_api,
-                                     insights=insights,
-                                     uncertainty_metrics=uncertainty_metrics)
+    # Drill-down now carries the demoted reviewer chips as a small header.
+    r = review_entry or {}
+    st = r.get("stage", "cataloged")
+    role = effective_role(r)
+    demoted_chips = []
+    stage_chip_color = "#F5D77A" if st == "focus" else "#1F2A5C"
+    demoted_chips.append(f'<span class="stagechip" '
+                         f'style="background:{STAGE_COLORS[st]};'
+                         f'color:{stage_chip_color}">'
+                         f'{STAGE_LABELS[st]}</span>')
+    if role:
+        role_lbl = COMPOSITE_ROLE_LABELS.get(role, role)
+        note = r.get("composite_role_note", "")
+        demoted_chips.append(
+            f'<span class="rolechip" title="{_esc(note)}">{_esc(role_lbl)}</span>')
+    drill_header = ('<div class="ql-d-reviewer">'
+                    '<span class="ql-d-cap" style="margin-right:8px">Review status</span>'
+                    + "".join(demoted_chips) + '</div>')
+    details_body = drill_header + _ql_details_html(
+        f, probe_entry, cache_entry, tier, non_api,
+        insights=insights, uncertainty_metrics=uncertainty_metrics)
     parts.append(
         f'<details class="ql-details {tier_slug}" data-product-id="{_esc(f["path"])}">'
         f'<summary class="ql-summary" title="Toggle drill-down (press E when focused)">'
@@ -3876,14 +3990,14 @@ def product_row(f, review, work, probes, ctx=None):
     w = work.get(f["product"], {}) if f["product"] else {}
     ws = w.get("status", 0)
     finds = [x for x in FINDINGS if x["family"] == f["path"]]
-    chipcolor = "#F5D77A" if st == "focus" else "#1F2A5C"
 
-    mini = (f'<span class="stagechip" style="background:{STAGE_COLORS[st]};color:{chipcolor}">'
-            f'{STAGE_LABELS[st]}</span><span class="workchip w{ws}">{STATUS_LABELS[ws]}</span>')
-    role = effective_role(r)  # feature #7: human-set, note required
-    if role:
-        role_lbl = COMPOSITE_ROLE_LABELS.get(role, role)
-        mini += f'<span class="rolechip" title="{_esc(r.get("composite_role_note",""))}">{_esc(role_lbl)}</span>'
+    # Reframe pass commit #5: pcard mini now carries only the discovery-oriented
+    # signals - work depth (how far the team has reached) and any curated
+    # insights count. Stage chip + Composite role chip demoted into the Quick
+    # Look drill-down where the review workflow lives. The pcard's left border
+    # keeps the stage color so a reader who's learned the color still gets
+    # peripheral signal without a loud chip.
+    mini = f'<span class="workchip w{ws}">{STATUS_LABELS[ws]}</span>'
     if finds:
         plural = "s" if len(finds) > 1 else ""
         mini += f'<span class="fcount">{len(finds)} insight{plural}</span>'
@@ -3904,7 +4018,8 @@ def product_row(f, review, work, probes, ctx=None):
     branches.append(render_quick_look(f, probes.get(f["path"]),
                                        _data_cache.get(f["path"]),
                                        insights=r.get("insights") or [],
-                                       uncertainty_metrics=r.get("uncertainty_metrics", "")))
+                                       uncertainty_metrics=r.get("uncertainty_metrics", ""),
+                                       review_entry=r))
 
     # Contextual affordances: state-driven copyable commands that fill
     # what would otherwise be a blank section. Rules in _affordances().
