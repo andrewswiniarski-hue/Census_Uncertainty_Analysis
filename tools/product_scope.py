@@ -2285,10 +2285,14 @@ footer{padding:22px 44px;color:var(--muted);font-size:11.5px;}
 .facet li.empty{opacity:.4;}
 .facet li.empty label{cursor:default;}
 .facet .fhint{font-size:10.5px;color:var(--muted);font-style:italic;padding:2px 4px 0;}
-/* Actively-managed toggle (post-audit UX pass #3). Sits above the facets so
-   the reviewer sees the default filter first. Default-on hides ~560 of 573
-   cards on page load; unchecking reveals all products in the tab. Persists
-   via localStorage under 'product_scope:show_all_products' (see the JS). */
+/* Reviewer-mode toggle (reframe pass commit #4). Sits above the facets and
+   inverts the pre-reframe default: default view now shows ALL 573 products in
+   4 kind panels; ticking the box flips into "reviewer mode" - hides everything
+   but Candidate/FOCUS/newly-changed cards, revealing the AM tab instead. The
+   goal is exploration first, review-workflow second. Persists via localStorage
+   under 'product_scope:show_all_products' (same key as the pre-reframe toggle
+   for continuity; JS handles the migration so returning readers don't get an
+   unexpected view change). */
 .am-toggle{padding:8px 6px 10px;margin:0 0 10px;border-bottom:1px solid var(--line);}
 .am-toggle label{display:flex;align-items:center;gap:5px;font-size:12px;
      color:var(--navy);font-weight:600;cursor:pointer;line-height:1.3;}
@@ -2296,21 +2300,37 @@ footer{padding:22px 44px;color:var(--muted);font-size:11.5px;}
 .am-toggle .lbl{flex:0 1 auto;}
 .am-toggle .cnt{color:var(--muted);font-weight:400;font-variant-numeric:tabular-nums;}
 .am-hint{font-size:10.5px;color:var(--muted);font-style:italic;margin-top:4px;line-height:1.4;}
-/* Default-hidden cards: only visible when the panel carries the show-all class. */
-.panel:not(.am-showall) .prod:not([data-actively-managed]){display:none;}
-/* Kind-tab collapse (Phase A #2). Default view: the AM tab + panel are
-   visible, the 4 kind tabs + panels are hidden. When the reviewer ticks
-   "Show all products" (the AM toggle), body.am-showall is set: the AM
-   tab/panel disappear and the 4 kind tabs/panels come back. This means
-   the tab bar in the default state carries just Home + one Products
-   tab (labelled "Actively managed"), which is the goal - the 4-way
-   split only appears once someone opts into browsing the full catalog. */
-body:not(.am-showall) .tab.tab-kind,
-body:not(.am-showall) .panel.panel-kind{display:none;}
-body.am-showall .tab.tab-am,
-body.am-showall .panel.panel-am{display:none;}
+/* Default: all cards visible. Only in reviewer mode (body.am-reviewer +
+   panel.am-reviewer) do non-actively-managed cards hide. The visibility rule
+   is opt-in - all-cards is the default and reviewer-mode is the ticked
+   state. Class renamed from the pre-reframe .am-showall to make the polarity
+   explicit at read time; the localStorage KEY is unchanged for continuity
+   and migrated in the toggle handler below. */
+.panel.am-reviewer .prod:not([data-actively-managed]){display:none;}
+/* Reframe pass commit #4: default view shows the 4 kind tabs + panels; when
+   the reviewer ticks the toggle, body.am-reviewer flips, kind tabs hide, and
+   the small AM tab/panel becomes visible. Inversion of the pre-reframe rules. */
+body.am-reviewer .tab.tab-kind,
+body.am-reviewer .panel.panel-kind{display:none;}
+body:not(.am-reviewer) .tab.tab-am,
+body:not(.am-reviewer) .panel.panel-am{display:none;}
 .facet .fhint code{font-family:ui-monospace,Consolas,monospace;font-size:10.5px;
      background:var(--ice);color:var(--navy);padding:0 4px;border-radius:3px;font-style:normal;}
+/* Reviewer-mode facets group (reframe pass commit #4). Collapsed by default so
+   the sidebar reads as discovery-first (Family, Agency, Frequency); tapping
+   the summary expands to reveal the Status / Composite role / Has evidence /
+   Has probe / Notebook validated facets used by the review workflow. */
+.facet-reviewer-group{margin-top:12px;padding-top:8px;border-top:1px solid var(--ice);}
+.facet-reviewer-group > summary{cursor:pointer;font-size:10px;color:var(--muted);
+     font-weight:800;letter-spacing:.09em;text-transform:uppercase;padding:4px 0;
+     list-style:none;}
+.facet-reviewer-group > summary::-webkit-details-marker{display:none;}
+.facet-reviewer-group > summary::marker{content:"";}
+.facet-reviewer-group > summary:before{content:"\25B8  ";color:var(--muted);}
+.facet-reviewer-group[open] > summary:before{content:"\25BE  ";color:var(--navy);}
+.facet-reviewer-group > summary:hover{color:var(--navy);}
+.facet-reviewer-group[open] > summary{color:var(--navy);}
+.facet-reviewer-body .facet{border-top-color:var(--ice);}
 @media(max-width:900px){.products-shell{flex-direction:column;} .facets{position:static;width:100%;flex:none;}}
 /* Insight feed (Phase 5 #6 dual-render). Read-only display used by the Quick
    Look drill-down. Writes come from `python tools/product_scope.py --review
@@ -2485,11 +2505,11 @@ function _applyFacets(panel){
   });
   var textInput = panel.querySelector('.filter input');
   var q = textInput ? textInput.value.toLowerCase().trim() : '';
-  // Actively-managed toggle: default is "hide non-actively-managed". The
-  // panel carries .am-showall when the user has ticked the toggle to see
-  // everything. Facet counts still recompute against the same visibility
-  // rule so the sidebar numbers match what the reader actually sees.
-  var amOnly = !panel.classList.contains('am-showall');
+  // Reviewer mode: default is show-all (post-reframe). Panels flagged with
+  // .am-reviewer restrict visibility to actively-managed cards only. Facet
+  // counts recompute against the same visibility rule so sidebar numbers
+  // match what the reader actually sees.
+  var amOnly = panel.classList.contains('am-reviewer');
   var shown = 0;
   var prods = panel.querySelectorAll('.prod');
   prods.forEach(function(p){
@@ -2536,65 +2556,78 @@ function _applyFacets(panel){
 document.querySelectorAll('.facet input').forEach(function(cb){
   cb.addEventListener('change', function(){ _applyFacets(cb.closest('.panel')); });
 });
-/* --- Actively-managed toggle (post-audit UX pass #3) ---
-   Default: only cards with data-actively-managed="true" (Candidate/FOCUS OR
-   an auto:divergence insight) are visible - the reader opens each Products
-   tab looking at ~5-10 cards to review, not 573. Ticking the box reveals
-   everything in the tab. State persists across page loads via localStorage
-   under the same 'product_scope:*' prefix the drill-down code uses. Fails
+/* --- Reviewer-mode toggle (reframe pass commit #4) ---
+   Default: ALL 573 cards visible, split by kind (4 tabs). Ticking the toggle
+   flips to reviewer mode - hides everything but Candidate/FOCUS/newly-changed
+   cards and swaps the kind tabs for a single "Actively managed" tab. Inverts
+   the pre-reframe default of "AM only on first load"; the goal now is
+   exploration first, review workflow second. State persists across page loads
+   via localStorage under the same 'product_scope:show_all_products' key the
+   pre-reframe toggle used. Semantic inversion is handled with a one-time
+   migration flag so returning readers keep whatever view they last had. Fails
    silently on hostile storage envs (in-private mode, quota, disabled). */
 (function(){
-  var LS_KEY = 'product_scope:show_all_products';
+  var LS_KEY       = 'product_scope:show_all_products';
+  var LS_MIGRATED  = 'product_scope:show_all_products:migrated_v2';
   function _lsGet(k){ try { return localStorage.getItem(k); } catch(_){ return null; } }
   function _lsSet(k, v){ try { localStorage.setItem(k, v); } catch(_){} }
-  var showAll = _lsGet(LS_KEY) === 'true';
-  /* Phase A #2 - body.am-showall drives the tab-visibility CSS: default
-     (unset) hides the 4 kind tabs and shows the AM tab, set flips it. Keep
-     in sync with the per-panel .am-showall class so the AM-toggle's original
-     per-card filter still works when the reviewer is on a kind tab. */
-  document.body.classList.toggle('am-showall', showAll);
+  /* Pre-reframe semantics: value=='true' meant "show all", default hide-AM.
+     Post-reframe semantics: value=='true' means "reviewer mode ON", default
+     show all. To keep returning readers on the same visual state without
+     flipping views under them, migrate on first load in the new version. */
+  var raw = _lsGet(LS_KEY);
+  if (_lsGet(LS_MIGRATED) !== 'true'){
+    if (raw === 'true')       { _lsSet(LS_KEY, 'false'); raw = 'false'; }
+    else if (raw === 'false') { _lsSet(LS_KEY, 'true');  raw = 'true';  }
+    _lsSet(LS_MIGRATED, 'true');
+  }
+  var reviewerMode = raw === 'true';
+  /* body.am-reviewer drives both tab-visibility CSS (hides kind tabs, shows AM
+     tab) and the per-panel filter that hides non-AM cards. Renamed from the
+     pre-reframe .am-showall to make the polarity explicit at read time. */
+  document.body.classList.toggle('am-reviewer', reviewerMode);
   document.querySelectorAll('.panel').forEach(function(panel){
     if (!panel.querySelector('.am-cb')) return;   /* Home tab has no toggle */
-    if (showAll) panel.classList.add('am-showall');
-    panel.querySelectorAll('.am-cb').forEach(function(cb){ cb.checked = showAll; });
+    panel.classList.toggle('am-reviewer', reviewerMode);
+    panel.querySelectorAll('.am-cb').forEach(function(cb){ cb.checked = reviewerMode; });
   });
-  /* If the persisted state says show-all, the server-rendered "on" tab
-     (Home by default) stays put - Home is always visible. But if we ever
-     land with the AM tab pre-activated and the toggle set to show-all, that
-     tab would be display:none. Defensive: pick a visible fallback. */
+  /* Server-renders the Home tab as active on load. When the persisted state
+     puts us in reviewer mode but the currently-active tab (defensive fallback
+     for future changes) is a kind tab, jump to the AM tab so a hidden tab
+     doesn't dead-end the reader. Symmetric case handled too. */
   var activeInit = document.querySelector('.tab.on');
-  if (activeInit && showAll && activeInit.classList.contains('tab-am')){
-    var firstKindInit = document.querySelector('.tab.tab-kind');
-    if (firstKindInit) firstKindInit.click();
-  } else if (activeInit && !showAll && activeInit.classList.contains('tab-kind')){
+  if (activeInit && reviewerMode && activeInit.classList.contains('tab-kind')){
     var amInit = document.querySelector('.tab.tab-am');
     if (amInit) amInit.click();
+  } else if (activeInit && !reviewerMode && activeInit.classList.contains('tab-am')){
+    var firstKindInit = document.querySelector('.tab.tab-kind');
+    if (firstKindInit) firstKindInit.click();
   }
   document.querySelectorAll('.am-cb').forEach(function(cb){
     cb.addEventListener('change', function(){
-      var on = cb.checked;
-      _lsSet(LS_KEY, on ? 'true' : 'false');
-      /* Body class first - drives the tab collapse. */
-      document.body.classList.toggle('am-showall', on);
-      /* Update every products panel in sync so switching tabs keeps the
-         same view. The toggle lives inside each panel's sidebar, but the
-         visibility rule is panel-scoped via a CSS class (.am-showall). */
+      var reviewer = cb.checked;
+      _lsSet(LS_KEY, reviewer ? 'true' : 'false');
+      /* Body class first - drives the tab collapse via CSS. */
+      document.body.classList.toggle('am-reviewer', reviewer);
+      /* Update every products panel in sync so switching tabs keeps the same
+         view. The toggle lives inside each panel's sidebar; the visibility
+         rule is panel-scoped via .am-reviewer. */
       document.querySelectorAll('.panel').forEach(function(panel){
         if (!panel.querySelector('.am-cb')) return;
-        panel.classList.toggle('am-showall', on);
-        panel.querySelectorAll('.am-cb').forEach(function(x){ x.checked = on; });
+        panel.classList.toggle('am-reviewer', reviewer);
+        panel.querySelectorAll('.am-cb').forEach(function(x){ x.checked = reviewer; });
         _applyFacets(panel);
       });
       /* Tab-switch if the currently active tab just got hidden. Ticking
-         "Show all" while sitting on the AM tab -> jump to the first kind
-         tab. Unticking while on a kind tab -> jump to the AM tab. */
+         reviewer mode while on a kind tab -> jump to the AM tab. Unticking
+         while on the AM tab -> jump to the first kind tab. */
       var active = document.querySelector('.tab.on');
       if (!active) return;
-      var hideActive = (on && active.classList.contains('tab-am')) ||
-                       (!on && active.classList.contains('tab-kind'));
+      var hideActive = (reviewer && active.classList.contains('tab-kind')) ||
+                       (!reviewer && active.classList.contains('tab-am'));
       if (!hideActive) return;
-      var target = on ? document.querySelector('.tab.tab-kind')
-                      : document.querySelector('.tab.tab-am');
+      var target = reviewer ? document.querySelector('.tab.tab-am')
+                            : document.querySelector('.tab.tab-kind');
       if (target) target.click();
     });
   });
@@ -2618,9 +2651,9 @@ document.querySelectorAll('.filter input').forEach(function(inp){
     var panel = inp.closest('.panel'), shown = 0;
     /* If any facet checkboxes are active, defer to the facet applier so text+facets combine. */
     if (panel.querySelector('.facet input:checked')) { _applyFacets(panel); return; }
-    /* Same story if the actively-managed toggle is on (default) - defer to
-       the facet applier so its combined visibility rule fires. */
-    if (!panel.classList.contains('am-showall')) { _applyFacets(panel); return; }
+    /* Same story if reviewer mode is on (opt-in post-reframe) - defer to the
+       facet applier so its combined visibility rule fires. */
+    if (panel.classList.contains('am-reviewer')) { _applyFacets(panel); return; }
     panel.querySelectorAll('.prod').forEach(function(p){
       var hit = !q || p.dataset.s.indexOf(q) !== -1;
       p.style.display = hit ? '' : 'none';
@@ -2723,11 +2756,12 @@ document.querySelectorAll('.filter input').forEach(function(inp){
     e.preventDefault();
     var prog = box.getAttribute('data-landscape-prog');
     if (!prog) return;
-    /* Ensure the reader can see all matching cards: flip on show-all if
-       the AM-only default is filtering some out. */
-    if (!document.body.classList.contains('am-showall')){
+    /* Ensure the reader can see all matching cards: if reviewer mode is on,
+       flip it off so non-AM cards become visible. Default view already shows
+       all cards. */
+    if (document.body.classList.contains('am-reviewer')){
       var cb = document.querySelector('.am-cb');
-      if (cb){ cb.checked = true;
+      if (cb){ cb.checked = false;
         cb.dispatchEvent(new Event('change', {bubbles: true})); }
     }
     /* Prefer whichever kind panel actually contains this program's cards.
@@ -2797,11 +2831,12 @@ document.querySelectorAll('.filter input').forEach(function(inp){
     /* Which panel is this card in? */
     var panel = card.closest('.panel');
     if (panel){
-      /* If card isn't actively-managed and body is in AM-only mode, flip. */
+      /* If card isn't actively-managed and body is in reviewer mode, flip
+         reviewer mode off so the target card becomes visible. */
       var isAM = card.dataset.activelyManaged === 'true';
-      if (!isAM && !document.body.classList.contains('am-showall')){
+      if (!isAM && document.body.classList.contains('am-reviewer')){
         var cb = document.querySelector('.am-cb');
-        if (cb){ cb.checked = true;
+        if (cb){ cb.checked = false;
           cb.dispatchEvent(new Event('change', {bubbles: true})); }
       }
       /* Switch to the panel's tab. */
@@ -2856,6 +2891,33 @@ def _vint(f):
     if len(v) > 1: return f"{v[0]}–{v[-1]}"
     return str(v[0]) if v else EMDASH
 
+def _frequency_bucket(f):
+    """Vintage-to-release-frequency heuristic. Coarse-grained by design - the
+    catalog doesn't carry an explicit frequency field, so we infer:
+       time-series flag -> 'time series'
+       0-1 vintages     -> 'single vintage'
+       spans >=10y with 1-2 vintages -> 'decennial'
+       spans <=10y with >=3 vintages -> 'annual (or near-annual)'
+       everything else  -> 'multi-year'
+    Used for the sidebar Frequency facet. If this proves noisy we can tighten
+    the thresholds; if it proves useless, drop the facet and move on.
+    """
+    if (f.get("flags") or {}).get("ts"):
+        return "time series"
+    v = sorted(f.get("vintages") or [])
+    if len(v) <= 1: return "single vintage"
+    span = v[-1] - v[0]
+    n = len(v)
+    if n >= max(3, int(span * 0.6)): return "annual"
+    if span >= 10 and n <= 2:         return "decennial"
+    return "multi-year"
+
+# TODO(reframe #4): geography-level facet needs probe data to be trustworthy;
+# the catalog's spatial field is usually just "United States". Once probes
+# cover more of the catalog, add a "geo_level" derived from probe["levels"]
+# to the facet_values dict + FACET_DEFS list. Skipping for now instead of
+# fabricating from repo-inferred keyword grepping (which would be misleading).
+
 def product_facet_values(f, review, work, probes, top_families, data_cache=None):
     """Facet metadata for one product family - emitted as data-* on the .prod card
     and consumed by the sidebar JS to filter and recount without a page reload.
@@ -2875,23 +2937,31 @@ def product_facet_values(f, review, work, probes, top_families, data_cache=None)
         "family":    family,
         "fbucket":   fbucket,
         "agency":    "U.S. Census Bureau",   # only agency in the current catalog
+        "freq":      _frequency_bucket(f),
         "evidence":  "yes" if ws > 0 else "no",
         "probe":     "yes" if probes.get(f["path"], {}).get("ok") else "no",
         "validated": "yes" if ws >= 4 else "no",
         "role":      role or "(unset)",
     }
 
+# FACET_DEFS entries: (key, label, sortmode, group).
+# group='primary'   -> discovery-oriented facets, always visible.
+# group='reviewer'  -> review-workflow facets, collapsed behind a details toggle
+#                      at the bottom of the sidebar (reframe pass commit #4).
 FACET_DEFS = [
-    ("stage",     "Status",              None),   # None -> use display order from below
-    ("fbucket",   "Family",              "count"), # sort by count desc
-    ("agency",    "Agency",              "count"),
-    ("evidence",  "Has repo evidence",   None),
-    ("probe",     "Has API probe",       None),
-    ("validated", "Notebook validated",  None),
-    ("role",      "Composite role",      "count"),
+    ("fbucket",   "Family",              "count",  "primary"),
+    ("agency",    "Agency",              "count",  "primary"),
+    ("freq",      "Frequency",           None,     "primary"),
+    ("stage",     "Status",              None,     "reviewer"),
+    ("role",      "Composite role",      "count",  "reviewer"),
+    ("evidence",  "Has repo evidence",   None,     "reviewer"),
+    ("probe",     "Has API probe",       None,     "reviewer"),
+    ("validated", "Notebook validated",  None,     "reviewer"),
 ]
 FACET_ORDER = {
     "stage":     ["focus", "candidate", "reviewed", "cataloged", "set-aside"],
+    "freq":      ["annual", "decennial", "multi-year",
+                  "single vintage", "time series"],
     "evidence":  ["yes", "no"],
     "probe":     ["yes", "no"],
     "validated": ["yes", "no"],
@@ -3953,42 +4023,42 @@ def build_facet_sidebar(prods, review, work, probes, top_families, data_cache=No
     `catalog_total` overrides the total count shown next to the toggle - used
     so the AM panel says "5 of 573" (the whole catalog) instead of "5 of 5".
     """
-    # ---- Actively-managed toggle (post-audit UX pass #3) --------------------
-    # Default on = hide cards that are neither Candidate/Focus nor carry an
-    # active auto:divergence insight, so the reviewer opens the tab looking at
-    # the ~5-10 products they should actually be doing something about. Toggle
-    # off = show all 573. State is persisted in localStorage so a page reload
-    # keeps the reviewer's choice; the JS wires the checkbox to _applyFacets()
-    # so the facet-count recomputation on the sidebar respects this too.
+    # ---- Reviewer-mode toggle (reframe pass commit #4) ----------------------
+    # Post-reframe default: SHOW all products (573). Ticking flips to reviewer
+    # mode - hides everything but Candidate/FOCUS/newly-changed cards. Same
+    # localStorage key as the pre-reframe toggle; the JS handles semantic
+    # migration so returning readers keep their last view. On the sidebar this
+    # toggle now advertises entry INTO the smaller review workflow, not out
+    # of it. Off (default) = 573 cards across 4 kind panels; On = ~5 AM cards.
     n_all = catalog_total if catalog_total is not None else len(prods)
     n_am  = sum(1 for f in prods
                  if _is_actively_managed(f, review.get(f["path"], {})))
     if am_view:
-        hint = (f'Currently viewing the {n_am} actively-managed product'
+        hint = (f'Currently in reviewer mode: {n_am} actively-managed product'
                 f'{"s" if n_am != 1 else ""} '
-                f'(Candidate / FOCUS / newly-changed). Tick to reveal the '
+                f'(Candidate / FOCUS / newly-changed). Untick to browse the '
                 f'full catalog ({n_all} products) split by kind.')
     else:
-        hint = (f'Default: only Candidate / FOCUS / newly-changed '
-                f'products ({n_am} of {n_all} on this tab). Tick to reveal '
-                f'the rest.')
+        hint = (f'Currently browsing all {n_all} products. Tick to switch to '
+                f'reviewer mode - only the {n_am} actively-managed card'
+                f'{"s" if n_am != 1 else ""} '
+                f'(Candidate / FOCUS / newly-changed).')
     am_toggle = (
         '<div class="am-toggle">'
         '<label><input type="checkbox" class="am-cb"> '
-        '<span class="lbl">Show all products</span> '
-        f'<span class="cnt">({n_all})</span></label>'
+        '<span class="lbl">Reviewer mode: only actively-managed products</span> '
+        f'<span class="cnt">({n_am} of {n_all})</span></label>'
         f'<div class="am-hint">{hint}</div>'
         '</div>')
     # Collect all facet values across the tab's products.
     rows = [product_facet_values(f, review, work, probes, top_families, data_cache)
             for f in prods]
-    blocks = []
-    for key, label, sortmode in FACET_DEFS:
+    def _facet_block(key, label, sortmode):
         vals = {}
         for r in rows:
             v = r.get(key, "")
             vals[v] = vals.get(v, 0) + 1
-        if not vals: continue
+        if not vals: return ""
         if key in FACET_ORDER:
             ordered = [v for v in FACET_ORDER[key] if v in vals]
             # any extras (defensive - a new stage etc.) sort at the end alphabetically
@@ -4009,17 +4079,35 @@ def build_facet_sidebar(prods, review, work, probes, top_families, data_cache=No
                 f'<span class="cnt">{n}</span></label></li>')
         note = ""
         if key == "role" and set(vals.keys()) == {"(unset)"}:
-            # Feature #7 not yet applied (nothing declared); leave a plain hint,
-            # no static tutorial - just a nudge that this facet becomes live once
-            # someone edits composite_role in product_review.json.
             note = '<div class="fhint">Set <code>composite_role</code> on a product to populate this facet.</div>'
-        blocks.append(
-            f'<div class="facet" data-f="{_esc(key)}">'
-            f'<h4>{_esc(label)}</h4>'
-            f'<ul>{"".join(items)}</ul>{note}</div>')
+        return (f'<div class="facet" data-f="{_esc(key)}">'
+                f'<h4>{_esc(label)}</h4>'
+                f'<ul>{"".join(items)}</ul>{note}</div>')
+
+    primary_blocks = []
+    reviewer_blocks = []
+    for key, label, sortmode, group in FACET_DEFS:
+        html = _facet_block(key, label, sortmode)
+        if not html: continue
+        if group == "reviewer":
+            reviewer_blocks.append(html)
+        else:
+            primary_blocks.append(html)
+    reviewer_section = ""
+    if reviewer_blocks:
+        # Reframe pass commit #4: reviewer-workflow facets (Status / Composite
+        # role / Has evidence / Has probe / Notebook validated) collapse behind
+        # a details toggle so the sidebar reads as discovery-first. Everything
+        # still filters exactly as before once expanded.
+        reviewer_section = (
+            '<details class="facet-reviewer-group">'
+            '<summary>Reviewer mode facets</summary>'
+            '<div class="facet-reviewer-body">' + "".join(reviewer_blocks) + '</div>'
+            '</details>')
     return ('<aside class="facets"><div class="facets-head">'
             '<h3>Filter</h3><a class="facet-clear" href="#" style="display:none">Clear filters</a>'
-            '</div>' + am_toggle + "".join(blocks) + '</aside>')
+            '</div>' + am_toggle + "".join(primary_blocks) + reviewer_section
+            + '</aside>')
 
 def build_kind_panel(kind, fams, review, work, probes, git=None, snapshot=None,
                      data_cache=None, eda_diffs=None):
