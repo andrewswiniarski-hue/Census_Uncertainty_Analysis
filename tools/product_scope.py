@@ -158,15 +158,15 @@ def insight_hash(source, text):
     return hashlib.sha256((str(source) + str(text)).encode("utf-8")).hexdigest()[:16]
 
 # Tabs, from the Bureau's own dataset flags. Not our categories.
-KINDS = ["Aggregate tables", "Microdata", "Time series", "Unflagged"]
+KINDS = ["Aggregate tables", "Microdata", "Time series", "Uncategorized"]
 KIND_BLURB = {
     "Aggregate tables": "Published estimate tables. This is where published uncertainty lives: "
                         "margins of error, allocation tables, variance replicate tables.",
     "Microdata":        "Record-level files. Nothing is published per estimate - replicate weights "
                         "ship with the data and the analyst computes their own standard errors.",
     "Time series":      "Multi-year series reached through a single endpoint.",
-    "Unflagged":        "The catalog record carries none of the Bureau's aggregate / microdata / "
-                        "time-series flags.",
+    "Uncategorized":    "Tool fallback bucket, not a Bureau label: the catalog record carries "
+                        "none of the aggregate / microdata / time-series flags.",
 }
 
 # Plain-English expansion of catalog path prefixes. Bureau program names, nothing more.
@@ -282,7 +282,7 @@ EXTRA_PRODUCTS = [
      "desc": "Demonstration products released so researchers can measure the effect of the 2020 "
              "Disclosure Avoidance System. Not an API product; downloaded by ingestion/pull_das_demo_nj.py."},
     {"path": "geo/tiger", "title": "TIGER / Cartographic Boundary Files",
-     "vintages": [2024], "kind": "Unflagged",
+     "vintages": [2024], "kind": "Uncategorized",
      "desc": "Geographic boundary files. Not an API dataset."},
 ]
 
@@ -511,7 +511,7 @@ def _kind_of(flags):
     if flags.get("micro"): return "Microdata"
     if flags.get("ts"):    return "Time series"
     if flags.get("agg"):   return "Aggregate tables"
-    return "Unflagged"
+    return "Uncategorized"
 
 def fetch_catalog(cache_path: Path, online: bool):
     data = None
@@ -5087,7 +5087,7 @@ def build_what_learned(fams, review, worklog, git):
 # SVG squarified treemap (Bruls, Huijsen & van Wijk 2000) rendering the whole
 # Census product catalog in two nested partitions:
 #   * Outer: 4 kind rectangles (Aggregate / Microdata / Time series /
-#     Unflagged) sized proportionally to product count.
+#     Uncategorized) sized proportionally to product count.
 #   * Inner: program rectangles within each kind, area-proportional to product
 #     count in that program.
 # Each program box carries a data-landscape-prog attribute (the delegated JS
@@ -5328,7 +5328,7 @@ def _lscape_prog_fallback_html(kind, progs, prog_names, work, probes,
     program chips so the reader still sees the vocabulary even if the
     proportional viz can't. `warn=True` emits a stderr line so a real
     failure is visible in the regen log; pass warn=False for the expected
-    tiny-kind case (e.g. Unflagged with one product)."""
+    tiny-kind case (e.g. Uncategorized with one product)."""
     if warn:
         print(f"  [landscape] squarified layout failed for kind '{kind}' - "
               f"falling back to flex row", file=sys.stderr)
@@ -5405,7 +5405,7 @@ def build_landscape_viz(fams, work, probes, data_cache):
         svg_parts.append(_lscape_kind_head_svg(kind, total_in_kind,
                                                 len(prog_names), kx, ky, kw))
         # Two failure modes: (a) inner rect too small to render (expected
-        # for tiny kinds like Unflagged with one product) - degrade silently
+        # for tiny kinds like Uncategorized with one product) - degrade silently
         # to a chip row; (b) zero total size (data-shape bug) - warn.
         too_small = inner_w <= 0 or inner_h <= 0
         no_sizes = not prog_sizes or sum(prog_sizes) <= 0

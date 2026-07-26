@@ -73,7 +73,7 @@ Skips the HTML report and writes only the export. Same catalog + review + eviden
 
 ## How the report is organised
 
-**Tabs** come from the Bureau's own dataset flags: **Aggregate tables** (published estimate tables — where margins of error live), **Microdata** (record-level files with replicate weights and no published per-estimate uncertainty), **Time series**, **Unflagged**. This split is not our opinion; it is `c_isAggregate` / `c_isMicrodata` / `c_isTimeseries` straight from the catalog, and it is the single most important distinction for this project.
+**Tabs** come from the Bureau's own dataset flags: **Aggregate tables** (published estimate tables — where margins of error live), **Microdata** (record-level files with replicate weights and no published per-estimate uncertainty), **Time series**, **Uncategorized** (tool fallback bucket for records that carry none of the three Bureau flags). This split is not our opinion; it is `c_isAggregate` / `c_isMicrodata` / `c_isTimeseries` straight from the catalog, and it is the single most important distinction for this project.
 
 Inside a tab: **program → subject → products**. The subject level only appears where a program spans more than one topic — Decennial opens as a flat list, ACS splits four ways. The filter box searches path, title, subject and program, and reaches through every level.
 
