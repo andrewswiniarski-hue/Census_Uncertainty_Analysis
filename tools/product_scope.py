@@ -2183,46 +2183,85 @@ TEMPLATE = r"""<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Product Scope - Census Uncertainty Analytics</title>
 <style>
-:root{--navy:#1F2A5C;--deep:#16204A;--gold:#C9A227;--ice:#EEF2FA;--line:#CADCFC;--ink:#22283B;--muted:#5A6072;}
+:root{
+  --navy:#1F2A5C;--deep:#16204A;--gold:#C9A227;--ice:#EEF2FA;--line:#CADCFC;--ink:#22283B;--muted:#5A6072;
+  /* ----- Radix Themes 9-step type scale (adopted 2026-07-26) -----
+     Rip-replaces the pre-existing 21-distinct-font-size mess. Every visible
+     size on the page now resolves to one of these tokens, and every line-
+     height is a 4px multiple that pairs with its step. The weight ladder is
+     400 body / 500 emphasis / 600 headline (no 300, no 700 anywhere).
+     Font stacks: sans (body/UI), mono (numbers, code, paths), display
+     (hero moments only - H1, section transitions, hero numbers).
+     External WOFF2 bundling for IBM Plex Sans / IBM Plex Mono / Fraunces
+     could not land in this commit: the sandbox blocks Google Fonts,
+     Fontsource, jsDelivr, unpkg, and raw.githubusercontent.com. Instead we
+     use tight system-font stacks that match the DNA of those faces (Plex
+     is a modern humanist grotesque, so Segoe UI Variable / system-ui hits
+     the same slot; Fraunces is a warm serif, Georgia is the closest
+     Windows/Mac shared fallback). When network access lands, one @font-face
+     block at the top of this <style> is the only change needed to bundle
+     the real WOFF2 files inline. */
+  --f-sans:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif;
+  --f-mono:ui-monospace,"Cascadia Mono","SF Mono",Consolas,"Liberation Mono",Menlo,monospace;
+  --f-display:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
+  /* Nine steps, each with its own paired line-height. */
+  --fs-1:12px; --lh-1:16px;   /* micro-labels, badges, source pointers        */
+  --fs-2:14px; --lh-2:20px;   /* metadata, table cells, secondary UI          */
+  --fs-3:16px; --lh-3:24px;   /* BODY default                                 */
+  --fs-4:18px; --lh-4:26px;   /* callouts, card titles                        */
+  --fs-5:20px; --lh-5:28px;   /* subheads                                     */
+  --fs-6:24px; --lh-6:32px;   /* section headers                              */
+  --fs-7:28px; --lh-7:36px;   /* panel titles                                 */
+  --fs-8:36px; --lh-8:40px;   /* hero secondary                               */
+  --fs-9:60px; --lh-9:60px;   /* hero primary number                          */
+  /* Weight ladder - ban 300 and 700; use 400/500/600 only. */
+  --w-body:400; --w-emph:500; --w-head:600;
+  /* Negative letter-spacing on headlines (Vercel Geist convention). */
+  --lsp-tight:-0.02em; --lsp-tighter:-0.03em;
+}
 *{box-sizing:border-box;margin:0;}
-body{font:14.5px/1.5 "Segoe UI",system-ui,sans-serif;color:var(--ink);background:#fff;padding:0 0 60px;}
+/* Base body: 16px/24 Radix step 3 sans, per the type system rip-replace. */
+body{font-family:var(--f-sans);font-size:var(--fs-3);line-height:var(--lh-3);font-weight:var(--w-body);color:var(--ink);background:#fff;padding:0 0 60px;font-feature-settings:"ss01","cv11";}
+/* Every headline gets weight 600 + tight tracking. 24px+ -> -.02em, 36px+ -> -.03em. */
+h1,h2,h3,.starthere .sh-title,.home-hero-p1 .hero-title,.wti-recent h3,.lscape-fallback-head{font-family:var(--f-display);font-weight:var(--w-head);letter-spacing:var(--lsp-tight);}
+h1{letter-spacing:var(--lsp-tighter);}
 header{background:var(--deep);color:#fff;padding:26px 44px 0;}
-.kicker{color:var(--gold);font-weight:700;font-size:11.5px;letter-spacing:.22em;text-transform:uppercase;}
-h1{font-family:Georgia,Cambria,serif;font-size:29px;margin:6px 0 4px;}
-header p{color:#CADCFC;font-size:13px;max-width:940px;}
+.kicker{color:var(--gold);font-weight:var(--w-head);font-size:var(--fs-2);letter-spacing:.22em;text-transform:uppercase;}
+h1{font-family:var(--f-display);font-size:var(--fs-7);margin:6px 0 4px;}
+header p{color:#CADCFC;font-size:var(--fs-2);max-width:940px;}
 .tabs{display:flex;gap:4px;margin-top:18px;flex-wrap:wrap;}
 .tab{padding:9px 17px;border-radius:8px 8px 0 0;background:#28356B;color:#CADCFC;cursor:pointer;
-     font-size:13px;font-weight:600;border:0;font-family:inherit;}
+     font-size:var(--fs-2);font-weight:var(--w-emph);border:0;font-family:inherit;}
 .tab .n{opacity:.65;font-weight:400;margin-left:5px;}
 .tab.on{background:#fff;color:var(--navy);}
 .wrap{padding:20px 44px;max-width:1300px;}
 .panel{display:none;} .panel.on{display:block;}
-.blurb{font-size:12.5px;color:var(--muted);background:var(--ice);border-left:3px solid var(--line);
+.blurb{font-size:var(--fs-2);color:var(--muted);background:var(--ice);border-left:3px solid var(--line);
        padding:8px 12px;border-radius:4px;margin-bottom:14px;max-width:920px;}
 .filter{margin:0 0 14px;}
-.filter input{width:340px;padding:7px 11px;border:1px solid var(--line);border-radius:7px;font:inherit;font-size:13px;}
-.filter span{font-size:11.5px;color:var(--muted);margin-left:10px;}
+.filter input{width:340px;padding:7px 11px;border:1px solid var(--line);border-radius:7px;font:inherit;font-size:var(--fs-2);}
+.filter span{font-size:var(--fs-2);color:var(--muted);margin-left:10px;}
 /* Phase A ceiling-push #2: keyboard-hint chip injected at load time under
    every products-panel filter input. Wraps if the filter row gets narrow. */
-.filter-kbd-hint{display:inline-block;font-size:10.5px;color:var(--muted);
+.filter-kbd-hint{display:inline-block;font-size:var(--fs-1);color:var(--muted);
      margin-left:12px;letter-spacing:.01em;}
-.filter-kbd-hint kbd{display:inline-block;padding:0 5px;font-family:ui-monospace,Consolas,monospace;
-     font-size:10px;background:var(--ice);color:var(--navy);border:1px solid var(--line);
-     border-radius:3px;box-shadow:inset 0 -1px 0 #CADCFC;font-weight:700;line-height:14px;
+.filter-kbd-hint kbd{display:inline-block;padding:0 5px;font-family:var(--f-mono);
+     font-size:var(--fs-1);background:var(--ice);color:var(--navy);border:1px solid var(--line);
+     border-radius:3px;box-shadow:inset 0 -1px 0 #CADCFC;font-weight:var(--w-head);line-height:14px;
      margin:0 1px;}
 /* Beginner-UX pass commit #2. First-visit "Start here" banner: dismissible via
    localStorage. Sits between the freshness bar and the tab panels. Renders on
    every page but hides itself once dismissed on this machine. */
 .starthere{background:#FBF8EC;border:1px solid var(--gold);border-radius:8px;
      padding:12px 46px 12px 16px;margin:14px 44px 0;max-width:1300px;
-     position:relative;font-size:13px;color:#4E3E11;line-height:1.55;}
+     position:relative;font-size:var(--fs-2);color:#4E3E11;line-height:1.55;}
 .starthere.dismissed{display:none;}
-.starthere .sh-title{font-family:Georgia,serif;color:var(--navy);font-size:15.5px;
-     font-weight:700;margin:0 0 5px;letter-spacing:.005em;}
+.starthere .sh-title{font-family:var(--f-display);color:var(--navy);font-size:var(--fs-3);
+     font-weight:var(--w-head);margin:0 0 5px;letter-spacing:.005em;}
 .starthere ol{margin:2px 0 0 22px;padding:0;}
 .starthere li{margin:3px 0;padding-left:2px;}
 .starthere .sh-dismiss{position:absolute;top:8px;right:10px;background:transparent;
-     border:0;color:var(--muted);font-size:16px;line-height:1;cursor:pointer;
+     border:0;color:var(--muted);font-size:var(--fs-3);line-height:1;cursor:pointer;
      padding:4px 6px;border-radius:4px;font-family:inherit;}
 .starthere .sh-dismiss:hover{background:var(--ice);color:var(--navy);}
 /* Phase-1 findings report hero card (2026-07-26). Sits at the top of the Home
@@ -2234,16 +2273,16 @@ header p{color:#CADCFC;font-size:13px;max-width:940px;}
      border:1.5px solid var(--gold);border-radius:10px;
      padding:18px 22px 20px;margin:0 0 26px;max-width:1020px;
      box-shadow:0 2px 6px rgba(201,162,39,0.14);position:relative;}
-.home-hero-p1 .hero-eyebrow{color:#7A5C0F;font-weight:700;font-size:10.5px;
+.home-hero-p1 .hero-eyebrow{color:#7A5C0F;font-weight:var(--w-head);font-size:var(--fs-1);
      letter-spacing:.16em;text-transform:uppercase;margin-bottom:6px;}
-.home-hero-p1 .hero-title{font-family:Georgia,serif;color:var(--navy);
-     font-size:19.5px;font-weight:700;line-height:1.28;margin:0 0 8px;}
-.home-hero-p1 .hero-title .hero-emoji{font-size:22px;margin-right:9px;
+.home-hero-p1 .hero-title{font-family:var(--f-display);color:var(--navy);
+     font-size:var(--fs-5);font-weight:var(--w-head);line-height:1.28;margin:0 0 8px;}
+.home-hero-p1 .hero-title .hero-emoji{font-size:var(--fs-6);margin-right:9px;
      vertical-align:-1px;}
-.home-hero-p1 .hero-body{color:#3A2E0B;font-size:13.5px;line-height:1.55;
+.home-hero-p1 .hero-body{color:#3A2E0B;font-size:var(--fs-2);line-height:1.55;
      margin:0 0 14px;max-width:820px;}
 .home-hero-p1 .hero-cta{display:inline-block;background:var(--navy);color:#fff;
-     text-decoration:none;font-weight:700;font-size:13px;letter-spacing:.02em;
+     text-decoration:none;font-weight:var(--w-head);font-size:var(--fs-2);letter-spacing:.02em;
      padding:9px 16px;border-radius:6px;
      box-shadow:0 1px 2px rgba(31,42,92,0.20);transition:background .12s ease-out;}
 .home-hero-p1 .hero-cta:hover{background:#0F1740;}
@@ -2251,7 +2290,7 @@ header p{color:#CADCFC;font-size:13px;max-width:940px;}
      outline-offset:3px;}
 .home-hero-p1 .hero-cta .arrow{margin-left:6px;}
 .home-hero-p1 .hero-meta{display:inline-block;margin-left:14px;color:#6B5518;
-     font-size:11.5px;font-style:italic;vertical-align:middle;}
+     font-size:var(--fs-2);font-style:italic;vertical-align:middle;}
 /* "Explore data" primary CTA (2026-07-26). Sits at the top of every card's
    Quick Look block so it's the first link a reviewer's eye goes to. Warmer
    than the neutral text around it and heavier than the secondary command
@@ -2263,26 +2302,26 @@ header p{color:#CADCFC;font-size:13px;max-width:940px;}
      gap:12px;flex-wrap:wrap;}
 .ql-dcgov-btn{display:inline-flex;align-items:center;gap:6px;
      background:var(--navy);color:#fff;text-decoration:none;
-     font-weight:700;font-size:12px;letter-spacing:.02em;
+     font-weight:var(--w-head);font-size:var(--fs-2);letter-spacing:.02em;
      padding:6px 12px;border-radius:5px;flex:0 0 auto;
      transition:background .12s ease-out;}
 .ql-dcgov-btn:hover{background:#0F1740;}
 .ql-dcgov-btn:focus-visible{outline:2px solid var(--gold);outline-offset:2px;}
 .ql-dcgov-btn .arrow{font-weight:400;}
-.ql-dcgov-tag{color:var(--muted);font-size:11.5px;line-height:1.35;flex:1;
+.ql-dcgov-tag{color:var(--muted);font-size:var(--fs-2);line-height:1.35;flex:1;
      min-width:220px;}
-.ql-dcgov-tag b{color:var(--navy);font-weight:600;}
+.ql-dcgov-tag b{color:var(--navy);font-weight:var(--w-emph);}
 /* Phase-1 report footer link on card drill-downs (2026-07-26). Small tinted
    row anchoring the drill-down back to the report section that covers this
    product. Same gold-family palette as the hero card so the two read as one
    system. */
 .ql-d-p1link{background:#FBF6E4;border:1px solid #E8D9A5;border-radius:5px;
-     padding:8px 11px;margin:8px 0 2px;font-size:12px;color:#4E3E11;
+     padding:8px 11px;margin:8px 0 2px;font-size:var(--fs-2);color:#4E3E11;
      line-height:1.45;}
-.ql-d-p1link .p1-label{color:#7A5C0F;font-weight:700;font-size:10.5px;
+.ql-d-p1link .p1-label{color:#7A5C0F;font-weight:var(--w-head);font-size:var(--fs-1);
      letter-spacing:.10em;text-transform:uppercase;margin-right:8px;}
 .ql-d-p1link a{color:var(--navy);text-decoration:none;
-     border-bottom:1px dotted #B69B45;font-weight:600;}
+     border-bottom:1px dotted #B69B45;font-weight:var(--w-emph);}
 .ql-d-p1link a:hover{color:#3A4890;border-bottom-style:solid;}
 /* Beginner-UX pass commit #2. Inline glossary tooltip. Circle-question after a
    term; hover reveals the definition. Pure CSS (no JS needed). ::after tooltip
@@ -2290,13 +2329,13 @@ header p{color:#CADCFC;font-size:13px;max-width:940px;}
    Falls back to native title= attribute in browsers without :hover (touch). */
 .gloss{display:inline-block;width:14px;height:14px;line-height:14px;text-align:center;
      background:var(--ice);color:var(--navy);border:1px solid var(--line);
-     border-radius:50%;font-size:9.5px;font-weight:700;font-style:normal;
+     border-radius:50%;font-size:var(--fs-1);font-weight:var(--w-head);font-style:normal;
      cursor:help;margin:0 3px;position:relative;vertical-align:2px;
-     font-family:"Segoe UI",system-ui,sans-serif;}
+     font-family:var(--f-sans);}
 .gloss:hover{background:var(--gold);color:#16204A;border-color:var(--gold);}
 .gloss::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 6px);
      left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;
-     font-size:11px;font-weight:400;text-align:left;line-height:1.4;
+     font-size:var(--fs-1);font-weight:400;text-align:left;line-height:1.4;
      padding:7px 10px;border-radius:5px;width:max-content;max-width:280px;
      white-space:normal;box-shadow:0 3px 12px rgba(0,0,0,.24);z-index:20;
      opacity:0;pointer-events:none;transition:opacity .14s ease-in .04s;}
@@ -2314,61 +2353,61 @@ header p{color:#CADCFC;font-size:13px;max-width:940px;}
 .ql-lm-wrap{background:#FBF8EC;border:1px solid var(--gold);border-radius:6px;
      padding:8px 10px;margin:2px 0 8px;}
 .ql-lm-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;}
-.ql-lm-btn{font:inherit;font-size:12.5px;font-weight:700;padding:7px 14px;
+.ql-lm-btn{font:inherit;font-size:var(--fs-2);font-weight:var(--w-head);padding:7px 14px;
      border:0;border-radius:6px;background:var(--gold);color:#16204A;
      cursor:pointer;line-height:1.3;letter-spacing:.01em;}
 .ql-lm-btn:hover{background:#B7912A;color:#fff;}
 .ql-lm-btn:focus-visible{outline:2px solid var(--navy);outline-offset:2px;}
 .ql-lm-btn.done{background:#5FA76F;color:#fff;}
-.ql-lm-note{font-size:11px;color:#8a4d1c;font-style:italic;flex:1;min-width:0;}
-.ql-lm-more{margin-top:8px;font-size:11px;color:var(--muted);}
-.ql-lm-more > summary{cursor:pointer;font-weight:600;color:var(--navy);
+.ql-lm-note{font-size:var(--fs-1);color:#8a4d1c;font-style:italic;flex:1;min-width:0;}
+.ql-lm-more{margin-top:8px;font-size:var(--fs-1);color:var(--muted);}
+.ql-lm-more > summary{cursor:pointer;font-weight:var(--w-emph);color:var(--navy);
      padding:2px 0;list-style:none;letter-spacing:.02em;}
 .ql-lm-more > summary::-webkit-details-marker{display:none;}
 .ql-lm-more > summary::marker{content:"";}
 .ql-lm-more > summary::before{content:"\25B8  ";color:var(--muted);}
 .ql-lm-more[open] > summary::before{content:"\25BE  ";color:var(--navy);}
 .ql-lm-more-body{padding:5px 4px 2px;}
-.ql-lm-sub{font-size:10px;color:var(--muted);font-weight:700;letter-spacing:.05em;
+.ql-lm-sub{font-size:var(--fs-1);color:var(--muted);font-weight:var(--w-head);letter-spacing:.05em;
      text-transform:uppercase;margin-bottom:2px;}
 /* Beginner-UX pass commit #5. "+ Add a note" button + hint. Small ice-blue
    button so it doesn't compete with the gold "Learn more" primary action;
    sits at the bottom of every card's insights feed. */
 .ql-addnote-wrap{display:flex;flex-wrap:wrap;align-items:center;gap:8px;
      padding:8px 4px 2px;margin-top:6px;border-top:1px dotted #E1E7F0;}
-.ql-addnote-btn{font:inherit;font-size:11.5px;font-weight:700;padding:5px 12px;
+.ql-addnote-btn{font:inherit;font-size:var(--fs-2);font-weight:var(--w-head);padding:5px 12px;
      border:1px solid var(--line);border-radius:5px;background:var(--ice);
      color:var(--navy);cursor:pointer;line-height:1.3;}
 .ql-addnote-btn:hover{background:var(--navy);color:#F5D77A;border-color:var(--navy);}
 .ql-addnote-btn:focus-visible{outline:2px solid var(--gold);outline-offset:2px;}
 .ql-addnote-btn.done{background:#5FA76F;color:#fff;border-color:#5FA76F;}
-.ql-addnote-hint{font-size:10.5px;color:var(--muted);flex:1;min-width:200px;
+.ql-addnote-hint{font-size:var(--fs-1);color:var(--muted);flex:1;min-width:200px;
      line-height:1.4;}
 .ql-addnote-hint code{background:var(--ice);color:var(--navy);
-     font-family:ui-monospace,Consolas,monospace;font-size:10px;padding:0 4px;
+     font-family:var(--f-mono);font-size:var(--fs-1);padding:0 4px;
      border-radius:3px;}
 /* .funnel / .fstep / .farrow / .f-cand / .f-focus removed Phase A #3
    alongside _build_reviewer_mode_details() — the pre-reframe funnel bar
    was 568 -> 0 -> 0 -> 5 -> 0 (depressing without being informative). */
-h2{font-family:Georgia,serif;color:var(--navy);font-size:20px;margin:26px 0 4px;}
-.sub{font-size:12px;color:var(--muted);margin-bottom:10px;max-width:900px;}
-table.rep{border-collapse:collapse;width:100%;max-width:1020px;font-size:13px;margin-bottom:6px;}
-table.rep th{text-align:left;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;
+h2{font-family:var(--f-display);color:var(--navy);font-size:var(--fs-5);margin:26px 0 4px;}
+.sub{font-size:var(--fs-2);color:var(--muted);margin-bottom:10px;max-width:900px;}
+table.rep{border-collapse:collapse;width:100%;max-width:1020px;font-size:var(--fs-2);margin-bottom:6px;}
+table.rep th{text-align:left;font-size:var(--fs-1);letter-spacing:.08em;text-transform:uppercase;
              color:var(--muted);border-bottom:2px solid var(--ice);padding:6px 9px;}
 table.rep td{border-bottom:1px solid var(--ice);padding:7px 9px;vertical-align:top;}
-.mono{font-family:ui-monospace,Consolas,monospace;font-size:11.5px;color:var(--muted);}
+.mono{font-family:var(--f-mono);font-size:var(--fs-2);color:var(--muted);}
 .gsec{margin:12px 0 6px;}
-.ghead{font-family:Georgia,serif;color:var(--navy);font-size:17px;cursor:pointer;padding:4px 0;border-bottom:2px solid var(--ice);}
+.ghead{font-family:var(--f-display);color:var(--navy);font-size:var(--fs-4);cursor:pointer;padding:4px 0;border-bottom:2px solid var(--ice);}
 .ghead:before{content:"\25BE  ";color:var(--gold);}
 .gsec.gfold .ghead:before{content:"\25B8  ";}
 .gsec.gfold .prod{display:none;} .gsec.gfold .psec{display:none;}
 .psec{margin:6px 0 6px 18px;}
-.phead{font-size:13px;font-weight:700;color:#50639B;cursor:pointer;padding:3px 0;border-bottom:1px solid var(--ice);}
+.phead{font-size:var(--fs-2);font-weight:var(--w-head);color:#50639B;cursor:pointer;padding:3px 0;border-bottom:1px solid var(--ice);}
 .phead:before{content:"\25BE  ";color:var(--line);}
 .psec.pfold .phead:before{content:"\25B8  ";}
 .psec.pfold .prod{display:none;}
-.phead em{font-style:normal;color:var(--muted);font-size:11px;margin-left:7px;font-weight:400;}
-.ghead em{font-family:"Segoe UI",sans-serif;font-style:normal;color:var(--muted);font-size:12px;margin-left:8px;}
+.phead em{font-style:normal;color:var(--muted);font-size:var(--fs-1);margin-left:7px;font-weight:400;}
+.ghead em{font-family:var(--f-sans);font-style:normal;color:var(--muted);font-size:var(--fs-2);margin-left:8px;}
 .prod{display:table;width:100%;margin:9px 0;}
 /* Phase A ceiling-push #2: subtle focus ring for keyboard j/k nav so the
    reader knows which card Enter would toggle. :focus-visible so a mouse
@@ -2380,20 +2419,20 @@ table.rep td{border-bottom:1px solid var(--ice);padding:7px 9px;vertical-align:t
 .pnode,.branches{display:table-cell;vertical-align:top;}
 .pnode{width:350px;min-width:350px;}
 .pcard{border:1px solid var(--line);border-left:6px solid var(--line);border-radius:8px;padding:9px 12px;cursor:pointer;background:#fff;}
-.pcard .path{font-family:ui-monospace,Consolas,monospace;font-size:12px;font-weight:700;color:var(--navy);word-break:break-all;}
-.pcard .title{font-size:11.5px;color:var(--muted);line-height:1.3;margin-top:1px;}
+.pcard .path{font-family:var(--f-mono);font-size:var(--fs-2);font-weight:var(--w-head);color:var(--navy);word-break:break-all;}
+.pcard .title{font-size:var(--fs-2);color:var(--muted);line-height:1.3;margin-top:1px;}
 .pcard .mini{margin-top:5px;}
 /* .qbox / #qbar (per-card probe checkbox + bottom-right queue slideout) removed
    in the beginner-UX pass (commit #1). The single-shot `--probe <path>` CLI +
    the per-card "Suggested next step" copy button are the one true path now. */
-.stagechip,.workchip,.kindchip,.rolechip{display:inline-block;padding:2px 9px;border-radius:10px;font-size:10px;
-      font-weight:700;border:1px solid var(--line);margin-right:5px;}
-.workchip{font-weight:600;}
-.kindchip{font-weight:600;background:#fff;color:var(--muted);}
-.rolechip{background:#F1E7C8;color:#6B4E11;border-color:var(--gold);font-weight:700;cursor:help;}
+.stagechip,.workchip,.kindchip,.rolechip{display:inline-block;padding:2px 9px;border-radius:10px;font-size:var(--fs-1);
+      font-weight:var(--w-head);border:1px solid var(--line);margin-right:5px;}
+.workchip{font-weight:var(--w-emph);}
+.kindchip{font-weight:var(--w-emph);background:#fff;color:var(--muted);}
+.rolechip{background:#F1E7C8;color:#6B4E11;border-color:var(--gold);font-weight:var(--w-head);cursor:help;}
 .w4{background:var(--navy);color:#F5D77A;} .w3{background:#50639B;color:#fff;} .w2{background:#8FA8D8;color:#16204A;}
 .w1{background:var(--ice);color:var(--navy);} .w0{background:#F6F7FA;color:#9AA0B0;}
-.fcount{font-size:10px;color:var(--gold);font-weight:700;}
+.fcount{font-size:var(--fs-1);color:var(--gold);font-weight:var(--w-head);}
 .branches{padding-left:34px;position:relative;}
 .prod.folded .branches{display:none;}
 .branch{position:relative;margin:0 0 8px 0;max-width:820px;}
@@ -2402,20 +2441,20 @@ table.rep td{border-bottom:1px solid var(--ice);padding:7px 9px;vertical-align:t
 .branch:first-child:after{top:16px;height:0;}
 .branch + .branch:after{top:-14px;height:30px;}
 .bcard{border:1px solid var(--line);border-radius:8px;padding:8px 12px;background:#fff;}
-.blabel{font-size:9.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-bottom:3px;}
-.unc{font-size:12px;background:var(--ice);border-left:3px solid var(--gold);padding:6px 9px;border-radius:4px;}
+.blabel{font-size:var(--fs-1);font-weight:var(--w-head);letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-bottom:3px;}
+.unc{font-size:var(--fs-2);background:var(--ice);border-left:3px solid var(--gold);padding:6px 9px;border-radius:4px;}
 .unc.todo{border-left-color:#c96a27;font-style:italic;color:#8a4d1c;}
-.desc{font-size:11.5px;color:var(--muted);line-height:1.45;}
+.desc{font-size:var(--fs-2);color:var(--muted);line-height:1.45;}
 .krow{display:table;width:100%;max-width:430px;border-collapse:separate;border-spacing:3px 0;margin-top:4px;}
-.kbox{display:table-cell;height:22px;border-radius:4px;text-align:center;vertical-align:middle;border:1px solid var(--line);font-size:8.5px;font-weight:600;width:20%;}
+.kbox{display:table-cell;height:22px;border-radius:4px;text-align:center;vertical-align:middle;border:1px solid var(--line);font-size:var(--fs-1);font-weight:var(--w-emph);width:20%;}
 .s0{background:#EDF0F7;color:#5A6072;} .s1{background:#CADCFC;color:#1F2A5C;} .s2{background:#8FA8D8;color:#16204A;}
 .s3{background:#50639B;color:#fff;} .s4{background:#1F2A5C;color:#F5D77A;}
-.inferred{font-size:10px;color:#8a4d1c;font-style:italic;margin-top:3px;}
-.receipts{font-size:10px;color:var(--muted);font-family:ui-monospace,Consolas,monospace;line-height:1.5;margin-top:5px;}
+.inferred{font-size:var(--fs-1);color:#8a4d1c;font-style:italic;margin-top:3px;}
+.receipts{font-size:var(--fs-1);color:var(--muted);font-family:var(--f-mono);line-height:1.5;margin-top:5px;}
 .receipt-link{color:#3A4890;text-decoration:none;border-bottom:1px dotted #8FA8D8;}
 .receipt-link:hover{color:var(--navy);border-bottom-style:solid;}
 /* Contextual affordances: state-driven copyable commands / JSON nudges. */
-.aff-row{padding:6px 8px;border-radius:5px;margin:4px 0;font-size:11.5px;line-height:1.4;
+.aff-row{padding:6px 8px;border-radius:5px;margin:4px 0;font-size:var(--fs-2);line-height:1.4;
      display:flex;flex-wrap:wrap;align-items:center;gap:8px;}
 .aff-row.aff-info{background:#F1F5FF;border-left:3px solid #8FA8D8;}
 .aff-row.aff-amber{background:#FBF0D6;border-left:3px solid #C9A227;color:#6E4E11;}
@@ -2425,62 +2464,62 @@ table.rep td{border-bottom:1px solid var(--ice);padding:7px 9px;vertical-align:t
 .diff-banner{background:var(--ice);border-left:4px solid var(--navy);border-radius:6px;
      padding:11px 15px;margin:0 0 16px;max-width:1020px;}
 .diff-banner.baseline{background:#F6F7FA;border-left-color:var(--line);}
-.diff-headline{font-size:13.5px;color:var(--navy);line-height:1.4;}
+.diff-headline{font-size:var(--fs-2);color:var(--navy);line-height:1.4;}
 .diff-headline b{color:var(--navy);}
-.diff-when{font-size:10.5px;color:var(--muted);margin-top:3px;font-family:ui-monospace,Consolas,monospace;}
-.diff-banner details{margin-top:8px;font-size:12px;}
-.diff-banner summary{cursor:pointer;color:#3A4890;font-weight:600;}
+.diff-when{font-size:var(--fs-1);color:var(--muted);margin-top:3px;font-family:var(--f-mono);}
+.diff-banner details{margin-top:8px;font-size:var(--fs-2);}
+.diff-banner summary{cursor:pointer;color:#3A4890;font-weight:var(--w-emph);}
 .diff-list{list-style:none;padding:8px 0 0;margin:0;max-height:280px;overflow-y:auto;}
-.diff-list li{padding:2px 0;color:var(--muted);font-size:11.5px;line-height:1.5;border-bottom:1px solid #E1E7F0;}
-.diff-list code{font-family:ui-monospace,Consolas,monospace;font-size:11px;background:#fff;
+.diff-list li{padding:2px 0;color:var(--muted);font-size:var(--fs-2);line-height:1.5;border-bottom:1px solid #E1E7F0;}
+.diff-list code{font-family:var(--f-mono);font-size:var(--fs-1);background:#fff;
      padding:1px 5px;border-radius:3px;color:var(--navy);}
-.meta{font-size:11px;color:var(--muted);margin-top:3px;}
+.meta{font-size:var(--fs-1);color:var(--muted);margin-top:3px;}
 .tk{border-left:3px solid var(--line);padding:4px 8px;margin:5px 0;}
 .tk.odd{border-left-color:var(--gold);}
-.tkh{font-size:11.5px;} .tkh b{color:var(--navy);margin-right:6px;} .tkh em{float:right;font-style:normal;color:var(--muted);font-size:9.5px;}
-.tkd{font-size:10.5px;color:var(--muted);line-height:1.35;margin-top:1px;}
-.nowork{font-size:11.5px;color:var(--muted);font-style:italic;}
+.tkh{font-size:var(--fs-2);} .tkh b{color:var(--navy);margin-right:6px;} .tkh em{float:right;font-style:normal;color:var(--muted);font-size:var(--fs-1);}
+.tkd{font-size:var(--fs-1);color:var(--muted);line-height:1.35;margin-top:1px;}
+.nowork{font-size:var(--fs-2);color:var(--muted);font-style:italic;}
 .wl{border:1px solid var(--line);border-radius:8px;padding:10px 13px;margin:9px 0;max-width:1020px;}
-.wlh{font-size:12.5px;color:var(--navy);font-weight:700;}
-.wlh span{font-weight:400;color:var(--muted);font-size:11px;margin-left:8px;}
-.wli{font-size:12px;line-height:1.45;margin:5px 0 0;padding-left:10px;border-left:2px solid var(--ice);}
+.wlh{font-size:var(--fs-2);color:var(--navy);font-weight:var(--w-head);}
+.wlh span{font-weight:400;color:var(--muted);font-size:var(--fs-1);margin-left:8px;}
+.wli{font-size:var(--fs-2);line-height:1.45;margin:5px 0 0;padding-left:10px;border-left:2px solid var(--ice);}
 .wli b{display:inline-block;background:var(--ice);color:var(--navy);border-radius:9px;padding:1px 8px;
-       font-size:10.5px;margin-right:6px;font-family:ui-monospace,Consolas,monospace;}
+       font-size:var(--fs-1);margin-right:6px;font-family:var(--f-mono);}
 /* "Where the team is" section (reframe pass commit #1). Answers a cold
    teammate's first two questions on opening the report: how far has the team
    reached into the ~573-product catalog, and which products are we actually
    working with today? Replaces the funnel + curated-findings-first framing. */
 .wti-section{margin:0 0 24px;max-width:1020px;}
 .wti-cov-list{display:flex;flex-direction:column;gap:8px;margin:8px 0 6px;}
-.wti-cov-row{display:flex;align-items:center;gap:12px;font-size:12.5px;}
-.wti-cov-label{flex:0 0 200px;color:var(--navy);font-weight:600;font-size:12px;}
+.wti-cov-row{display:flex;align-items:center;gap:12px;font-size:var(--fs-2);}
+.wti-cov-label{flex:0 0 200px;color:var(--navy);font-weight:var(--w-emph);font-size:var(--fs-2);}
 .wti-cov-bar{flex:1;height:14px;background:#F6F7FA;border-radius:7px;overflow:hidden;
        position:relative;border:1px solid var(--ice);min-width:60px;}
 .wti-cov-bar-fill{height:100%;border-radius:6px;transition:width .18s ease-out;}
 .wti-cov-bar-fill.green{background:#7ABF89;}
 .wti-cov-bar-fill.amber{background:#E9CD7A;}
 .wti-cov-bar-fill.red{background:#D0876E;}
-.wti-cov-cnt{flex:0 0 128px;font-family:ui-monospace,Consolas,monospace;
-       font-size:11px;color:var(--muted);text-align:right;}
+.wti-cov-cnt{flex:0 0 128px;font-family:var(--f-mono);
+       font-size:var(--fs-1);color:var(--muted);text-align:right;}
 .wti-recent{margin-top:16px;}
-.wti-recent h3{font-family:Georgia,serif;font-size:15px;color:var(--navy);margin:0 0 6px;}
+.wti-recent h3{font-family:var(--f-display);font-size:var(--fs-3);color:var(--navy);margin:0 0 6px;}
 .wti-recent-list{list-style:none;padding:0;margin:0;border-top:1px solid var(--ice);}
 .wti-recent-list li{padding:6px 8px;border-bottom:1px solid var(--ice);
-       display:flex;gap:10px;align-items:baseline;font-size:12px;flex-wrap:wrap;}
-.wti-recent-list li a.wti-path{font-family:ui-monospace,Consolas,monospace;
-       font-weight:700;color:var(--navy);text-decoration:none;flex:0 0 auto;
+       display:flex;gap:10px;align-items:baseline;font-size:var(--fs-2);flex-wrap:wrap;}
+.wti-recent-list li a.wti-path{font-family:var(--f-mono);
+       font-weight:var(--w-head);color:var(--navy);text-decoration:none;flex:0 0 auto;
        border-bottom:1px dotted #8FA8D8;cursor:pointer;}
 .wti-recent-list li a.wti-path:hover{color:#3A4890;border-bottom-style:solid;}
 .wti-recent-list li .wti-what{color:var(--ink);flex:1;min-width:180px;line-height:1.4;}
-.wti-recent-list li .wti-when{font-family:ui-monospace,Consolas,monospace;
-       font-size:10.5px;color:var(--muted);flex:0 0 auto;}
-.wti-tier-chip{display:inline-block;padding:1px 7px;border-radius:8px;font-size:9.5px;
-       font-weight:700;letter-spacing:.03em;margin-right:2px;text-transform:uppercase;}
+.wti-recent-list li .wti-when{font-family:var(--f-mono);
+       font-size:var(--fs-1);color:var(--muted);flex:0 0 auto;}
+.wti-tier-chip{display:inline-block;padding:1px 7px;border-radius:8px;font-size:var(--fs-1);
+       font-weight:var(--w-head);letter-spacing:.03em;margin-right:2px;text-transform:uppercase;}
 .wti-tier-chip.t2{background:#D6EDD9;color:#1F5A2E;}
 .wti-tier-chip.t1{background:#DCE7FA;color:#1F2A5C;}
 .wti-tier-chip.t0{background:#EDF0F7;color:#5A6072;}
-.wti-empty{font-size:12px;color:var(--muted);font-style:italic;padding:8px 0;}
-.wti-empty code{font-family:ui-monospace,Consolas,monospace;background:var(--ice);
+.wti-empty{font-size:var(--fs-2);color:var(--muted);font-style:italic;padding:8px 0;}
+.wti-empty code{font-family:var(--f-mono);background:var(--ice);
        color:var(--navy);padding:1px 5px;border-radius:3px;font-style:normal;}
 /* "What we've learned" section (reframe pass commit #2). Aggregates every
    insight source in one place: curated findings, WORKLOG mining, human
@@ -2489,25 +2528,25 @@ table.rep td{border-bottom:1px solid var(--ice);padding:7px 9px;vertical-align:t
 .wwl-section{margin:0 0 24px;max-width:1020px;}
 .wwl-list{list-style:none;padding:0;margin:8px 0 0;border-top:1px solid var(--ice);}
 .wwl-list li{padding:7px 8px;border-bottom:1px solid var(--ice);
-       display:flex;gap:10px;align-items:baseline;font-size:12px;line-height:1.45;
+       display:flex;gap:10px;align-items:baseline;font-size:var(--fs-2);line-height:1.45;
        flex-wrap:wrap;}
 .wwl-list li:last-child{border-bottom:0;}
-.wwl-ico{flex:0 0 20px;font-size:14px;line-height:1;padding-top:1px;text-align:center;}
+.wwl-ico{flex:0 0 20px;font-size:var(--fs-3);line-height:1;padding-top:1px;text-align:center;}
 .wwl-body{flex:1;min-width:220px;}
-.wwl-head{color:var(--ink);font-weight:600;}
+.wwl-head{color:var(--ink);font-weight:var(--w-emph);}
 .wwl-head b{color:var(--navy);margin-right:6px;}
-.wwl-meta{color:var(--muted);font-size:10.5px;margin-top:2px;
+.wwl-meta{color:var(--muted);font-size:var(--fs-1);margin-top:2px;
        display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;}
 .wwl-meta a{color:#3A4890;text-decoration:none;border-bottom:1px dotted #8FA8D8;}
-.wwl-meta code{font-family:ui-monospace,Consolas,monospace;font-size:10.5px;
+.wwl-meta code{font-family:var(--f-mono);font-size:var(--fs-1);
        background:var(--ice);color:var(--navy);padding:0 4px;border-radius:3px;}
-.wwl-detail{color:var(--muted);font-size:11px;line-height:1.4;margin-top:2px;}
-.wwl-empty-team{font-size:11.5px;color:var(--muted);font-style:italic;padding:6px 0;}
-.wwl-empty-team code{font-family:ui-monospace,Consolas,monospace;background:var(--ice);
+.wwl-detail{color:var(--muted);font-size:var(--fs-1);line-height:1.4;margin-top:2px;}
+.wwl-empty-team{font-size:var(--fs-2);color:var(--muted);font-style:italic;padding:6px 0;}
+.wwl-empty-team code{font-family:var(--f-mono);background:var(--ice);
        color:var(--navy);padding:1px 5px;border-radius:3px;font-style:normal;
-       font-size:10.5px;}
-.wwl-more{margin-top:10px;font-size:11.5px;}
-.wwl-more > summary{cursor:pointer;color:#3A4890;font-weight:600;padding:3px 0;
+       font-size:var(--fs-1);}
+.wwl-more{margin-top:10px;font-size:var(--fs-2);}
+.wwl-more > summary{cursor:pointer;color:#3A4890;font-weight:var(--w-emph);padding:3px 0;
        list-style:none;}
 .wwl-more > summary::-webkit-details-marker{display:none;}
 .wwl-more > summary::marker{content:"";}
@@ -2516,10 +2555,10 @@ table.rep td{border-bottom:1px solid var(--ice);padding:7px 9px;vertical-align:t
 /* Phase A ceiling-push #3: footer inside the Show-all drawer telling the
    reader how many mined items were dropped by the 30-cap, with a link
    into the raw WORKLOG for the full record. Sits below the last <li>. */
-.wwl-tail{padding:9px 10px;font-size:11px;color:var(--muted);line-height:1.5;
+.wwl-tail{padding:9px 10px;font-size:var(--fs-1);color:var(--muted);line-height:1.5;
      background:#F6F7FA;border-top:1px solid var(--ice);border-radius:0 0 5px 5px;
      margin-top:0;}
-.wwl-tail b{color:var(--navy);font-weight:700;}
+.wwl-tail b{color:var(--navy);font-weight:var(--w-head);}
 .wwl-tail a{color:#3A4890;text-decoration:none;border-bottom:1px dotted #8FA8D8;}
 /* "Census data landscape" viz (Phase A ceiling-push #1). SVG squarified
    treemap: Kind (outer 4-way partition) -> Program (inner partition), area
@@ -2529,7 +2568,7 @@ table.rep td{border-bottom:1px solid var(--ice);padding:7px 9px;vertical-align:t
    are pure enhancement; the geometry + labels convey the whole message
    with JS off. See build_landscape_viz() for the rendering pipeline. */
 .lscape-section{margin:0 0 24px;max-width:1020px;}
-.lscape-caption{font-size:12px;color:var(--muted);margin:6px 0 10px;
+.lscape-caption{font-size:var(--fs-2);color:var(--muted);margin:6px 0 10px;
        max-width:900px;line-height:1.45;}
 /* Redesign 2026-07-26: stacked full-width rows, one per dataset kind. Each
    row is its own SVG (kind header + squarified program treemap) with a
@@ -2554,34 +2593,34 @@ table.rep td{border-bottom:1px solid var(--ice);padding:7px 9px;vertical-align:t
    programs out of the treemap. Native <details> so it works with JS off. */
 .lscape-spill{border-top:1px solid var(--ice);padding:8px 14px 10px;
        background:rgba(255,255,255,0.55);}
-.lscape-spill > summary{list-style:none;cursor:pointer;font-size:12px;
+.lscape-spill > summary{list-style:none;cursor:pointer;font-size:var(--fs-2);
        color:var(--muted);display:flex;align-items:center;gap:8px;
        flex-wrap:wrap;padding:2px 0;}
 .lscape-spill > summary::-webkit-details-marker{display:none;}
 .lscape-spill > summary::before{content:"\25B8";display:inline-block;
-       color:var(--muted);font-size:10px;transition:transform .15s ease;}
+       color:var(--muted);font-size:var(--fs-1);transition:transform .15s ease;}
 .lscape-spill[open] > summary::before{transform:rotate(90deg);}
-.lscape-spill .lscape-spill-count{font-weight:700;color:var(--navy);
-       font-size:12px;}
+.lscape-spill .lscape-spill-count{font-weight:var(--w-head);color:var(--navy);
+       font-size:var(--fs-2);}
 .lscape-spill .lscape-spill-preview{color:var(--ink);opacity:.75;
-       font-size:11.5px;}
-.lscape-spill .lscape-spill-total{font-family:ui-monospace,Consolas,monospace;
-       font-size:11px;color:var(--muted);}
+       font-size:var(--fs-2);}
+.lscape-spill .lscape-spill-total{font-family:var(--f-mono);
+       font-size:var(--fs-1);color:var(--muted);}
 .lscape-spill-chips{margin-top:8px;}
 /* Fallback flex row rendered per-kind when squarify fully fails (all-zero
    sizes, degenerate rect) - kept as a hard-failsafe path. */
 .lscape-fallback{margin:8px 0;padding:8px 10px;border:1px dashed var(--line);
        border-radius:6px;background:#FFF8E8;}
-.lscape-fallback-head{font-family:Georgia,serif;font-weight:700;
-       color:var(--navy);font-size:13px;margin-bottom:5px;}
+.lscape-fallback-head{font-family:var(--f-display);font-weight:var(--w-head);
+       color:var(--navy);font-size:var(--fs-2);margin-bottom:5px;}
 .lscape-fallback-row{display:flex;flex-wrap:wrap;gap:5px;}
-.lscape-fallback-chip{padding:4px 9px;font-size:11px;border-radius:5px;
+.lscape-fallback-chip{padding:4px 9px;font-size:var(--fs-1);border-radius:5px;
        border:1px solid transparent;cursor:pointer;color:var(--ink);
        transition:filter .12s ease;}
 .lscape-fallback-chip:hover{filter:brightness(0.94);}
 .lscape-fallback-chip:focus-visible{outline:2px solid var(--gold);outline-offset:1px;}
-.lscape-fallback-chip em{font-style:normal;font-family:ui-monospace,Consolas,monospace;
-       font-size:10px;color:var(--muted);margin-left:5px;}
+.lscape-fallback-chip em{font-style:normal;font-family:var(--f-mono);
+       font-size:var(--fs-1);color:var(--muted);margin-left:5px;}
 /* Tier fill/stroke - bumped in vividness during 2026-07-26 redesign so the
    3 touched programs actually pop off the mostly-grey wall. Grey stayed
    muted so untouched programs read as background. */
@@ -2589,45 +2628,45 @@ table.rep td{border-bottom:1px solid var(--ice);padding:7px 9px;vertical-align:t
 .lscape-tier-1{background:#B7CDF6;border-color:#5A7ED1;}
 .lscape-tier-2{background:#8BD3CC;border-color:#3D9E93;}
 .lscape-tier-3{background:#8FCD97;border-color:#3E9152;}
-.lscape-legend{display:flex;gap:14px;align-items:center;font-size:11.5px;
+.lscape-legend{display:flex;gap:14px;align-items:center;font-size:var(--fs-2);
        color:var(--muted);margin:8px 0 0;flex-wrap:wrap;padding:6px 12px;
        background:var(--ice);border-radius:6px;}
-.lscape-legend b{color:var(--navy);font-weight:700;}
+.lscape-legend b{color:var(--navy);font-weight:var(--w-head);}
 .lscape-legend .lscape-legend-item{display:inline-flex;align-items:center;gap:2px;}
-.lscape-legend .lscape-legend-cnt{font-family:ui-monospace,Consolas,monospace;
-       font-size:10.5px;color:var(--muted);margin-left:2px;}
+.lscape-legend .lscape-legend-cnt{font-family:var(--f-mono);
+       font-size:var(--fs-1);color:var(--muted);margin-left:2px;}
 .lscape-legend .lscape-swatch{display:inline-block;width:13px;height:13px;
        border-radius:3px;margin-right:6px;vertical-align:-2px;
        border:1px solid transparent;}
 .lscape-legend .lscape-legend-summary{margin-left:auto;color:var(--muted);
-       font-size:11px;font-family:ui-monospace,Consolas,monospace;}
+       font-size:var(--fs-1);font-family:var(--f-mono);}
 /* .rev-mode-details / .rev-mode-body removed Phase A #3 (2026-07-26) - the
    Home tab no longer carries a collapsed 'Reviewer mode data' block; the
    funnel + inventory + work-depth table + notebook-health it contained were
    ~13 KB of dead scaffolding after the reframe. */
-.nohit{display:none;font-size:12.5px;color:var(--muted);font-style:italic;padding:10px 0;}
-footer{padding:22px 44px;color:var(--muted);font-size:11.5px;}
+.nohit{display:none;font-size:var(--fs-2);color:var(--muted);font-style:italic;padding:10px 0;}
+footer{padding:22px 44px;color:var(--muted);font-size:var(--fs-2);}
 /* Freshness pill bar (shown on every page - reads data-generated-at at page load). */
-.freshbar{background:#0F1738;color:#CADCFC;padding:9px 44px;font-size:12px;
+.freshbar{background:#0F1738;color:#CADCFC;padding:9px 44px;font-size:var(--fs-2);
      display:flex;align-items:center;gap:14px;flex-wrap:wrap;border-bottom:1px solid #263466;}
-.freshbar .pill{display:inline-block;padding:3px 12px;border-radius:11px;font-weight:700;font-size:11.5px;
+.freshbar .pill{display:inline-block;padding:3px 12px;border-radius:11px;font-weight:var(--w-head);font-size:var(--fs-2);
      letter-spacing:.02em;background:#2A356C;color:#CADCFC;}
 .freshbar .pill.fresh{background:#1F7A3A;color:#E6F5EA;}
 .freshbar .pill.stale{background:#E9CD7A;color:#3A2F0A;}
 .freshbar .pill.old{background:#C0392B;color:#FFF;}
-.freshbar .sha{font-family:ui-monospace,Consolas,monospace;font-size:10.5px;opacity:.7;}
-.freshbar .kbd-hint{margin-left:auto;font-size:10.5px;opacity:.75;letter-spacing:.01em;}
-.freshbar .kbd-hint kbd{display:inline-block;padding:0 5px;margin:0 2px;font-family:ui-monospace,Consolas,monospace;
-     font-size:10px;background:#28356B;color:#F5D77A;border:1px solid #3A4890;border-radius:3px;
-     box-shadow:inset 0 -1px 0 #0F1738;font-weight:700;line-height:14px;}
+.freshbar .sha{font-family:var(--f-mono);font-size:var(--fs-1);opacity:.7;}
+.freshbar .kbd-hint{margin-left:auto;font-size:var(--fs-1);opacity:.75;letter-spacing:.01em;}
+.freshbar .kbd-hint kbd{display:inline-block;padding:0 5px;margin:0 2px;font-family:var(--f-mono);
+     font-size:var(--fs-1);background:#28356B;color:#F5D77A;border:1px solid #3A4890;border-radius:3px;
+     box-shadow:inset 0 -1px 0 #0F1738;font-weight:var(--w-head);line-height:14px;}
 /* Reusable click-to-copy control: <span class="copy-cmd"><code>...</code><button data-copy="...">Copy</button></span> */
 .copy-cmd{display:inline-flex;align-items:center;gap:6px;background:#16204A;border:1px solid #28356B;
-     border-radius:6px;padding:2px 4px 2px 8px;font-family:ui-monospace,Consolas,monospace;font-size:11px;
+     border-radius:6px;padding:2px 4px 2px 8px;font-family:var(--f-mono);font-size:var(--fs-1);
      color:#CADCFC;max-width:100%;}
 .copy-cmd code{background:transparent;color:inherit;padding:0;font-size:inherit;white-space:nowrap;
      overflow:hidden;text-overflow:ellipsis;max-width:520px;}
 .copy-cmd button{background:#28356B;color:#F5D77A;border:0;border-radius:4px;padding:2px 8px;
-     font:inherit;font-size:10.5px;font-weight:700;cursor:pointer;letter-spacing:.03em;}
+     font:inherit;font-size:var(--fs-1);font-weight:var(--w-head);cursor:pointer;letter-spacing:.03em;}
 .copy-cmd button:hover{background:#3A4890;}
 .copy-cmd button.done{background:#1F7A3A;color:#fff;}
 /* Light variant, for use inside product cards on white backgrounds. */
@@ -2638,57 +2677,57 @@ footer{padding:22px 44px;color:var(--muted);font-size:11.5px;}
    background, monospace for numeric cells, unicode sparklines rendered inline
    in a slightly larger font so the shape is legible. */
 .eda-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:5px;}
-.eda-shape{font-size:11.5px;color:var(--navy);font-weight:600;font-family:ui-monospace,Consolas,monospace;}
-.eda-src{font-size:10px;color:var(--muted);font-family:ui-monospace,Consolas,monospace;
+.eda-shape{font-size:var(--fs-2);color:var(--navy);font-weight:var(--w-emph);font-family:var(--f-mono);}
+.eda-src{font-size:var(--fs-1);color:var(--muted);font-family:var(--f-mono);
      overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;flex:1;min-width:0;}
 .eda-src a{color:#3A4890;text-decoration:none;border-bottom:1px dotted #8FA8D8;}
 .pill.sample-fresh{background:#1F7A3A;color:#E6F5EA;}
 .pill.sample-stale{background:#E9CD7A;color:#3A2F0A;}
 .pill.sample-unknown{background:#F6F7FA;color:#5A6072;border:1px solid var(--line);}
-.eda-tbl{border-collapse:collapse;width:100%;font-size:10.5px;margin:4px 0;}
-.eda-tbl th{text-align:left;font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;
-     color:var(--muted);border-bottom:1px solid var(--ice);padding:3px 6px;font-weight:700;}
+.eda-tbl{border-collapse:collapse;width:100%;font-size:var(--fs-1);margin:4px 0;}
+.eda-tbl th{text-align:left;font-size:var(--fs-1);letter-spacing:.06em;text-transform:uppercase;
+     color:var(--muted);border-bottom:1px solid var(--ice);padding:3px 6px;font-weight:var(--w-head);}
 .eda-tbl td{border-bottom:1px solid #F1F3F8;padding:3px 6px;vertical-align:top;}
-.eda-tbl td.mono{font-family:ui-monospace,Consolas,monospace;font-variant-numeric:tabular-nums;}
-.eda-tbl tr.miss-flag td.miss-cell{background:#FBF0D6;color:#6E4E11;font-weight:700;}
-.eda-tbl td.spark{font-family:ui-monospace,"DejaVu Sans Mono",Consolas,monospace;font-size:12px;
+.eda-tbl td.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums;}
+.eda-tbl tr.miss-flag td.miss-cell{background:#FBF0D6;color:#6E4E11;font-weight:var(--w-head);}
+.eda-tbl td.spark{font-family:ui-monospace,"DejaVu Sans Mono",Consolas,monospace;font-size:var(--fs-2);
      color:var(--navy);letter-spacing:0;line-height:1;padding-top:5px;padding-bottom:5px;}
-.eda-cap{font-size:10px;color:var(--muted);margin:5px 0 2px;font-weight:600;
+.eda-cap{font-size:var(--fs-1);color:var(--muted);margin:5px 0 2px;font-weight:var(--w-emph);
      letter-spacing:.05em;text-transform:uppercase;}
-.eda-tv{font-size:10.5px;line-height:1.5;color:var(--ink);}
-.eda-tv .val{font-family:ui-monospace,Consolas,monospace;color:var(--navy);}
-.eda-tv .cnt{color:var(--muted);font-size:10px;margin-left:4px;}
-.eda-geo{font-size:11px;color:var(--ink);font-family:ui-monospace,Consolas,monospace;line-height:1.5;}
+.eda-tv{font-size:var(--fs-1);line-height:1.5;color:var(--ink);}
+.eda-tv .val{font-family:var(--f-mono);color:var(--navy);}
+.eda-tv .cnt{color:var(--muted);font-size:var(--fs-1);margin-left:4px;}
+.eda-geo{font-size:var(--fs-1);color:var(--ink);font-family:var(--f-mono);line-height:1.5;}
 .eda-geo b{color:var(--navy);}
-.eda-empty{font-size:11px;color:var(--muted);font-style:italic;padding:6px 0;}
+.eda-empty{font-size:var(--fs-1);color:var(--muted);font-style:italic;padding:6px 0;}
 /* Diff banner variant used on cards to flag EDA changes on --refresh. */
 .eda-diff{background:#FBF0D6;border-left:3px solid #C9A227;border-radius:4px;
-     padding:5px 8px;margin:4px 0;font-size:11px;color:#6E4E11;line-height:1.45;}
+     padding:5px 8px;margin:4px 0;font-size:var(--fs-1);color:#6E4E11;line-height:1.45;}
 .eda-diff b{color:#6E4E11;}
 /* Quick Look (Phase 4 #1) - tiered summary section at the top of every card.
    Tier chip colors: grey (catalog), blue (probe), green (sample). */
-.tier-chip{display:inline-block;padding:2px 10px;border-radius:11px;font-size:10.5px;
-     font-weight:700;letter-spacing:.02em;border:1px solid var(--line);}
+.tier-chip{display:inline-block;padding:2px 10px;border-radius:11px;font-size:var(--fs-1);
+     font-weight:var(--w-head);letter-spacing:.02em;border:1px solid var(--line);}
 .tier-chip.tier-catalog{background:#EDF0F7;color:#5A6072;border-color:#D6DBE8;}
 .tier-chip.tier-probe{background:#DCE7FA;color:#1F2A5C;border-color:#8FA8D8;}
 .tier-chip.tier-sample{background:#D6EDD9;color:#1F5A2E;border-color:#7ABF89;}
 .ql-head{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:4px;}
-.ql-sub{font-size:10.5px;color:var(--muted);font-style:italic;}
+.ql-sub{font-size:var(--fs-1);color:var(--muted);font-style:italic;}
 /* Phase 4b: three-line TL;DR. Each line is one glance's worth of information -
    dense but scannable. Middle-dot separators keep the visual rhythm consistent
    across tiers; small caps 'ql-k' labels distinguish keys from values without
    bolding the whole line. Tint the line background at very low opacity in the
    tier's own color family so eye can track catalog/probe/sample lineage. */
-.ql-line{font-size:11.5px;color:var(--ink);line-height:1.55;margin:3px 0;
+.ql-line{font-size:var(--fs-2);color:var(--ink);line-height:1.55;margin:3px 0;
      padding:3px 8px;border-radius:4px;border-left:3px solid transparent;
      overflow-wrap:anywhere;}
 .ql-t0{background:#F6F7FA;border-left-color:#D6DBE8;}
 .ql-t1{background:#F1F5FF;border-left-color:#8FA8D8;}
 .ql-t2{background:#EEF7EF;border-left-color:#7ABF89;}
-.ql-k{font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
-     font-weight:700;margin-right:2px;}
+.ql-k{font-size:var(--fs-1);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
+     font-weight:var(--w-head);margin-right:2px;}
 .ql-sep{color:#B8BFCE;margin:0 2px;}
-.ql-nonapi{font-size:11px;color:#8a4d1c;font-style:italic;margin:4px 0;}
+.ql-nonapi{font-size:var(--fs-1);color:#8a4d1c;font-style:italic;margin:4px 0;}
 /* Reframe pass commit #5: reframed TL;DR lines. `.ql-desc` renders the
    catalog description (moved up from the drill-down); `.ql-inside` styles
    the "what's inside" line so its trailing tier chip sits flush-right.
@@ -2696,11 +2735,11 @@ footer{padding:22px 44px;color:var(--muted);font-size:11.5px;}
    the "what's inside" line - readable but not the visual anchor it was
    pre-reframe. `.ql-d-reviewer` is the stage+role chip row promoted into
    the drill-down header. */
-.ql-desc{font-size:11.5px;color:var(--muted);line-height:1.45;margin:3px 0 2px;
+.ql-desc{font-size:var(--fs-2);color:var(--muted);line-height:1.45;margin:3px 0 2px;
      padding:3px 8px;font-style:italic;overflow-wrap:anywhere;}
 .ql-inside{display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
 .ql-tier-tail{margin-left:auto;}
-.tier-chip.tier-mini{font-size:9px;padding:1px 6px;font-weight:600;
+.tier-chip.tier-mini{font-size:var(--fs-1);padding:1px 6px;font-weight:var(--w-emph);
      opacity:0.85;text-transform:lowercase;letter-spacing:.02em;}
 .ql-d-reviewer{display:flex;align-items:center;gap:6px;flex-wrap:wrap;
      padding:6px 8px;margin:2px 0 6px;background:#F6F7FA;border-radius:5px;
@@ -2718,13 +2757,13 @@ footer{padding:22px 44px;color:var(--muted);font-size:11.5px;}
 .ql-details.ql-d-tier1[open]{background:#F5F9FF;}
 .ql-details.ql-d-tier2[open]{background:#F3FAF4;}
 .ql-summary{list-style:none;padding:5px 10px;cursor:pointer;user-select:none;
-     display:flex;align-items:center;gap:6px;font-size:11px;color:var(--navy);
-     font-weight:600;letter-spacing:.02em;border-radius:6px;}
+     display:flex;align-items:center;gap:6px;font-size:var(--fs-1);color:var(--navy);
+     font-weight:var(--w-emph);letter-spacing:.02em;border-radius:6px;}
 .ql-summary::-webkit-details-marker{display:none;}     /* Safari */
 .ql-summary::marker{content:"";}                       /* Firefox/Chrome */
 .ql-summary:hover{background:var(--ice);}
 .ql-summary:focus-visible{outline:2px solid #8FA8D8;outline-offset:1px;}
-.ql-chevron{display:inline-block;font-size:11px;line-height:1;color:var(--muted);
+.ql-chevron{display:inline-block;font-size:var(--fs-1);line-height:1;color:var(--muted);
      transition:transform .16s ease-in-out;transform-origin:50% 50%;}
 .ql-details[open] .ql-chevron{transform:rotate(90deg);color:var(--navy);}
 .ql-summary-label{flex:1;}
@@ -2738,41 +2777,41 @@ footer{padding:22px 44px;color:var(--muted);font-size:11.5px;}
 .ql-d-block.ql-d-t1{background:#F1F5FF;border-color:#E1E8F6;}
 .ql-d-block.ql-d-t2{background:#EEF7EF;border-color:#DAEBDE;}
 .ql-d-block.ql-d-empty-wrap{background:#FBFAF6;border-color:#EEE6D3;}
-.ql-d-cap{font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;
-     color:var(--muted);font-weight:700;margin-bottom:4px;}
-.ql-d-row{font-size:11px;color:var(--ink);line-height:1.55;margin:2px 0;
+.ql-d-cap{font-size:var(--fs-1);letter-spacing:.08em;text-transform:uppercase;
+     color:var(--muted);font-weight:var(--w-head);margin-bottom:4px;}
+.ql-d-row{font-size:var(--fs-1);color:var(--ink);line-height:1.55;margin:2px 0;
      overflow-wrap:anywhere;}
-.ql-d-desc{font-size:11px;color:var(--ink);line-height:1.5;margin:2px 0 6px;}
+.ql-d-desc{font-size:var(--fs-1);color:var(--ink);line-height:1.5;margin:2px 0 6px;}
 .ql-d-link{color:#3A4890;text-decoration:none;border-bottom:1px dotted #8FA8D8;
-     font-family:ui-monospace,Consolas,monospace;font-size:10.5px;}
-.ql-d-empty{font-size:11px;color:var(--muted);line-height:1.5;margin:2px 0;}
+     font-family:var(--f-mono);font-size:var(--fs-1);}
+.ql-d-empty{font-size:var(--fs-1);color:var(--muted);line-height:1.5;margin:2px 0;}
 .ql-d-cmd{margin-top:4px;}
-.ql-muted{color:var(--muted);font-size:10px;}
+.ql-muted{color:var(--muted);font-size:var(--fs-1);}
 /* Faceted browsing sidebar (only on the Products tabs). */
 .products-shell{display:flex;gap:22px;align-items:flex-start;}
 .products-main{flex:1;min-width:0;}
 .facets{width:218px;flex:0 0 218px;position:sticky;top:8px;max-height:calc(100vh - 20px);
-     overflow-y:auto;padding-right:4px;font-size:12px;}
+     overflow-y:auto;padding-right:4px;font-size:var(--fs-2);}
 .facets-head{display:flex;align-items:baseline;justify-content:space-between;margin:0 0 8px;}
-.facets-head h3{font-family:Georgia,serif;color:var(--navy);font-size:14.5px;margin:0;}
-.facet-clear{font-size:11px;color:#B8532F;font-weight:600;text-decoration:none;}
+.facets-head h3{font-family:var(--f-display);color:var(--navy);font-size:var(--fs-3);margin:0;}
+.facet-clear{font-size:var(--fs-1);color:#B8532F;font-weight:var(--w-emph);text-decoration:none;}
 .facet-clear:hover{text-decoration:underline;}
 .facet{border-top:1px solid var(--ice);padding:8px 0 6px;}
-.facet h4{font-size:10px;letter-spacing:.11em;text-transform:uppercase;color:var(--muted);
-     font-weight:800;margin:0 0 4px;}
+.facet h4{font-size:var(--fs-1);letter-spacing:.11em;text-transform:uppercase;color:var(--muted);
+     font-weight:var(--w-head);margin:0 0 4px;}
 .facet ul{list-style:none;padding:0;margin:0;}
 .facet li{padding:0;}
 .facet label{display:flex;align-items:center;gap:5px;padding:2px 4px;border-radius:4px;cursor:pointer;
-     font-size:11.5px;color:var(--ink);}
+     font-size:var(--fs-2);color:var(--ink);}
 .facet label:hover{background:var(--ice);}
 .facet input[type=checkbox]{margin:0;transform:scale(0.9);cursor:pointer;}
 .facet .lbl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.facet .cnt{font-size:10.5px;color:var(--muted);font-variant-numeric:tabular-nums;
+.facet .cnt{font-size:var(--fs-1);color:var(--muted);font-variant-numeric:tabular-nums;
      background:var(--ice);border-radius:8px;padding:0 6px;line-height:15px;min-width:22px;text-align:center;}
-.facet li.on label{background:var(--ice);font-weight:600;color:var(--navy);}
+.facet li.on label{background:var(--ice);font-weight:var(--w-emph);color:var(--navy);}
 .facet li.empty{opacity:.4;}
 .facet li.empty label{cursor:default;}
-.facet .fhint{font-size:10.5px;color:var(--muted);font-style:italic;padding:2px 4px 0;}
+.facet .fhint{font-size:var(--fs-1);color:var(--muted);font-style:italic;padding:2px 4px 0;}
 /* Reviewer-mode toggle (reframe pass commit #4). Sits above the facets and
    inverts the pre-reframe default: default view now shows ALL 573 products in
    4 kind panels; ticking the box flips into "reviewer mode" - hides everything
@@ -2782,12 +2821,12 @@ footer{padding:22px 44px;color:var(--muted);font-size:11.5px;}
    for continuity; JS handles the migration so returning readers don't get an
    unexpected view change). */
 .am-toggle{padding:8px 6px 10px;margin:0 0 10px;border-bottom:1px solid var(--line);}
-.am-toggle label{display:flex;align-items:center;gap:5px;font-size:12px;
-     color:var(--navy);font-weight:600;cursor:pointer;line-height:1.3;}
+.am-toggle label{display:flex;align-items:center;gap:5px;font-size:var(--fs-2);
+     color:var(--navy);font-weight:var(--w-emph);cursor:pointer;line-height:1.3;}
 .am-toggle input[type=checkbox]{margin:0;transform:scale(1.05);cursor:pointer;}
 .am-toggle .lbl{flex:0 1 auto;}
 .am-toggle .cnt{color:var(--muted);font-weight:400;font-variant-numeric:tabular-nums;}
-.am-hint{font-size:10.5px;color:var(--muted);font-style:italic;margin-top:4px;line-height:1.4;}
+.am-hint{font-size:var(--fs-1);color:var(--muted);font-style:italic;margin-top:4px;line-height:1.4;}
 /* Default: all cards visible. Only in reviewer mode (body.am-reviewer +
    panel.am-reviewer) do non-actively-managed cards hide. The visibility rule
    is opt-in - all-cards is the default and reviewer-mode is the ticked
@@ -2802,15 +2841,15 @@ body.am-reviewer .tab.tab-kind,
 body.am-reviewer .panel.panel-kind{display:none;}
 body:not(.am-reviewer) .tab.tab-am,
 body:not(.am-reviewer) .panel.panel-am{display:none;}
-.facet .fhint code{font-family:ui-monospace,Consolas,monospace;font-size:10.5px;
+.facet .fhint code{font-family:var(--f-mono);font-size:var(--fs-1);
      background:var(--ice);color:var(--navy);padding:0 4px;border-radius:3px;font-style:normal;}
 /* Reviewer-mode facets group (reframe pass commit #4). Collapsed by default so
    the sidebar reads as discovery-first (Family, Agency, Frequency); tapping
    the summary expands to reveal the Status / Composite role / Has evidence /
    Has probe / Notebook validated facets used by the review workflow. */
 .facet-reviewer-group{margin-top:12px;padding-top:8px;border-top:1px solid var(--ice);}
-.facet-reviewer-group > summary{cursor:pointer;font-size:10px;color:var(--muted);
-     font-weight:800;letter-spacing:.09em;text-transform:uppercase;padding:4px 0;
+.facet-reviewer-group > summary{cursor:pointer;font-size:var(--fs-1);color:var(--muted);
+     font-weight:var(--w-head);letter-spacing:.09em;text-transform:uppercase;padding:4px 0;
      list-style:none;}
 .facet-reviewer-group > summary::-webkit-details-marker{display:none;}
 .facet-reviewer-group > summary::marker{content:"";}
@@ -2825,21 +2864,21 @@ body:not(.am-reviewer) .panel.panel-am{display:none;}
    <id> --insight "..."`; nothing in this page mutates the JSON. */
 .scope-insights-feed{list-style:none;padding:0;margin:4px 0 0;
      max-height:340px;overflow-y:auto;}
-.ins-empty{font-size:11px;color:var(--muted);font-style:italic;padding:4px 0;}
-.ins-empty code{font-family:ui-monospace,Consolas,monospace;font-size:10.5px;
+.ins-empty{font-size:var(--fs-1);color:var(--muted);font-style:italic;padding:4px 0;}
+.ins-empty code{font-family:var(--f-mono);font-size:var(--fs-1);
      background:var(--ice);color:var(--navy);padding:0 4px;border-radius:3px;
      font-style:normal;}
 .ins-row{display:flex;gap:8px;align-items:flex-start;padding:5px 0;
-     border-bottom:1px dotted #E1E7F0;font-size:11.5px;}
+     border-bottom:1px dotted #E1E7F0;font-size:var(--fs-2);}
 .ins-row:last-child{border-bottom:0;}
-.ins-ico{font-size:14px;line-height:1;padding-top:2px;flex:0 0 18px;text-align:center;}
+.ins-ico{font-size:var(--fs-3);line-height:1;padding-top:2px;flex:0 0 18px;text-align:center;}
 .ins-body{flex:1;min-width:0;}
-.ins-meta{display:flex;gap:6px;align-items:baseline;font-size:10.5px;
+.ins-meta{display:flex;gap:6px;align-items:baseline;font-size:var(--fs-1);
      color:var(--muted);flex-wrap:wrap;}
-.ins-when{font-family:ui-monospace,Consolas,monospace;}
-.ins-who{color:var(--navy);font-weight:600;font-size:11px;}
+.ins-when{font-family:var(--f-mono);}
+.ins-who{color:var(--navy);font-weight:var(--w-emph);font-size:var(--fs-1);}
 .ins-badge{background:var(--ice);color:var(--navy);border-radius:8px;
-     padding:0 6px;font-size:9.5px;letter-spacing:.03em;font-weight:700;
+     padding:0 6px;font-size:var(--fs-1);letter-spacing:.03em;font-weight:var(--w-head);
      text-transform:uppercase;}
 .ins-badge.ins-src-auto-repo{background:#F1F5FF;color:#1F2A5C;}
 .ins-badge.ins-src-auto-cache_diff{background:#EEF7EF;color:#1F5A2E;}
@@ -2849,16 +2888,16 @@ body:not(.am-reviewer) .panel.panel-am{display:none;}
      overflow-wrap:anywhere;}
 /* Phase 5 #6 - Quick Look TL;DR insight sub-line. Compact list, no borders,
    inherits the tier stripe so the eye reads it as part of the TL;DR pack. */
-.ql-insights{list-style:none;padding:0;margin:3px 0 0;font-size:10.5px;
+.ql-insights{list-style:none;padding:0;margin:3px 0 0;font-size:var(--fs-1);
      line-height:1.55;color:var(--muted);}
 .ql-insights li.ins-tldr{display:flex;gap:5px;align-items:baseline;padding:1px 0;
      overflow-wrap:anywhere;}
-.ql-insights .ins-ico{font-size:11px;line-height:1;flex:0 0 15px;padding-top:1px;
+.ql-insights .ins-ico{font-size:var(--fs-1);line-height:1;flex:0 0 15px;padding-top:1px;
      text-align:center;}
-.ql-insights .ins-when{font-family:ui-monospace,Consolas,monospace;color:var(--muted);}
-.ql-insights .ins-who{color:var(--navy);font-weight:600;font-size:10.5px;}
+.ql-insights .ins-when{font-family:var(--f-mono);color:var(--muted);}
+.ql-insights .ins-who{color:var(--navy);font-weight:var(--w-emph);font-size:var(--fs-1);}
 .ql-insights .ins-text{color:var(--ink);}
-.ql-ins-more{font-size:10px;color:#3A4890;cursor:pointer;font-weight:600;
+.ql-ins-more{font-size:var(--fs-1);color:#3A4890;cursor:pointer;font-weight:var(--w-emph);
      background:none;border:0;padding:1px 0;letter-spacing:.02em;
      text-decoration:underline dotted;font-family:inherit;}
 .ql-ins-more:hover{color:var(--navy);}
