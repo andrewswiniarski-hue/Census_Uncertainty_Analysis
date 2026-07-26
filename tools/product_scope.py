@@ -2616,19 +2616,101 @@ table.rep td{border-bottom:1px solid var(--ice);padding:7px 9px;vertical-align:t
 .aff-row.aff-amber{background:#FBF0D6;border-left:3px solid #C9A227;color:#6E4E11;}
 .aff-row.aff-nudge{background:#F6F7FA;border-left:3px solid var(--line);color:var(--muted);}
 .aff-text{flex:1;min-width:200px;}
-/* Diff banner (Home tab, top). Baseline mode is grey; active diff uses ice. */
-.diff-banner{background:var(--ice);border-left:4px solid var(--navy);border-radius:6px;
-     padding:11px 15px;margin:0 0 16px;max-width:1020px;}
+/* Diff banner (Home tab, top). Condense pass 2026-07-26: restyled from a
+   content-weight band into a slim one-line utility strip that sits directly
+   under the sticky chapter nav - together with the freshbar (freshness pill
+   + tour launcher) it reads as ONE meta/utility layer above the chapters,
+   not three separate content bands. Product-level detail stays one click
+   away behind the existing <details> toggle. */
+.diff-banner{background:#F6F8FC;border:1px solid var(--ice);border-left:3px solid #8FA8D8;
+     border-radius:6px;padding:5px 12px;margin:0 0 20px;max-width:1020px;
+     display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;}
 .diff-banner.baseline{background:#F6F7FA;border-left-color:var(--line);}
-.diff-headline{font-size:var(--fs-2);color:var(--navy);line-height:1.4;}
+.diff-headline{font-size:var(--fs-1);color:var(--muted);line-height:1.5;flex:1;min-width:220px;}
 .diff-headline b{color:var(--navy);}
-.diff-when{font-size:var(--fs-1);color:var(--muted);margin-top:3px;font-family:var(--f-mono);}
-.diff-banner details{margin-top:8px;font-size:var(--fs-2);}
+.diff-when{font-size:var(--fs-1);color:var(--muted);font-family:var(--f-mono);}
+.diff-banner details{font-size:var(--fs-1);flex:0 0 auto;}
 .diff-banner summary{cursor:pointer;color:#3A4890;font-weight:var(--w-emph);}
 .diff-list{list-style:none;padding:8px 0 0;margin:0;max-height:280px;overflow-y:auto;}
 .diff-list li{padding:2px 0;color:var(--muted);font-size:var(--fs-2);line-height:1.5;border-bottom:1px solid #E1E7F0;}
 .diff-list code{font-family:var(--f-mono);font-size:var(--fs-1);background:#fff;
      padding:1px 5px;border-radius:3px;color:var(--navy);}
+/* Home chapter structure (condense-home pass 2026-07-26). Groups the
+   ~9 Home sections into 3 labeled chapters ("Get oriented" / "The landscape"
+   / "Team pulse") so a first-time reader sees structure instead of a wall of
+   density. Each chapter carries a small muted small-caps label at the top and
+   a subtle hairline below; spacing WITHIN a chapter is tightened (~30% less
+   than the pre-condense per-section margins) and spacing BETWEEN chapters is
+   loosened (~50% more) so the rhythm change makes chapter boundaries obvious
+   without any new visual weight. */
+.home-chapter{margin:0 0 40px;padding:0;max-width:1020px;
+     border-bottom:1px solid var(--ice);padding-bottom:32px;}
+.home-chapter:last-child{border-bottom:0;padding-bottom:0;margin-bottom:0;}
+.home-chapter-label{font-family:var(--f-sans);font-size:var(--fs-2);
+     font-weight:var(--w-head);color:var(--muted);letter-spacing:0.14em;
+     text-transform:uppercase;margin:0 0 14px;line-height:1.4;
+     display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;}
+.home-chapter-label .hc-tag{color:var(--navy);}
+.home-chapter-label .hc-sep{color:var(--line);font-weight:var(--w-body);
+     letter-spacing:0.02em;}
+.home-chapter-label .hc-caption{color:var(--muted);font-size:var(--fs-1);
+     letter-spacing:0.06em;text-transform:none;font-weight:var(--w-body);}
+/* Within-chapter section spacing (overrides each section's default
+   bottom-margin so the chapter body reads as one tight block). */
+.home-chapter > .home-hero-p1,
+.home-chapter > .home-search,
+.home-chapter > .curriculum-section,
+.home-chapter > .onboard-grid,
+.home-chapter > .wti-section,
+.home-chapter > .lscape-section,
+.home-chapter > .cpress-section,
+.home-chapter > .wwl-section{margin-bottom:16px;}
+.home-chapter > *:last-child{margin-bottom:0;}
+/* Get-oriented two-column onboarding grid (condense pass 2026-07-26).
+   Left column: Phase-1 hero + "Find a product" search stacked. Right column:
+   the 5-product curriculum. One "get started" moment instead of three
+   stacked full-width bands; collapses to a single column under 960px. */
+.onboard-grid{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);
+     gap:18px;align-items:start;max-width:1020px;}
+.onboard-col{min-width:0;display:flex;flex-direction:column;gap:16px;}
+.onboard-col > *{margin-bottom:0 !important;}
+@media(max-width:960px){.onboard-grid{grid-template-columns:1fr;}}
+/* Sticky in-page chapter nav (condense-home pass 2026-07-26 commit #3).
+   Slim secondary nav rendered at the top of the Home panel, above the diff
+   banner. Three chapter chips ("Get oriented" / "The landscape" /
+   "Team pulse") that smooth-scroll to the corresponding chapter on click
+   and highlight the currently-visible chapter as the reader scrolls
+   (IntersectionObserver-driven). Sticky-positioned within body scroll so
+   it stays visible while the reader moves down the page. Because it lives
+   inside #panel-home, the tab-switch machinery automatically hides it when
+   the reader is on a Products tab - no extra visibility JS needed. */
+.home-chapternav{position:sticky;top:0;z-index:40;
+     background:rgba(255,255,255,0.94);backdrop-filter:blur(6px);
+     -webkit-backdrop-filter:blur(6px);
+     border-bottom:1px solid var(--ice);
+     margin:0 0 12px;padding:8px 0 8px;
+     display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+     max-width:1020px;}
+.home-chapternav-lead{font-family:var(--f-sans);font-size:var(--fs-1);
+     color:var(--muted);font-weight:var(--w-emph);letter-spacing:0.10em;
+     text-transform:uppercase;margin-right:4px;}
+.home-chapternav-chip{display:inline-flex;align-items:center;gap:6px;
+     background:transparent;color:var(--muted);
+     border:1px solid var(--line);border-radius:14px;
+     padding:4px 12px;font-family:inherit;font-size:var(--fs-2);
+     font-weight:var(--w-emph);cursor:pointer;text-decoration:none;
+     letter-spacing:.01em;line-height:1.3;
+     transition:background .12s ease,color .12s ease,border-color .12s ease;}
+.home-chapternav-chip:hover{background:var(--ice);color:var(--navy);
+     border-color:var(--line);}
+.home-chapternav-chip:focus-visible{outline:2px solid var(--gold);outline-offset:2px;}
+.home-chapternav-chip.on{background:var(--navy);color:#fff;border-color:var(--navy);}
+.home-chapternav-chip.on:hover{background:var(--deep);color:#fff;}
+.home-chapternav-chip .hcn-idx{font-family:var(--f-mono);color:inherit;
+     opacity:.6;font-weight:var(--w-body);font-size:var(--fs-1);}
+/* Scroll target offset - so smooth-scroll lands the chapter label just
+   below the sticky nav bar instead of behind it. */
+.home-chapter{scroll-margin-top:64px;}
 .meta{font-size:var(--fs-1);color:var(--muted);margin-top:3px;}
 .tk{border-left:3px solid var(--line);padding:4px 8px;margin:5px 0;}
 .tk.odd{border-left-color:var(--gold);}
@@ -2646,27 +2728,12 @@ table.rep td{border-bottom:1px solid var(--ice);padding:7px 9px;vertical-align:t
    reached into the ~573-product catalog, and which products are we actually
    working with today? Replaces the funnel + curated-findings-first framing. */
 .wti-section{margin:0 0 24px;max-width:1020px;}
-/* Named-tier progress rail (UX pass 2026-07-26 commit #2).
-   Replaces the pre-existing 3-bar coverage list ("Has repo evidence: 6/573
-   1.0%" style). One horizontal segmented bar; segment widths are proportional
-   to mutually-exclusive tier counts (cataloged / probed / sampled / reviewed).
-   All raw sub-25% percentages have been removed: the visual IS the summary. */
-.pipeline-rail{margin:14px 0 6px;}
-.pipeline-bar{display:flex;height:28px;border-radius:14px;overflow:hidden;
-       background:#F6F7FA;border:1px solid var(--line);
-       box-shadow:inset 0 1px 2px rgba(31,42,92,0.05);}
-.pipeline-seg{height:100%;transition:width .18s ease-out;
-       display:flex;align-items:center;justify-content:center;
-       font-family:var(--f-mono);font-variant-numeric:tabular-nums;
-       font-size:var(--fs-1);font-weight:var(--w-head);color:var(--navy);
-       overflow:hidden;white-space:nowrap;
-       border-right:1px solid rgba(255,255,255,.55);}
-.pipeline-seg:last-child{border-right:0;}
-.pipeline-seg[data-stage="cataloged"]{background:#DDE3EE;}
-.pipeline-seg[data-stage="probed"]   {background:#B7CDF6;}
-.pipeline-seg[data-stage="sampled"]  {background:#8BD3CC;color:#0F3E39;}
-.pipeline-seg[data-stage="reviewed"] {background:#8FCD97;color:#153A20;}
-.pipeline-seg .pipeline-seg-n{font-family:var(--f-mono);}
+/* Pipeline legend (condense pass 2026-07-26). The old segmented tier bar
+   was retired - it duplicated the Sankey flow, which now leads the merged
+   "Where the team is" section as its single visual. The swatch + count
+   labels survive here as the Sankey's legend, and the plain-English stage
+   caption stays below them. */
+.pipeline-rail{margin:2px 0 6px;}
 .pipeline-labels{display:flex;margin-top:10px;font-size:var(--fs-2);
        color:var(--muted);flex-wrap:wrap;gap:22px;line-height:var(--lh-2);}
 .pipeline-label{display:inline-flex;align-items:baseline;gap:8px;}
@@ -2681,6 +2748,8 @@ table.rep td{border-bottom:1px solid var(--ice);padding:7px 9px;vertical-align:t
 .pipeline-label-name{color:var(--ink);}
 .pipeline-caption{font-size:var(--fs-2);color:var(--muted);
        line-height:var(--lh-3);margin-top:12px;max-width:860px;}
+/* Sankey embedded in the wti section: tighten the gap to its legend. */
+.wti-section .sankey-wrap{margin:10px 0 0;}
 /* Deprecated wti-cov-* rules kept for one release cycle in case a plugin
    or a stale HTML snippet still references them; unused after 2026-07-26. */
 .wti-cov-list{display:flex;flex-direction:column;gap:8px;margin:8px 0 6px;}
@@ -2953,6 +3022,78 @@ table.rep td{border-bottom:1px solid var(--ice);padding:7px 9px;vertical-align:t
        border:1px solid transparent;}
 .lscape-legend .lscape-legend-summary{margin-left:auto;color:var(--muted);
        font-size:var(--fs-1);font-family:var(--f-mono);}
+/* Condense-home pass 2026-07-26 commit #2. Compact landscape view + expand
+   toggle. Default state shows kind row headers + top-3 programs per kind as
+   inline text (~200 px total vs. the full SVG's ~1,143 px). The full SVG
+   treemap lives inside the sibling `.lscape-expanded` div which stays
+   `hidden` until the user (or persisted localStorage state) opens it.
+   `data-landscape-toggle` buttons flip between the two views. */
+.lscape-compact{margin:6px 0 0;}
+.lscape-compact-caption{font-size:var(--fs-2);color:var(--muted);
+       line-height:1.45;margin:0 0 10px;max-width:900px;}
+.lscape-compact-caption b{color:var(--navy);font-weight:var(--w-emph);}
+.lscape-compact-rows{display:flex;flex-direction:column;gap:6px;margin:0 0 12px;}
+.lscape-compact-row{display:grid;grid-template-columns:120px 62px 1fr;
+       align-items:baseline;gap:12px;padding:9px 12px 9px 14px;
+       background:#FBFCFE;border:1px solid var(--ice);
+       border-left:4px solid var(--line);border-radius:6px;font-size:var(--fs-2);
+       line-height:var(--lh-2);}
+.lscape-compact-name{font-family:var(--f-display);color:var(--navy);
+       font-weight:var(--w-head);letter-spacing:var(--lsp-tight);
+       font-size:var(--fs-3);}
+.lscape-compact-count{font-family:var(--f-mono);color:var(--navy);
+       font-weight:var(--w-head);font-size:var(--fs-3);
+       font-variant-numeric:tabular-nums;text-align:right;}
+.lscape-compact-top{color:var(--ink);font-size:var(--fs-2);
+       line-height:1.4;min-width:0;overflow:hidden;text-overflow:ellipsis;
+       white-space:nowrap;}
+.lscape-compact-topprefix{color:var(--muted);font-weight:var(--w-head);
+       font-size:var(--fs-1);letter-spacing:.04em;text-transform:uppercase;
+       margin-right:4px;}
+.lscape-compact-num{font-family:var(--f-mono);color:var(--muted);
+       font-size:var(--fs-1);font-variant-numeric:tabular-nums;}
+@media(max-width:640px){
+  .lscape-compact-row{grid-template-columns:1fr auto;grid-template-rows:auto auto;}
+  .lscape-compact-top{grid-column:1/-1;white-space:normal;}
+}
+.lscape-expand-btn,.lscape-collapse-btn{display:inline-flex;align-items:center;
+       gap:6px;background:var(--ice);color:var(--navy);border:1px solid var(--line);
+       border-radius:6px;padding:8px 14px;font-family:inherit;font-size:var(--fs-2);
+       font-weight:var(--w-emph);cursor:pointer;transition:background .12s ease;
+       letter-spacing:.01em;}
+.lscape-expand-btn:hover,.lscape-collapse-btn:hover{background:#DDE7F7;}
+.lscape-expand-btn:focus-visible,.lscape-collapse-btn:focus-visible{outline:2px solid var(--gold);
+       outline-offset:2px;}
+.lscape-expand-caret{color:var(--navy);font-size:var(--fs-3);line-height:1;
+       transform:translateY(1px);}
+.lscape-collapse-btn{margin-top:10px;background:transparent;border-color:var(--line);
+       color:var(--muted);font-weight:var(--w-body);font-size:var(--fs-1);}
+.lscape-collapse-btn:hover{background:var(--ice);color:var(--navy);}
+/* Bureau press-release compact preview (2026-07-26 commit #2). Single-line
+   preview showing today's top headline + a "N more" button that opens the
+   full 5-item list. Both compact and full states are pre-rendered; the
+   `hidden` attribute swaps them via the persistence JS. */
+.cpress-preview{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;
+       padding:2px 0;font-size:var(--fs-2);line-height:1.5;color:var(--ink);}
+.cpress-preview-label{color:var(--navy);font-weight:var(--w-head);
+       font-family:var(--f-display);letter-spacing:var(--lsp-tight);
+       font-size:var(--fs-3);}
+.cpress-preview-title{color:var(--ink);text-decoration:none;flex:1;
+       min-width:200px;border-bottom:1px dotted transparent;}
+.cpress-preview-title:hover{color:var(--navy);border-bottom-color:#8FA8D8;}
+.cpress-expand-btn{display:inline-flex;align-items:center;gap:4px;
+       background:transparent;color:#3A4890;border:0;padding:2px 6px;
+       font-family:inherit;font-size:var(--fs-2);font-weight:var(--w-emph);
+       cursor:pointer;border-bottom:1px dotted #8FA8D8;letter-spacing:.01em;}
+.cpress-expand-btn:hover{color:var(--navy);border-bottom-style:solid;}
+.cpress-expand-btn:focus-visible{outline:2px solid var(--gold);outline-offset:2px;}
+.cpress-collapse-btn{display:inline-flex;align-items:center;gap:6px;
+       margin-top:8px;background:transparent;color:var(--muted);
+       border:1px solid var(--line);border-radius:6px;padding:4px 10px;
+       font-family:inherit;font-size:var(--fs-1);cursor:pointer;
+       font-weight:var(--w-body);}
+.cpress-collapse-btn:hover{background:var(--ice);color:var(--navy);}
+.cpress-collapse-btn:focus-visible{outline:2px solid var(--gold);outline-offset:2px;}
 /* .rev-mode-details / .rev-mode-body removed Phase A #3 (2026-07-26) - the
    Home tab no longer carries a collapsed 'Reviewer mode data' block; the
    funnel + inventory + work-depth table + notebook-health it contained were
@@ -3365,7 +3506,7 @@ body:not(.am-reviewer) .panel.panel-am{display:none;}
   <div class="tour-halo" aria-hidden="true"></div>
   <div class="tour-callout" role="document">
     <div class="tour-callout-head">
-      <span class="tour-step-idx" id="tour-step-idx">1 / 7</span>
+      <span class="tour-step-idx" id="tour-step-idx">1 / 6</span>
       <button type="button" class="tour-skip" id="tour-skip" aria-label="Skip the tour">Skip tour</button>
     </div>
     <div class="tour-callout-title" id="tour-title">&nbsp;</div>
@@ -3749,6 +3890,198 @@ document.querySelectorAll('.filter input').forEach(function(inp){
       _lsSet(LS_PREFIX + el.dataset.productId, el.open ? 'true' : 'false');
     }
   }, true);
+})();
+/* --- Condense-home pass 2026-07-26 commit #2. Section-level collapse
+   persistence for the three heavy Home sections (landscape treemap, WWL
+   Show-all drawer, Bureau press feed). Extends the existing localStorage
+   pattern under keyed namespaces:
+     * product_scope:landscape_expanded  ('true'/'false')
+     * product_scope:wwl_show_all        ('true'/'false')  -- <details> based
+     * product_scope:bureau_expanded     ('true'/'false')
+   Any hostile storage env (in-private, quota, disabled) silently no-ops. */
+(function(){
+  var LS_KEY_PREFIX = 'product_scope:';
+  function _lsGet(k){ try { return localStorage.getItem(k); } catch(_){ return null; } }
+  function _lsSet(k, v){ try { localStorage.setItem(k, v); } catch(_){} }
+
+  /* Landscape treemap: swap between .lscape-compact (default) and
+     .lscape-expanded (SVG grid). Both live inside the same .lscape-section
+     so the swap is a `hidden` attribute flip. Buttons on both sides carry
+     data-landscape-toggle. */
+  var lscape = document.querySelector('.lscape-section[data-collapsible="landscape"]');
+  if (lscape){
+    var compact = lscape.querySelector('[data-landscape-view="compact"]');
+    var expanded = lscape.querySelector('[data-landscape-view="expanded"]');
+    var setLandscapeState = function(open){
+      if (compact) compact.hidden = !!open;
+      if (expanded) expanded.hidden = !open;
+      lscape.querySelectorAll('[data-landscape-toggle]').forEach(function(b){
+        b.setAttribute('aria-expanded', open ? 'true' : 'false');
+      });
+    };
+    var initialOpen = _lsGet(LS_KEY_PREFIX + 'landscape_expanded') === 'true';
+    setLandscapeState(initialOpen);
+    lscape.addEventListener('click', function(e){
+      var b = e.target.closest && e.target.closest('[data-landscape-toggle]');
+      if (!b) return;
+      e.preventDefault();
+      var currentlyOpen = !expanded || expanded.hidden === false;
+      var next = !currentlyOpen;
+      setLandscapeState(next);
+      _lsSet(LS_KEY_PREFIX + 'landscape_expanded', next ? 'true' : 'false');
+      /* When collapsing, scroll the section header back into view so the
+         reader isn't stranded at the bottom of the previously-tall SVG. */
+      if (!next){
+        var h = lscape.querySelector('h2');
+        if (h && h.scrollIntoView) h.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+      }
+    });
+    /* Also let a click on any compact kind row open the expanded view - it
+       reads as a discovery affordance without needing a second button. */
+    var rows = lscape.querySelectorAll('.lscape-compact-row');
+    rows.forEach(function(r){
+      r.style.cursor = 'pointer';
+      r.setAttribute('role', 'button');
+      r.setAttribute('tabindex', '0');
+      r.addEventListener('click', function(){
+        setLandscapeState(true);
+        _lsSet(LS_KEY_PREFIX + 'landscape_expanded', 'true');
+      });
+      r.addEventListener('keydown', function(e){
+        if (e.key === 'Enter' || e.key === ' '){
+          e.preventDefault();
+          setLandscapeState(true);
+          _lsSet(LS_KEY_PREFIX + 'landscape_expanded', 'true');
+        }
+      });
+    });
+  }
+
+  /* Bureau press feed: swap between .cpress-preview (default) and
+     .cpress-full (5-item list). Same hidden-attr flip pattern. */
+  var bureau = document.querySelector('.cpress-section[data-collapsible="bureau"]');
+  if (bureau){
+    var preview = bureau.querySelector('[data-bureau-view="collapsed"]');
+    var full = bureau.querySelector('[data-bureau-view="expanded"]');
+    var setBureauState = function(open){
+      if (preview) preview.hidden = !!open;
+      if (full) full.hidden = !open;
+      bureau.querySelectorAll('[data-bureau-toggle]').forEach(function(b){
+        b.setAttribute('aria-expanded', open ? 'true' : 'false');
+      });
+    };
+    var bInitialOpen = _lsGet(LS_KEY_PREFIX + 'bureau_expanded') === 'true';
+    setBureauState(bInitialOpen);
+    bureau.addEventListener('click', function(e){
+      var b = e.target.closest && e.target.closest('[data-bureau-toggle]');
+      if (!b) return;
+      e.preventDefault();
+      var currentlyOpen = !full || full.hidden === false;
+      var next = !currentlyOpen;
+      setBureauState(next);
+      _lsSet(LS_KEY_PREFIX + 'bureau_expanded', next ? 'true' : 'false');
+    });
+  }
+
+  /* WWL Show-all drawer: <details> element with data-persist-key. Native
+     <details> already toggles open/closed with JS off; this restores the
+     last state from localStorage and persists changes on 'toggle'. */
+  document.querySelectorAll('details[data-persist-key]').forEach(function(el){
+    var key = LS_KEY_PREFIX + el.dataset.persistKey;
+    if (_lsGet(key) === 'true') el.open = true;
+  });
+  document.addEventListener('toggle', function(e){
+    var el = e.target;
+    if (el && el.tagName === 'DETAILS' && el.dataset && el.dataset.persistKey){
+      _lsSet(LS_KEY_PREFIX + el.dataset.persistKey, el.open ? 'true' : 'false');
+    }
+  }, true);
+})();
+/* --- Condense-home pass 2026-07-26 commit #3. Sticky in-page chapter nav
+   wayfinder for Home. Two behaviors:
+     1. Click a chip -> smooth-scroll to the corresponding chapter (uses
+        scroll-margin-top so the chapter label lands below the sticky bar).
+     2. As the reader scrolls, highlight the chip whose chapter is currently
+        top-of-viewport (IntersectionObserver watches each .home-chapter and
+        picks the last one whose top has crossed the sticky-nav boundary).
+   Falls back gracefully with JS off (chips are <a href="#..."> anchors that
+   still work). The nav DOM lives inside #panel-home so tab switching handles
+   its visibility automatically. */
+(function(){
+  var nav = document.querySelector('.home-chapternav');
+  if (!nav) return;
+  var chips = Array.prototype.slice.call(
+    nav.querySelectorAll('.home-chapternav-chip'));
+  if (!chips.length) return;
+
+  /* Smooth-scroll click handler. Native anchor jumps land under the sticky
+     nav because scroll-margin-top is set on .home-chapter; behavior: 'smooth'
+     is the only add. Ctrl/Cmd+click and middle-click still work as native
+     anchors. */
+  chips.forEach(function(chip){
+    chip.addEventListener('click', function(e){
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+      var id = chip.getAttribute('href');
+      if (!id || id.charAt(0) !== '#') return;
+      var target = document.querySelector(id);
+      if (!target) return;
+      e.preventDefault();
+      target.scrollIntoView({behavior: 'smooth', block: 'start'});
+      _setActive(chip);
+      /* Update the URL hash without triggering another scroll. */
+      try { history.replaceState(null, '', id); } catch(_){}
+    });
+  });
+
+  function _setActive(activeChip){
+    chips.forEach(function(c){
+      c.classList.toggle('on', c === activeChip);
+      c.setAttribute('aria-current', c === activeChip ? 'true' : 'false');
+    });
+  }
+
+  /* IntersectionObserver: watch every chapter, keep track of which ones are
+     currently intersecting near the top of the viewport. The `rootMargin`
+     top offset is negative so the "trigger line" sits just below the sticky
+     nav rather than at the very top of the viewport. */
+  var chapters = Array.prototype.slice.call(
+    document.querySelectorAll('.home-chapter[data-chapter]'));
+  if (!chapters.length) { _setActive(chips[0]); return; }
+  var visibleIds = new Set();
+  var observer = new IntersectionObserver(function(entries){
+    entries.forEach(function(en){
+      var cid = en.target.getAttribute('data-chapter');
+      if (en.isIntersecting) visibleIds.add(cid);
+      else visibleIds.delete(cid);
+    });
+    /* Pick the LAST chapter that's currently visible (most-recently-crossed
+       becomes the "current" one). Fallback: the first chapter above the
+       viewport if none intersect. */
+    var pick = null;
+    for (var i = chapters.length - 1; i >= 0; i--){
+      var cid = chapters[i].getAttribute('data-chapter');
+      if (visibleIds.has(cid)) { pick = cid; break; }
+    }
+    if (!pick){
+      /* Nothing intersecting - find the chapter whose top is above the
+         trigger line (i.e., we've scrolled past it). */
+      for (var j = chapters.length - 1; j >= 0; j--){
+        var r = chapters[j].getBoundingClientRect();
+        if (r.top < 80){ pick = chapters[j].getAttribute('data-chapter'); break; }
+      }
+    }
+    if (!pick) pick = chapters[0].getAttribute('data-chapter');
+    var chip = nav.querySelector('.home-chapternav-chip[data-chapter-target="' + pick + '"]');
+    if (chip) _setActive(chip);
+  }, {
+    root: null,
+    rootMargin: '-80px 0px -55% 0px',
+    threshold: 0
+  });
+  chapters.forEach(function(ch){ observer.observe(ch); });
+  /* Seed the initial highlight on the first chapter so the nav isn't blank
+     before the first scroll event. */
+  _setActive(chips[0]);
 })();
 /* --- Keyboard shortcut: E toggles the focused Quick Look drill-down ---
    Behaviour (Phase 4b #5):
@@ -4221,7 +4554,7 @@ document.querySelectorAll('.filter input').forEach(function(inp){
    -------------------------------------------------------------------------- */
 (function(){
   var TOUR_SEEN_KEY = 'product_scope:tour_seen';
-  // Seven tour stops in order. Each: {sel, title, body}. sel is a CSS
+  // Six tour stops in page order. Each: {sel, title, body}. sel is a CSS
   // selector; the FIRST match on the page is highlighted. Home-panel
   // selectors are guaranteed present (the tour runs on Home).
   var STOPS = [
@@ -4240,25 +4573,21 @@ document.querySelectorAll('.filter input').forEach(function(inp){
      body:  "If you'd rather explore in the tool, walk these five products "
           + "top to bottom. Each one illustrates a single uncertainty "
           + "mechanism with real Census data."},
-    {sel: '.pipeline-rail',
+    {sel: '.wti-section',
      title: "Where the team is",
-     body:  "This rail shows how far along we are on the research pipeline - "
-          + "how many products we've probed, sampled, and reviewed against "
-          + "the full catalog of 573."},
+     body:  "The flow diagram shows how far we are on the research pipeline - "
+          + "how many of the 573 products we've probed, sampled, and reviewed. "
+          + "Ribbon width is the count that carried forward at each stage."},
+    {sel: '.lscape-section',
+     title: "The Census data landscape",
+     body:  "All 573 product families laid out by type and program. Box size "
+          + "is proportional to product count. Click any box to drill into "
+          + "that program's cards."},
     {sel: '.wwl-section',
      title: "What we've learned",
      body:  "One feed for every insight the team has recorded: curated head-"
           + "lines, WORKLOG findings, per-product notes, auto-generated "
-          + "signals when data drifts."},
-    {sel: '.sankey-section',
-     title: "The research pipeline",
-     body:  "Same numbers as the rail above, drawn as flows. Ribbon width "
-          + "shows the count that carried forward; shrinking node stacks "
-          + "show what dropped out at each stage."},
-    {sel: '.lscape-section',
-     title: "The Census data landscape",
-     body:  "All 573 product families laid out by type and program. Box size "
-          + "is proportional to product count. You're ready - open the first "
+          + "signals when data drifts. You're ready - open the first "
           + "curriculum product from step 3 and start exploring."}
   ];
   var idx = 0;
@@ -6652,24 +6981,12 @@ def build_where_team_is(fams, review, work, probes, data_cache, git, repo):
         "reviewed":  "reviewed",
     }
 
-    # Segmented bar: one <div> per stage, width proportional to its share.
-    # Zero-count stages render at 0% width so the visual invariant (widths
-    # sum to 100%) is preserved without giving empty tiers false weight.
-    seg_html = []
-    for stage in PIPELINE_STAGES:
-        n = pc[stage]
-        share = 100.0 * n / total
-        # Only paint the count inside the segment when there's room. At
-        # under ~6% the number wouldn't fit; the label below carries it.
-        inline_n = f'<span class="pipeline-seg-n">{n:,}</span>' if share >= 6.0 else ""
-        seg_html.append(
-            f'<div class="pipeline-seg" data-stage="{stage}" '
-            f'style="width:{share:.3f}%" '
-            f'title="{n:,} of {pc["total"]:,} products - {STAGE_LABEL[stage]}">'
-            f'{inline_n}</div>')
-
-    # Labels below the bar: swatch + count + name. Reads left-to-right in
-    # the same order as the segments.
+    # Condense pass 2026-07-26: the segmented tier bar was retired in favor
+    # of the Sankey flow (they rendered the same four counts as two separate
+    # bands). The Sankey is now the section's visual; the swatch + count
+    # labels below survive as its legend, so no number was lost.
+    # Labels: swatch + count + name. Reads left-to-right in
+    # the same order as the Sankey stages.
     lbl_html = []
     for stage in PIPELINE_STAGES:
         n = pc[stage]
@@ -6685,14 +7002,15 @@ def build_where_team_is(fams, review, work, probes, data_cache, git, repo):
              '<div class="sub">Every product moves through the '
              f'research pipeline{gloss("research pipeline")} on its way to a '
              'finished uncertainty note. This shows where each of the '
-             f'{pc["total"]:,} catalog product families currently sits.</div>',
+             f'{pc["total"]:,} catalog product families currently sits'
+             f'{gloss("reviewed")}. <b>Ribbon width</b> is the number of '
+             'products that carried forward to the next stage.</div>',
+             # Condense pass 2026-07-26: the Sankey flow IS the section's
+             # visual (it and the old segmented tier bar told the same
+             # pipeline-state story as two separate bands). Visual first,
+             # then the swatch legend, then the plain-English caption.
+             build_sankey_pipeline(pc, embedded=True),
              '<div class="pipeline-rail">',
-             '<div class="pipeline-bar" role="img" aria-label='
-             f'"Research pipeline: {pc["cataloged"]:,} cataloged, '
-             f'{pc["probed"]:,} probed, {pc["sampled"]:,} sampled, '
-             f'{pc["reviewed"]:,} reviewed{gloss("reviewed")}.">',
-             "".join(seg_html),
-             '</div>',
              '<div class="pipeline-labels">',
              "".join(lbl_html),
              '</div>',
@@ -6935,8 +7253,9 @@ def build_census_press_feed(cache_path):
         "stale":  ("stale",  "may be outdated"),
     }.get(status, ("stale", ""))
 
+    top_items = items[:CENSUS_PRESS_LIMIT]
     lis = []
-    for it in items[:CENSUS_PRESS_LIMIT]:
+    for it in top_items:
         title = it.get("title") or "(untitled)"
         link = it.get("link") or CENSUS_PRESS_FALLBACK
         date_display = it.get("date_display") or ""
@@ -6947,9 +7266,35 @@ def build_census_press_feed(cache_path):
             f'target="_blank" rel="noopener">{_esc(title)}</a>'
             '</li>')
 
+    # Condense-home pass 2026-07-26 commit #2: default-collapse into a
+    # single-line preview showing only the most recent headline + a "N more"
+    # button. Full head + caption + 5-item list live in the expanded panel,
+    # revealed via the toggle. Persists via localStorage
+    # `product_scope:bureau_expanded`. Preview line is always rendered so a
+    # first-time reader can see today's top Bureau headline without any
+    # interaction; the expand button opens the full list when they want more.
+    first = top_items[0] if top_items else {}
+    first_title = first.get("title") or "(no recent releases)"
+    first_link = first.get("link") or CENSUS_PRESS_FALLBACK
+    n_more = max(0, len(top_items) - 1)
     return (
         '<div class="cpress-section" role="region" '
+        'data-collapsible="bureau" '
         'aria-label="This week from Census - recent Bureau press releases">'
+        # Compact preview: shown by default, hidden when expanded.
+        '<div class="cpress-preview" data-bureau-view="collapsed">'
+        '<span class="cpress-preview-label">This week from Census:</span> '
+        f'<a class="cpress-preview-title" href="{_esc(first_link)}" '
+        f'target="_blank" rel="noopener">{_esc(first_title)}</a>'
+        + (f' <button type="button" class="cpress-expand-btn" '
+           f'data-bureau-toggle aria-expanded="false" '
+           f'aria-controls="cpress-full-panel">{n_more} more '
+           f'<span class="arrow" aria-hidden="true">&rarr;</span>'
+           f'</button>' if n_more else '')
+        + '</div>'
+        # Full panel: hidden by default, shown when expanded.
+        '<div class="cpress-full" id="cpress-full-panel" '
+        'data-bureau-view="expanded" hidden>'
         '<div class="cpress-head">'
         '<h3>This week from Census</h3>'
         + (f'<span class="cpress-tag {tag_class}">{_esc(tag_text)}</span>'
@@ -6964,6 +7309,12 @@ def build_census_press_feed(cache_path):
         '<ul class="cpress-list">'
         + "".join(lis) +
         '</ul>'
+        '<button type="button" class="cpress-collapse-btn" '
+        'data-bureau-toggle aria-expanded="true" '
+        'aria-controls="cpress-full-panel">'
+        '<span class="arrow" aria-hidden="true">&larr;</span> Collapse'
+        '</button>'
+        '</div>'
         '</div>')
 
 # ============================================================================
@@ -7157,13 +7508,19 @@ def build_what_learned(fams, review, worklog, git):
     # so the drawer stays scannable. Curated findings never drop from view -
     # they're editorial synthesis (small count of ~12) and always sort first.
     # The 30 cap applies only to sort_group > 0 (human / auto:* / worklog).
+    # Condense-home pass 2026-07-26 commit #2: tightened the default top-of-fold
+    # from 15 to 5 items so the section reads as a scannable teaser instead of
+    # a dense wall of insights. The Show-all drawer still holds the rest and
+    # persists open/closed state via localStorage under
+    # `product_scope:wwl_show_all` (see inline JS in the base template).
     SHOWALL_CAP = 30
+    WWL_DEFAULT_VISIBLE = 5
     curated = [e for e in entries if e["kind"] == "curated"]
     non_curated = [e for e in entries if e["kind"] != "curated"]
-    # Top-of-fold: first 15 across all entries (curated ranked first by
+    # Top-of-fold: first N across all entries (curated ranked first by
     # sort_key group=0, so this preserves the pre-#3 top-of-fold behavior).
-    visible = entries[:15]
-    hidden = entries[15:]
+    visible = entries[:WWL_DEFAULT_VISIBLE]
+    hidden = entries[WWL_DEFAULT_VISIBLE:]
     # Split hidden into curated-hidden vs non-curated-hidden (should be
     # empty for curated since all 12 fit in the first 15 slots), then cap
     # non-curated at SHOWALL_CAP.
@@ -7189,7 +7546,12 @@ def build_what_learned(fams, review, worklog, git):
     if hidden_render or dropped_non_curated:
         summary = (f'Show all {total_rendered} findings '
                    f'({len(hidden_render)} more)')
-        parts.append(f'<details class="wwl-more"><summary>{summary}</summary>'
+        # Condense-home pass 2026-07-26 commit #2: `data-persist-key` opts this
+        # <details> into the localStorage persistence layer for section state
+        # (see the collapsible-persistence inline JS). Key opens/closes across
+        # reloads under `product_scope:wwl_show_all`.
+        parts.append(f'<details class="wwl-more" data-persist-key="wwl_show_all">'
+                     f'<summary>{summary}</summary>'
                      '<ul class="wwl-list" style="border-top:1px solid var(--ice)">')
         parts.extend(_row(e) for e in hidden_render)
         parts.append('</ul>')
@@ -7777,11 +8139,15 @@ def _sankey_ribbon_path(x1, y1t, y1b, x2, y2t, y2b):
         f"C {mx:.2f} {y2b:.2f}, {mx:.2f} {y1b:.2f}, {x1:.2f} {y1b:.2f} Z"
     )
 
-def build_sankey_pipeline(pc):
+def build_sankey_pipeline(pc, embedded=False):
     """Emit an inline-SVG Sankey diagram for the four research-pipeline
     stages. `pc` is a _pipeline_counts() dict.
 
-    Returns a full <section> HTML fragment (caption + wrap + SVG + caption).
+    embedded=False returns a full standalone section fragment (h2 + captions
+    + wrap + SVG). embedded=True (the condense-pass default usage: the Sankey
+    now lives INSIDE the "Where the team is" section as its lead visual)
+    returns only the .sankey-wrap fragment - no section wrapper, no h2 -
+    so the host section supplies the header and legend.
     Compact: ~180px SVG height, full-width. Click on any node jumps to the
     Products tab (handler wired in the shared inline <script>).
     """
@@ -7900,6 +8266,16 @@ def build_sankey_pipeline(pc):
 
     svg.append('</svg>')
 
+    wrap = (
+        '<div class="sankey-wrap">'
+        + "".join(svg) +
+        '<div class="sankey-caption-bottom">'
+        'Click any stage to jump to the Products tab.'
+        '</div>'
+        '</div>'
+    )
+    if embedded:
+        return wrap
     return (
         '<div class="sankey-section">'
         '<h2>Research pipeline</h2>'
@@ -7909,12 +8285,7 @@ def build_sankey_pipeline(pc):
         'that carried forward to the next stage; the shrinking node stacks '
         'show how many dropped off along the way.'
         '</div>'
-        '<div class="sankey-wrap">'
-        + "".join(svg) +
-        '<div class="sankey-caption-bottom">'
-        'Click any stage to jump to the Products tab.'
-        '</div>'
-        '</div>'
+        + wrap +
         '</div>'
     )
 
@@ -8117,8 +8488,58 @@ def build_landscape_viz(fams, work, probes, data_cache, review=None):
         _, _, sw, sh = smallest_box
         smallest_note = (f'&middot; smallest box {sw:.0f}&times;{sh:.0f} px')
 
-    return ('<div class="lscape-section">'
+    # Condense-home pass 2026-07-26 commit #2: default-collapse the treemap.
+    # A 1,143-px-tall SVG stack is the single biggest thing on the Home tab
+    # and dominates initial paint. Render a compact summary (kind row headers
+    # + top-3 programs per kind as inline text) as the default view, and
+    # keep the full SVG treemap available behind an "Expand landscape" toggle.
+    # LocalStorage key `product_scope:landscape_expanded` remembers user
+    # preference across reloads. `<details>` is used natively so JS-off users
+    # still get a click-to-expand affordance; the inline JS below layers
+    # persistence on top.
+    compact_rows = []
+    for kind in kind_order:
+        progs = by_kind[kind]
+        n_kind = sum(len(v) for v in progs.values())
+        n_progs_in_kind = len(progs)
+        top3 = sorted(progs.items(), key=lambda kv: (-len(kv[1]), kv[0]))[:3]
+        top3_text = " &middot; ".join(
+            f'{_esc(pn)} <span class="lscape-compact-num">({len(items)})</span>'
+            for pn, items in top3)
+        top_prefix = "top" if n_progs_in_kind > 3 else "all"
+        tint = LSCAPE_KIND_TINT.get(kind, LSCAPE_KIND_TINT["Uncategorized"])
+        compact_rows.append(
+            f'<div class="lscape-compact-row" data-kind="{_esc(_kind_slug(kind))}" '
+            f'style="border-left-color:{tint["accent"]}">'
+            f'<div class="lscape-compact-name">{_esc(kind)}</div>'
+            f'<div class="lscape-compact-count">{n_kind}</div>'
+            f'<div class="lscape-compact-top">'
+            f'<span class="lscape-compact-topprefix">{top_prefix}:</span> '
+            f'{top3_text}'
+            f'</div>'
+            f'</div>')
+
+    return ('<div class="lscape-section" data-collapsible="landscape">'
             '<h2>The Census data landscape</h2>'
+            '<div class="lscape-compact" data-landscape-view="compact">'
+            '<div class="lscape-compact-caption">'
+            f'{len(fams):,} Census products across {len(kind_order)} dataset '
+            'kinds. The treemap below shows each program sized by product '
+            'count; expand it to explore. '
+            '<b>Click a kind row to expand.</b>'
+            '</div>'
+            '<div class="lscape-compact-rows">'
+            + "".join(compact_rows) +
+            '</div>'
+            '<button type="button" class="lscape-expand-btn" '
+            'data-landscape-toggle aria-expanded="false" '
+            'aria-controls="lscape-expanded-panel">'
+            '<span class="lscape-expand-label">Expand landscape</span> '
+            '<span class="lscape-expand-caret" aria-hidden="true">&#9656;</span>'
+            '</button>'
+            '</div>'
+            '<div class="lscape-expanded" id="lscape-expanded-panel" '
+            'data-landscape-view="expanded" hidden>'
             f'<div class="lscape-caption">{caption}</div>'
             f'<div class="lscape-viz">'
             + "".join(row_html_parts)
@@ -8132,7 +8553,15 @@ def build_landscape_viz(fams, work, probes, data_cache, review=None):
               f'box{"es" if prog_boxes_rendered != 1 else ""} rendered'
               f'{" &middot; " + str(spilled_boxes) + " in spill drawers" if spilled_boxes else ""}'
               f' {smallest_note}</span>'
-            '</div></div>')
+            '</div>'
+            '<button type="button" class="lscape-collapse-btn" '
+            'data-landscape-toggle aria-expanded="true" '
+            'aria-controls="lscape-expanded-panel">'
+            '<span class="lscape-expand-caret" aria-hidden="true">&#9662;</span> '
+            'Collapse landscape'
+            '</button>'
+            '</div>'
+            '</div>')
 
 def _all_flex_fallback(by_kind, kind_order, work, probes, data_cache, review=None):
     """Full-viz fallback for the (very unlikely) case where even the outer
@@ -8775,48 +9204,96 @@ def build_home(fams, review, work, counts, worklog, notebooks, probes, git=None,
     though the Home tab no longer surfaces them directly.
     """
     h = []
+    # Condense-home pass 2026-07-26 commit #3: sticky in-page chapter nav.
+    # Rendered at the very top of the Home panel (above the diff banner)
+    # so it wayfindes the reader through the 3 chapters below. Sticky-
+    # positioned inside body scroll, hides gracefully when the reader is
+    # on a Products tab (nav lives inside #panel-home which only shows
+    # when Home is the active tab). Small chips, muted colors, doesn't
+    # compete with content - see .home-chapternav CSS + the inline JS
+    # (IntersectionObserver-driven current-chapter highlight).
+    h.append(
+        '<nav class="home-chapternav" aria-label="Home chapters">'
+        '<span class="home-chapternav-lead" aria-hidden="true">Jump to</span>'
+        '<a href="#chapter-get-oriented" class="home-chapternav-chip" '
+        'data-chapter-target="get-oriented" data-chip-idx="1">'
+        '<span class="hcn-idx">1</span> Get oriented</a>'
+        '<a href="#chapter-landscape" class="home-chapternav-chip" '
+        'data-chapter-target="landscape" data-chip-idx="2">'
+        '<span class="hcn-idx">2</span> The landscape</a>'
+        '<a href="#chapter-team-pulse" class="home-chapternav-chip" '
+        'data-chapter-target="team-pulse" data-chip-idx="3">'
+        '<span class="hcn-idx">3</span> Team pulse</a>'
+        '</nav>')
+    # The diff banner renders as a slim one-line utility strip directly under
+    # the sticky nav (styled via .diff-banner) so all the meta-info - the
+    # freshness pill + tour launcher in the freshbar, and this regen diff -
+    # reads as ONE utility layer instead of three separate content bands.
     if diff is not None:
         h.append(build_diff_banner(diff, eda_diffs))
-    # Phase-1 findings report hero card (2026-07-26). Sits above "Where the
-    # team is" so a first-time reader's eye lands on it immediately. Persists
-    # regardless of Start-here banner dismissal (banner lives outside the
-    # panel and hides itself via localStorage).
-    h.append(build_phase1_hero_card())
-    # 2026-07-26: Home-tab "Find a product" search. Closes the goal-directed
-    # lookup gap from the head-to-head audit against census.gov (tool scored
-    # 4/10 vs census.gov's 9/10 on that dimension). Sits directly under the
-    # Phase-1 hero and above the curriculum: report = "read first" path,
-    # search = "I have a question" path, curriculum = "no idea where to
-    # start" path. All three are first-order discovery moves; the reader
-    # picks whichever fits their intent on this visit.
-    h.append(build_home_search(fams, review))
-    # UX pass 2026-07-26 commit #4: Start-here 5-product curriculum. Renders
-    # right below the phase-1 hero as the "if you want to explore in the tool"
-    # path (the report is the "if you want to read first" path). Both feed
-    # the same mental model, addressed to two different learning styles.
-    h.append(build_curriculum_card(fams))
-    # Primary framing: where we are + recently touched.
-    h.append(build_where_team_is(fams, review, work, probes, data_cache or {},
-                                  git, repo))
-    # Phase A 2026-07-26 commit #2: Bureau press-release mini-feed. Sits
-    # directly above "What we've learned" so external (Bureau) and internal
-    # (team) activity feeds visually cluster. Graceful fallback if fetch
-    # blocked - see build_census_press_feed() for the empty-state branch.
+    # Condense-home pass 2026-07-26 commit #1: wrap the Home sections into 3
+    # labeled chapters so a first-time reader sees structure before density.
+    # Small helper keeps the wrapping tidy and lets each chapter carry a
+    # muted small-caps label + hairline separator (styled via .home-chapter*).
+    def _chapter(cid, tag, caption, sections):
+        return (f'<section class="home-chapter" id="chapter-{cid}" '
+                f'data-chapter="{cid}" aria-labelledby="chapter-label-{cid}">'
+                f'<div class="home-chapter-label" id="chapter-label-{cid}">'
+                f'<span class="hc-tag">{tag}</span>'
+                f'<span class="hc-sep">&middot;</span>'
+                f'<span class="hc-caption">{caption}</span>'
+                f'</div>'
+                + "".join(sections) +
+                '</section>')
+
+    # ---- Chapter 1: Get oriented -----------------------------------------
+    # Phase-1 findings report hero card (2026-07-26): the plain-English tour
+    # that makes the rest of the tool make sense. Then "Find a product" search
+    # (I have a question) and the 5-item curriculum (no idea where to start).
+    # All three are first-order onboarding paths a first-time reader picks
+    # between on this visit. Hero + search sit in the LEFT column and the
+    # curriculum in the RIGHT column of a two-column grid (collapsing to one
+    # column under ~960px) so "read first" / "find something" / "walk the
+    # list" read as ONE get-started moment instead of three stacked bands.
+    ch1 = [
+        '<div class="onboard-grid">'
+        '<div class="onboard-col">'
+        + build_phase1_hero_card()
+        + build_home_search(fams, review)
+        + '</div>'
+        '<div class="onboard-col">'
+        + build_curriculum_card(fams)
+        + '</div>'
+        '</div>'
+    ]
+    h.append(_chapter("get-oriented", "Get oriented",
+                      "report &middot; search &middot; curriculum", ch1))
+
+    # ---- Chapter 2: The landscape ----------------------------------------
+    # One pipeline moment (Sankey flow as the visual, tier counts as its
+    # legend, "Recently touched" as the drill-in) followed by the landscape
+    # treemap - the shape-of-the-space centerpiece. The Sankey + tier rail
+    # were merged into build_where_team_is() in the condense pass: they told
+    # the same story (pipeline state) as two separate bands.
+    ch2 = [
+        build_where_team_is(fams, review, work, probes, data_cache or {},
+                             git, repo),
+        build_landscape_viz(fams, work, probes, data_cache or {},
+                             review=review),
+    ]
+    h.append(_chapter("landscape", "The landscape",
+                      "pipeline &middot; treemap", ch2))
+
+    # ---- Chapter 3: Team pulse -------------------------------------------
+    # External (Bureau press releases) + internal (WWL synthesis feed)
+    # activity signals. Visually clustered so the reader sees "what's new
+    # this week" as one section rather than two scattered feeds.
+    ch3 = []
     if repo is not None:
-        h.append(build_census_press_feed(repo / CENSUS_PRESS_CACHE))
-    # Aggregated feed: curated + WORKLOG + human + auto insights.
-    h.append(build_what_learned(fams, review, worklog, git))
-    # UX pass 2026-07-26 commit #3: Sankey research-pipeline flow.
-    # Sits ABOVE the landscape treemap - different question (pipeline
-    # progress vs. shape of the space). The treemap stays as the landscape
-    # awareness view. Phase A #1 counter-consolidation: `_tier_counts()` is
-    # now the SINGLE source both the Sankey and the treemap legend read from,
-    # so all three counters (tier rail, Sankey, landscape legend) agree.
-    pc = _tier_counts(fams, review, work, probes, data_cache or {})
-    h.append(build_sankey_pipeline(pc))
-    # Landscape viz: hierarchical Kind -> Program treemap.
-    h.append(build_landscape_viz(fams, work, probes, data_cache or {},
-                                  review=review))
+        ch3.append(build_census_press_feed(repo / CENSUS_PRESS_CACHE))
+    ch3.append(build_what_learned(fams, review, worklog, git))
+    h.append(_chapter("team-pulse", "Team pulse",
+                      "Bureau feed &middot; team findings", ch3))
     # Phase A 2026-07-26 commit #3: auto-tooltip jargon in the Home body copy
     # (MOE, CV, DP, PUMS, allocation, swapping, imputation, variance replicate,
     # differential privacy). Handled as a post-render pass so descriptions and
