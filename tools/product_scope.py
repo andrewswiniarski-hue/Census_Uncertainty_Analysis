@@ -508,9 +508,13 @@ CURRICULUM = [
 ]
 
 # Curated insight cards, written by the team, tagged with the product family they
-# belong to. Mined WORKLOG findings appear separately on the Home tab; they are NOT
-# attributed to a product, because WORKLOG does not record catalog paths and guessing
-# the link would be exactly the kind of inference this tool avoids.
+# belong to. Entries flagged `hero: True` render as the big-number stat cards at
+# the top of "What we've learned" (stat-first redesign 2026-07-26); the rest render
+# as compact one-liners below. Mined WORKLOG findings no longer render on Home at
+# all - demoted to a single WORKLOG.md link after Garrett's live-test feedback
+# ("massive wall of text"). WORKLOG items are NOT attributed to a product, because
+# WORKLOG does not record catalog paths and guessing the link would be exactly the
+# kind of inference this tool avoids.
 FINDINGS = [
  {"family": "acs/acs5", "stat": "1.4% → 13% → 20%", "headline": "Income error explodes as geography shrinks",
   "detail": "Median income CV at county / tract / block group; worst cases exceed the incomes measured.", "nb": "01", "kind": "finding"},
@@ -521,19 +525,23 @@ FINDINGS = [
  {"family": "acs/acs5", "stat": "ρ = −0.58", "headline": "Poverty data is most reliable where poverty is highest",
   "detail": "Urban cores measure best, affluent suburbs worst: an equity-relevant blind spot.", "nb": "03", "kind": "finding"},
  {"family": "dec/das-demo", "stat": "~9×", "headline": "Block groups carry ~9× the privacy noise of tracts",
-  "detail": "Same data, adjacent levels; geography type, not just size, drives DAS noise.", "nb": "04", "kind": "oddity"},
+  "detail": "Same data, adjacent levels; geography type, not just size, drives DAS noise.", "nb": "04", "kind": "oddity",
+  "hero": True},
  {"family": "dec/das-demo", "stat": "807 / 427", "headline": "Ghost and vanished blocks",
   "detail": "807 empty blocks gain 4,695 phantom residents; 427 inhabited blocks publish as empty.", "nb": "04", "kind": "finding"},
  {"family": "acs/acs5", "stat": "4 in 10", "headline": "Income is imputed for ~39% of households at a typical tract",
-  "detail": "Age/race under 1%: imputation is a variable-type story, concentrated in income.", "nb": "05", "kind": "finding"},
+  "detail": "Age/race under 1%: imputation is a variable-type story, concentrated in income.", "nb": "05", "kind": "finding",
+  "hero": True},
  {"family": "acs/acs5", "stat": "ρ ≈ 0", "headline": "Imputation is independent of the published error bars",
   "detail": "Every size-controlled allocation-vs-CV correlation sits in [−0.00, +0.19]: the MOE cannot see this error.", "nb": "05", "kind": "finding"},
  {"family": "acs/acs5", "stat": "22.8%", "headline": "The CV-only blind spot",
-  "detail": "481 of 2,109 tracts look fine by the error bar but carry heavily imputed income.", "nb": "06", "kind": "finding"},
+  "detail": "481 of 2,109 tracts look fine by the error bar but carry heavily imputed income.", "nb": "06", "kind": "finding",
+  "hero": True},
  {"family": "acs/acs5", "stat": "84.6%", "headline": "Combining rules disagree at the margin",
   "detail": "Equal-weight vs worst-component agree on only ~85% of the top-risk quartile.", "nb": "06", "kind": "finding"},
  {"family": "acs/acs5", "stat": "R² ≈ 0.67", "headline": "Score the estimate, not the place",
-  "detail": "Estimate size alone explains ~2/3 of CV variance; place population almost nothing.", "nb": "07", "kind": "finding"},
+  "detail": "Estimate size alone explains ~2/3 of CV variance; place population almost nothing.", "nb": "07", "kind": "finding",
+  "hero": True},
  {"family": "acs/acs5", "stat": "131", "headline": "The quiet tracts",
   "detail": "6% of NJ tracts publish population MOEs near zero with no documented reason.", "nb": "02", "kind": "oddity"},
 ]
@@ -2815,11 +2823,33 @@ details.disc[open] > summary .disc-preview{display:none;}
 .wti-empty{font-size:var(--fs-2);color:var(--muted);font-style:italic;padding:8px 0;}
 .wti-empty code{font-family:var(--f-mono);background:var(--ice);
        color:var(--navy);padding:1px 5px;border-radius:3px;font-style:normal;}
-/* "What we've learned" section (reframe pass commit #2). Aggregates every
-   insight source in one place: curated findings, WORKLOG mining, human
-   review notes, auto:cache_diff, auto:divergence. First synthesis of the
-   feed - previously these lived scattered across cards + Home tab. */
+/* "What we've learned" section - stat-first redesign (2026-07-26, after
+   Garrett's live test called the old all-sources feed "a massive wall of
+   text"). Hero stat cards (curated findings flagged `hero`) lead; team
+   notes and compact curated one-liners follow; WORKLOG prose is demoted
+   to one outbound link. */
 .wwl-section{margin:0 0 24px;max-width:1020px;}
+.wwl-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;
+       margin:14px 0 6px;}
+@media (max-width:900px){.wwl-stats{grid-template-columns:repeat(2,minmax(0,1fr));}}
+@media (max-width:480px){.wwl-stats{grid-template-columns:minmax(0,1fr);}}
+.wwl-stat{background:#FBFCFE;border:1px solid var(--line);
+       border-top:3px solid var(--gold);border-radius:8px;
+       padding:14px 16px 12px;display:flex;flex-direction:column;gap:6px;}
+.wwl-stat-num{font-family:var(--f-display);font-size:var(--fs-9);
+       line-height:var(--lh-9);color:var(--navy);
+       font-variant-numeric:tabular-nums;letter-spacing:-.01em;}
+.wwl-stat-num.long{font-size:var(--fs-8);line-height:var(--lh-8);padding:10px 0;}
+.wwl-stat-take{font-size:var(--fs-2);line-height:var(--lh-2);color:var(--ink);
+       font-weight:var(--w-emph);flex:1;}
+.wwl-stat-meta{font-size:var(--fs-1);color:var(--muted);}
+.wwl-stat-meta a.wti-path{font-family:var(--f-mono);font-weight:var(--w-head);
+       color:var(--navy);text-decoration:none;
+       border-bottom:1px dotted #8FA8D8;cursor:pointer;}
+.wwl-stat-meta a.wti-path:hover{color:#3A4890;border-bottom-style:solid;}
+.wwl-stat-nb{font-family:var(--f-mono);}
+.wwl-subhead{font-family:var(--f-display);font-size:var(--fs-4);
+       color:var(--navy);margin:18px 0 4px;}
 .wwl-list{list-style:none;padding:0;margin:8px 0 0;border-top:1px solid var(--ice);}
 .wwl-list li{padding:7px 8px;border-bottom:1px solid var(--ice);
        display:flex;gap:10px;align-items:baseline;font-size:var(--fs-2);line-height:1.45;
@@ -3504,21 +3534,8 @@ body:not(.am-reviewer) .panel.panel-am{display:none;}
 .ql-unc-empty{display:inline-flex;flex-wrap:wrap;gap:8px;align-items:center;
        font-style:normal;color:var(--muted);}
 .ql-unc-empty .copy-cmd{margin-top:2px;}
-/* Home tab "What we've learned" no-team-notes teaching block. */
-.wwl-teach{padding:12px 14px;background:#FBFCFE;border:1px solid var(--line);
-       border-radius:8px;font-style:normal;color:var(--ink);}
-.wwl-teach-lead{font-size:var(--fs-2);margin-bottom:10px;line-height:var(--lh-3);
-       color:var(--ink);}
-.wwl-teach-lead b{color:var(--navy);font-weight:var(--w-emph);}
-.wwl-teach-cheat{display:flex;flex-wrap:wrap;gap:18px;padding:6px 0 10px;
-       border-bottom:1px dotted var(--line);}
-.wwl-teach-kbd{font-size:var(--fs-2);color:var(--muted);line-height:1.6;}
-.wwl-teach-kbd kbd{display:inline-block;padding:0 7px;font-family:var(--f-mono);
-       font-size:var(--fs-1);background:var(--ice);color:var(--navy);
-       border:1px solid var(--line);border-radius:3px;font-weight:var(--w-head);
-       box-shadow:inset 0 -1px 0 var(--line);margin:0 3px;}
-.wwl-teach-then{margin-top:10px;font-size:var(--fs-2);color:var(--muted);
-       line-height:var(--lh-3);}
+/* (Keyboard-cheatsheet "wwl-teach" empty-state block removed 2026-07-26 in
+   the de-walling pass - the teach content was part of the text wall.) */
 /* "No products touched yet" teaching block. */
 .wti-teach{background:#FBFCFE;padding:12px 14px;border:1px solid var(--line);
        border-radius:8px;font-style:normal;color:var(--ink);}
@@ -7699,12 +7716,11 @@ def build_census_press_feed(cache_path):
 # entries would double-count. Existing entries still render on cards; they
 # just don't feed the Home synthesis feed.
 
-# Icons used to signal insight kind at a glance in the "What we've learned"
-# feed. Curated findings + WORKLOG lines get their own icons; the rest reuse
-# the existing INSIGHT_SOURCE_ICON map so a reader who has learned "wrench =
-# cache diff" on a product card sees the same wrench here.
+# Icon for curated findings in the "What we've learned" feed. Human notes
+# reuse INSIGHT_SOURCE_ICON so a reader who learned the icons on a product
+# card sees the same ones here. (WWL_ICON_WORKLOG removed 2026-07-26 - mined
+# WORKLOG rows no longer render on Home.)
 WWL_ICON_CURATED = "\U0001F4CC"   # pushpin - hand-selected headlines
-WWL_ICON_WORKLOG = "\U0001F4D6"   # book - team narrative record
 
 def _worklog_url(git):
     """Same GitHub-blob-or-file-fallback pattern the pre-reframe WORKLOG
@@ -7717,244 +7733,161 @@ def _worklog_url(git):
                             ).replace("\\", "/")
 
 def build_what_learned(fams, review, worklog, git):
-    """Home-tab 'What we've learned' section. Aggregates curated FINDINGS,
-    mined WORKLOG findings, and every human / auto:cache_diff / auto:divergence
-    insight from product_review.json into one time-ordered feed.
+    """Home-tab 'What we've learned' section - stat-first redesign
+    (2026-07-26, after Garrett's live test: the previous every-source feed
+    read as 'a massive wall of text and not helpful').
 
-    Priority order within the feed:
-      1. Curated FINDINGS - highest signal, hand-picked headlines.
-      2. Human insights - team notes, in reverse-chronological order.
-      3. auto:divergence - state-change signals worth surfacing.
-      4. auto:cache_diff - sample-drift signals.
-      5. WORKLOG findings - full narrative in the demoted section already,
-         but surfaced here as headlines so the Home tab is a one-stop synthesis.
-    Legacy auto:repo entries are excluded (they duplicate WORKLOG text).
-    Visible cap of 15 items keeps the section scannable; the rest sit behind
-    a 'Show all (N)' <details> toggle.
+    Layout, top to bottom:
+      1. Hero stat cards - the curated findings flagged `hero` in FINDINGS,
+         rendered number-first (type-scale step 8/9) with a one-line
+         takeaway and a product chip that jumps to the card via
+         window.__jumpToCard (the Home->card jump fixed the same day).
+      2. Team notes - human insights from product_review.json, newest
+         first, capped at 5 visible. Team gold; stays prominent.
+      3. More findings - the remaining curated findings as compact
+         one-liners (stat + headline + product chip), 5 visible, the rest
+         behind the persisted Show-more drawer.
+      4. One 'Full team log' link out to WORKLOG.md.
+
+    Deliberately DEMOTED (Garrett's call, live test 2026-07-26):
+      * WORKLOG-mined prose rows - not rendered here at all any more. The
+        ~40 mined rows were the wall; one WORKLOG.md link replaces them.
+        mine_worklog() still runs (the entry count labels the link).
+      * auto:cache_diff / auto:divergence insights - bookkeeping signals;
+        they still render on each product card's Quick Look drill-down,
+        just not on Home.
     """
-    # Curated findings first, in FINDINGS order (already curated by hand).
-    entries = []
-    for x in FINDINGS:
-        entries.append({
-            "icon":     WWL_ICON_CURATED,
-            "kind":     "curated",
-            "headline": f"{x['stat']} - {x['headline']}" if x.get("stat")
-                        else x["headline"],
-            "detail":   x.get("detail") or "",
-            "product":  x.get("family") or "",
-            "meta_tail": f"EDA nb {x['nb']}" if x.get("nb") else "",
-            "sort_key": (0, x["headline"]),   # curated group sorts before others
-        })
+    wl_url = _worklog_url(git)
+    heroes = [x for x in FINDINGS if x.get("hero")]
+    rest   = [x for x in FINDINGS if not x.get("hero")]
 
-    # Human + auto insights from product_review.json.
+    # Human insights only (see docstring for what got demoted and why).
+    notes = []
     for path, r in (review or {}).items():
         if not isinstance(r, dict): continue
         for ins in (r.get("insights") or []):
-            src = ins.get("source") or ""
-            if src == INSIGHT_HUMAN:
-                icon = INSIGHT_SOURCE_ICON.get(src, "\U0001F464")
-                kind = "human"; sort_group = 1
-            elif src == INSIGHT_AUTO_DIVERGENCE:
-                icon = INSIGHT_SOURCE_ICON.get(src, "⚠")
-                kind = "auto:divergence"; sort_group = 2
-            elif src == INSIGHT_AUTO_CACHE_DIFF:
-                icon = INSIGHT_SOURCE_ICON.get(src, "\U0001F527")
-                kind = "auto:cache_diff"; sort_group = 3
-            else:
-                continue    # skip auto:repo (audit cut) + unknown sources
-            when = ins.get("when") or ""
-            who = ins.get("who") or ""
-            text = ins.get("text") or ""
-            entries.append({
-                "icon":     icon,
-                "kind":     kind,
-                "headline": text if len(text) <= 140 else text[:137].rstrip() + "...",
-                "detail":   "",   # text already fits headline
-                "product":  path,
-                "when_iso": when,
-                "who":      who,
-                "meta_tail": "",
-                # Newest-first inside the group.
-                "sort_key": (sort_group, -_iso_to_ord(when), path),
-            })
+            if (ins.get("source") or "") != INSIGHT_HUMAN: continue
+            notes.append({"text": ins.get("text") or "",
+                          "who":  ins.get("who") or "",
+                          "when": ins.get("when") or "",
+                          "product": path})
+    notes.sort(key=lambda n: (-_iso_to_ord(n["when"]), n["product"]))
 
-    # WORKLOG-mined findings. Post-#3 the mine_worklog rows come pre-scored
-    # by the stat-carrying heuristic; sort tiebreak by score desc so a row
-    # with three stats floats above a row with one, all else equal.
-    wl_url = _worklog_url(git)
-    for e in worklog:
-        for item in e.get("items", []):
-            text = item.get("text") or ""
-            stat = item.get("stat") or ""
-            score = int(item.get("score", 0))
-            headline = (f"{stat} - " if stat else "") + \
-                       (text if len(text) <= 140 else text[:137].rstrip() + "...")
-            entries.append({
-                "icon":     WWL_ICON_WORKLOG,
-                "kind":     "worklog",
-                "headline": headline,
-                "detail":   "",
-                "product":  "",   # WORKLOG doesn't record catalog paths
-                "when_iso": (e.get("date") or "") + "T00:00:00Z",
-                "who":      e.get("author") or "",
-                "score":    score,
-                "meta_tail": f'<a href="{_esc(wl_url)}" target="_blank" rel="noopener">'
-                             f'{_esc(e.get("title", "")[:70])}</a>',
-                # Rank by (group, -score, -timestamp, text) so within the
-                # worklog group the highest-scoring rows come first.
-                "sort_key": (4, -score,
-                             -_iso_to_ord((e.get("date") or "") + "T00:00:00Z"),
-                             text),
-            })
-
-    # Sort by the sort_key tuples; deterministic across runs.
-    entries.sort(key=lambda x: x["sort_key"])
-
-    # Human-insights empty-state prompt (per spec).
-    n_human = sum(1 for e in entries if e["kind"] == "human")
+    def _chip(family):
+        if not family: return ""
+        return (f'<a class="wti-path" href="#prod-{_esc(family)}" '
+                f'data-jump-path="{_esc(family)}">{_esc(family)}</a>')
 
     parts = ['<div class="wwl-section">',
              '<h2>What we\'ve learned</h2>',
-             '<div class="sub">Every insight the team has recorded, folded '
-             'into one feed: curated headlines from EDA notebooks, findings '
-             'mined from WORKLOG.md, team notes on individual products, and '
-             'auto-generated signals when sample data drifts or a composite '
-             'role gets declared.</div>']
-    if n_human == 0:
-        # UX pass 2026-07-26 commit #5 - teaching-moment empty state.
-        # No team notes yet -> show the Linear-style keyboard cheatsheet so
-        # the empty space is doing something (teaching the reader that this
-        # tool is keyboard-navigable) rather than just marking silence.
+             '<div class="sub">The headline numbers from the team\'s EDA '
+             'notebooks first, then the rest of the curated findings. '
+             'Every product chip jumps to that product\'s card.</div>']
+
+    # ---- 1. Hero stat cards ------------------------------------------------
+    if heroes:
+        parts.append('<div class="wwl-stats">')
+        for x in heroes:
+            stat = x.get("stat") or ""
+            # Long stats (e.g. 'R (approx) 0.67') drop one type-scale step so the
+            # card row keeps a shared baseline; short ones get the full hero size.
+            size_cls = " long" if len(stat) > 5 else ""
+            chip = _chip(x.get("family"))
+            nb = (f'<span class="wwl-stat-nb">EDA nb {_esc(x["nb"])}</span>'
+                  if x.get("nb") else "")
+            sep = " &middot; " if chip and nb else ""
+            parts.append(
+                f'<div class="wwl-stat" title="{_esc(x.get("detail") or "")}">'
+                f'<div class="wwl-stat-num{size_cls}">{_esc(stat)}</div>'
+                f'<div class="wwl-stat-take">{_esc(x["headline"])}</div>'
+                f'<div class="wwl-stat-meta">{chip}{sep}{nb}</div>'
+                '</div>')
+        parts.append('</div>')
+
+    # ---- 2. Team notes (human insights, prominent) -------------------------
+    NOTES_VISIBLE = 5
+    parts.append('<h3 class="wwl-subhead">Team notes</h3>')
+    if not notes:
+        # Compact one-liner empty state (the old keyboard-cheatsheet teach
+        # block was part of the wall; cut in the same de-walling pass).
         parts.append(
-            '<div class="wwl-empty-team wwl-teach">'
-            '<div class="wwl-teach-lead">'
-            '<b>No team notes yet on individual products.</b> '
-            'While you wait, learn the keyboard shortcuts:'
-            '</div>'
-            '<div class="wwl-teach-cheat">'
-            '<span class="wwl-teach-kbd"><kbd>/</kbd> focus filter</span>'
-            '<span class="wwl-teach-kbd"><kbd>j</kbd> / <kbd>k</kbd> next / prev card</span>'
-            '<span class="wwl-teach-kbd"><kbd>Enter</kbd> open card</span>'
-            '<span class="wwl-teach-kbd"><kbd>E</kbd> toggle drill-down</span>'
-            '</div>'
-            '<div class="wwl-teach-then">'
-            'Then add your first note with '
+            '<div class="wwl-empty-team">No team notes on individual '
+            'products yet &mdash; add the first with '
             '<span class="copy-cmd light">'
             '<code>python tools/product_scope.py --review acs/acs5 '
             '--insight "your observation"</code>'
-            '<button data-copy=\'python tools/product_scope.py --review acs/acs5 '
-            '--insight "your observation"\'>Copy</button></span>.'
-            '</div>'
+            '<button data-copy=\'python tools/product_scope.py --review '
+            'acs/acs5 --insight "your observation"\'>Copy</button></span>'
             '</div>')
-
-    def _row(e):
-        # Meta line composition: product link, when (relative), who, extra.
-        meta_bits = []
-        if e.get("product"):
-            meta_bits.append(f'<a href="#prod-{_esc(e["product"])}" '
-                             f'data-jump-path="{_esc(e["product"])}" '
-                             f'class="wti-path">{_esc(e["product"])}</a>')
-        if e.get("when_iso"):
-            when = _iso_to_dt(e["when_iso"])
-            rel = _rel_time_str(when) if when else e["when_iso"][:10]
-            meta_bits.append(f'<span title="{_esc(e["when_iso"])}">{_esc(rel)}</span>')
-        if e.get("who"):
-            meta_bits.append(_esc(e["who"]))
-        if e.get("meta_tail"):
-            meta_bits.append(e["meta_tail"])
-        meta_html = (' &middot; '.join(meta_bits)) if meta_bits else ""
-        detail_html = (f'<div class="wwl-detail">{_esc(e["detail"])}</div>'
-                       if e.get("detail") else "")
-        return ('<li>'
-                f'<div class="wwl-ico">{e["icon"]}</div>'
-                '<div class="wwl-body">'
-                f'<div class="wwl-head">{_esc(e["headline"])}</div>'
-                + detail_html +
-                (f'<div class="wwl-meta">{meta_html}</div>' if meta_html else "")
-                + '</div></li>')
-
-    # Phase A ceiling-push #3: cap the Show-all render at 30 mined+auto items
-    # so the drawer stays scannable. Curated findings never drop from view -
-    # they're editorial synthesis (small count of ~12) and always sort first.
-    # The 30 cap applies only to sort_group > 0 (human / auto:* / worklog).
-    # Condense-home pass 2026-07-26 commit #2: tightened the default top-of-fold
-    # from 15 to 5 items so the section reads as a scannable teaser instead of
-    # a dense wall of insights. The Show-all drawer still holds the rest and
-    # persists open/closed state via localStorage under
-    # `product_scope:wwl_show_all` (see inline JS in the base template).
-    SHOWALL_CAP = 30
-    WWL_DEFAULT_VISIBLE = 5
-    curated = [e for e in entries if e["kind"] == "curated"]
-    non_curated = [e for e in entries if e["kind"] != "curated"]
-    # Top-of-fold: first N across all entries (curated ranked first by
-    # sort_key group=0, so this preserves the pre-#3 top-of-fold behavior).
-    visible = entries[:WWL_DEFAULT_VISIBLE]
-    hidden = entries[WWL_DEFAULT_VISIBLE:]
-    # Split hidden into curated-hidden vs non-curated-hidden (should be
-    # empty for curated since all 12 fit in the first 15 slots), then cap
-    # non-curated at SHOWALL_CAP.
-    hidden_curated = [e for e in hidden if e["kind"] == "curated"]
-    hidden_non_curated = [e for e in hidden if e["kind"] != "curated"]
-    n_non_curated_total = len(non_curated)
-    kept_non_curated = hidden_non_curated[:max(0, SHOWALL_CAP - (
-        len(non_curated) - len(hidden_non_curated)))]
-    # kept_non_curated is the tail of hidden non-curated after capping. The
-    # rendered Show-all drawer will contain: hidden_curated + kept_non_curated,
-    # totaling at most SHOWALL_CAP + len(hidden_curated) entries.
-    dropped_non_curated = len(hidden_non_curated) - len(kept_non_curated)
-    hidden_render = hidden_curated + kept_non_curated
-    total_rendered = len(visible) + len(hidden_render)
-    parts.append('<ul class="wwl-list">')
-    if not entries:
-        parts.append('<li><div class="wwl-body"><div class="wwl-head" '
-                     'style="color:var(--muted);font-style:italic">'
-                     'No findings recorded yet.</div></div></li>')
     else:
-        parts.extend(_row(e) for e in visible)
-    parts.append('</ul>')
-    if hidden_render or dropped_non_curated:
-        summary = (f'Show all {total_rendered} findings '
-                   f'({len(hidden_render)} more)')
-        # Closed-state preview (condense pass 2026-07-26): tell the reader
-        # what's inside before they open it - the composition of the hidden
-        # entries plus the first hidden headline. Rendered in a .disc-preview
-        # span the unified disclosure CSS hides once the drawer is open.
-        comp_bits = []
-        n_cur = sum(1 for e in hidden_render if e["kind"] == "curated")
-        n_wl = sum(1 for e in hidden_render if e["kind"] == "worklog")
-        n_notes = len(hidden_render) - n_cur - n_wl
-        if n_cur:
-            comp_bits.append(f'{n_cur} curated')
-        if n_notes:
-            comp_bits.append(f'{n_notes} product note{"s" if n_notes != 1 else ""}')
-        if n_wl:
-            comp_bits.append(f'{n_wl} worklog note{"s" if n_wl != 1 else ""}')
-        preview = " &middot; ".join(comp_bits)
-        if hidden_render:
-            nxt = hidden_render[0]["headline"]
-            nxt = nxt if len(nxt) <= 70 else nxt[:67].rstrip() + "..."
-            preview += (f' &middot; next: &ldquo;{_esc(nxt)}&rdquo;'
-                        if preview else
-                        f'next: &ldquo;{_esc(nxt)}&rdquo;')
-        preview_html = (f'<span class="disc-preview">{preview}</span>'
-                        if preview else "")
-        # `data-persist-key` opts this <details> into the localStorage
-        # persistence layer for section state (see the collapsible-persistence
-        # inline JS). Key opens/closes across reloads under
-        # `product_scope:wwl_show_all`.
-        parts.append(f'<details class="wwl-more disc" data-persist-key="wwl_show_all">'
-                     f'<summary>{summary}{preview_html}</summary>'
-                     '<ul class="wwl-list" style="border-top:1px solid var(--ice)">')
-        parts.extend(_row(e) for e in hidden_render)
+        note_icon = INSIGHT_SOURCE_ICON.get(INSIGHT_HUMAN, "\U0001F464")
+        def _note_row(n):
+            meta_bits = [_chip(n["product"])]
+            if n["when"]:
+                when = _iso_to_dt(n["when"])
+                rel = _rel_time_str(when) if when else n["when"][:10]
+                meta_bits.append(f'<span title="{_esc(n["when"])}">{_esc(rel)}</span>')
+            if n["who"]:
+                meta_bits.append(_esc(n["who"]))
+            meta = " &middot; ".join(b for b in meta_bits if b)
+            return ('<li>'
+                    f'<div class="wwl-ico">{note_icon}</div>'
+                    '<div class="wwl-body">'
+                    f'<div class="wwl-head">{_esc(n["text"])}</div>'
+                    + (f'<div class="wwl-meta">{meta}</div>' if meta else "")
+                    + '</div></li>')
+        parts.append('<ul class="wwl-list">')
+        parts.extend(_note_row(n) for n in notes[:NOTES_VISIBLE])
         parts.append('</ul>')
-        if dropped_non_curated > 0:
-            parts.append(f'<div class="wwl-tail">'
-                         f'<b>{dropped_non_curated} more not shown</b> '
-                         f'(mined + auto items ranked by stat-carrying '
-                         f'signal; see <a href="{_esc(wl_url)}" target="_blank" '
-                         f'rel="noopener">WORKLOG.md</a> for the full record).'
-                         f'</div>')
-        parts.append('</details>')
+        extra_notes = notes[NOTES_VISIBLE:]
+        if extra_notes:
+            parts.append(
+                f'<details class="wwl-more disc" data-persist-key="wwl_notes_all">'
+                f'<summary>Show {len(extra_notes)} more note'
+                f'{"s" if len(extra_notes) != 1 else ""}</summary>'
+                '<ul class="wwl-list" style="border-top:1px solid var(--ice)">')
+            parts.extend(_note_row(n) for n in extra_notes)
+            parts.append('</ul></details>')
+
+    # ---- 3. More findings (remaining curated, compact one-liners) ----------
+    FIND_VISIBLE = 5
+    def _find_row(x):
+        stat_html = f'<b>{_esc(x["stat"])}</b> ' if x.get("stat") else ""
+        meta_bits = [_chip(x.get("family"))]
+        if x.get("nb"):
+            meta_bits.append(f'EDA nb {_esc(x["nb"])}')
+        meta = " &middot; ".join(b for b in meta_bits if b)
+        # Full detail sentence rides in the tooltip so the row stays one line.
+        return (f'<li title="{_esc(x.get("detail") or "")}">'
+                f'<div class="wwl-ico">{WWL_ICON_CURATED}</div>'
+                '<div class="wwl-body">'
+                f'<div class="wwl-head">{stat_html}{_esc(x["headline"])}</div>'
+                + (f'<div class="wwl-meta">{meta}</div>' if meta else "")
+                + '</div></li>')
+    if rest:
+        parts.append('<h3 class="wwl-subhead">More findings</h3>')
+        parts.append('<ul class="wwl-list">')
+        parts.extend(_find_row(x) for x in rest[:FIND_VISIBLE])
+        parts.append('</ul>')
+        overflow = rest[FIND_VISIBLE:]
+        if overflow:
+            parts.append(
+                f'<details class="wwl-more disc" data-persist-key="wwl_show_all">'
+                f'<summary>Show {len(overflow)} more finding'
+                f'{"s" if len(overflow) != 1 else ""}</summary>'
+                '<ul class="wwl-list" style="border-top:1px solid var(--ice)">')
+            parts.extend(_find_row(x) for x in overflow)
+            parts.append('</ul></details>')
+
+    # ---- 4. Full team log link ---------------------------------------------
+    n_wl = len(worklog or [])
+    entries_note = f', {n_wl} dated entries' if n_wl else ''
+    parts.append(
+        f'<div class="wwl-tail">Looking for the day-by-day narrative? '
+        f'<a href="{_esc(wl_url)}" target="_blank" rel="noopener">'
+        f'Full team log &rarr;</a> (WORKLOG.md{entries_note}). '
+        'Process notes live there; auto-generated drift signals stay on '
+        'the product cards.</div>')
     parts.append('</div>')
     return "".join(parts)
 
