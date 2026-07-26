@@ -34,7 +34,7 @@ Usage:
 Output: product_report.html (self-contained, no CDN, no storage APIs).
 """
 
-import argparse, json, os, re, subprocess, sys, datetime, time, urllib.request
+import argparse, json, os, re, subprocess, sys, datetime, time, urllib.request, webbrowser
 from pathlib import Path
 
 try:
@@ -3923,6 +3923,11 @@ def main():
                     help="after --review, skip the automatic HTML regen. Use "
                          "when batching multiple review writes from a shell "
                          "loop, so the report only regenerates on the last one.")
+    ap.add_argument("--open", dest="open_report", action="store_true",
+                    help="open product_report.html in the default browser "
+                         "after any regen (or standalone, if paired with "
+                         "--no-regen). Uses stdlib webbrowser, which delegates "
+                         "to start / open / xdg-open on the host OS.")
     args = ap.parse_args()
     repo = Path(args.repo).resolve()
     if not (repo / "ingestion").exists():
@@ -3946,9 +3951,36 @@ def main():
             t0 = time.perf_counter()
             _run_report_pipeline(repo, args, out)
             print(f"regenerated in {time.perf_counter() - t0:.2f}s -> {out.name}")
+        if code == 0 and args.open_report:
+            _open_report_in_browser(out)
         sys.exit(code)
 
-    _run_report_pipeline(repo, args, out)
+    # Standalone (no --review) path. --no-regen here means "just open what's
+    # already on disk" - useful when paired with --open to re-launch the
+    # existing report without rebuilding it.
+    if not args.no_regen:
+        _run_report_pipeline(repo, args, out)
+    if args.open_report and not args.export:
+        _open_report_in_browser(out)
+
+def _open_report_in_browser(out_path):
+    """Open the report file in the default browser via stdlib webbrowser.
+    Prints a one-line status. `--open` opens whatever is currently on disk -
+    if paired with --no-regen and the file is missing, we say so instead of
+    silently failing. Cross-platform: webbrowser.open() dispatches to start
+    (Windows) / open (macOS) / xdg-open (Linux) under the hood, so the caller
+    doesn't have to fork by OS."""
+    p = Path(out_path)
+    if not p.exists():
+        print(f"warning: cannot open {p.name} - file does not exist "
+              f"(regen it first, or drop --no-regen)", file=sys.stderr)
+        return
+    try:
+        webbrowser.open(p.resolve().as_uri())
+        print(f"opened {p.name} in default browser")
+    except Exception as ex:
+        print(f"warning: could not open browser ({ex!r}); "
+              f"the report is at {p.resolve()}", file=sys.stderr)
 
 def _run_report_pipeline(repo, args, out):
     """Full report-render pipeline: scan repo, load catalog, run any queued
