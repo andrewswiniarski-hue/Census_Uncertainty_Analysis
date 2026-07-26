@@ -1796,8 +1796,13 @@ def sample_products(repo, fams, review, probes, only_product, size, refresh, git
                 "failed": [], "diffs": {}}
 
     print(f"[sample] {len(targets)} target(s); size={size}; "
-          f"api_key={'yes' if api_key else 'no (public rate limits apply)'}; "
+          f"api_key={'yes' if api_key else 'no'}; "
           f"refresh={'yes' if refresh else 'no'}")
+    if not api_key:
+        print("  [note] No CENSUS_API_KEY set - using anonymous access "
+              "(500 req/day/IP limit).")
+        print("         Get a key at https://api.census.gov/data/key_signup.html "
+              "and add to .env if you need more volume.")
     summary = {"sampled": [], "skipped_fresh": [], "skipped_non_api": [],
                "failed": [], "diffs": {}}
     for i, path in enumerate(targets):

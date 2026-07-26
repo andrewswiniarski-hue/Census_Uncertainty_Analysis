@@ -4,6 +4,8 @@ Explore Census data products: see what the team has looked at, what's inside eac
 
 ## Try it in 2 commands
 
+No API key required for any of the commands in this section.
+
 ```powershell
 python tools\product_scope.py
 start product_report.html
@@ -27,6 +29,23 @@ python tools\product_scope.py --review acs/acs5 --insight "This looks like it co
 `--repo` defaults to the current directory, so run these from the repo root and the tool finds itself.
 
 The review workflow — marking products as candidates or FOCUS, assigning composite roles, filtering the sidebar by review status — lives in the "Reviewer mode" toggle on any Products tab. Toggle it on to see only the actively-managed cards; leave it off (the default) to browse the whole catalog.
+
+---
+
+## Do I need a Census API key?
+
+**No key needed** for the basic workflow:
+- `python tools/product_scope.py` (regen + browse the report)
+- `python tools/product_scope.py --probe <product>` (fetch product metadata)
+- `python tools/product_scope.py --review <product> --insight "..."` (log your own notes)
+
+**Optional key** only if you're running heavy `--sample` batches — Census's public rate limit is ~500 requests/day/IP. If you're just sampling one or two products, anonymous access works fine.
+
+**To add a key:**
+1. Get one free (30 seconds): https://api.census.gov/data/key_signup.html
+2. Copy `.env.example` to `.env` in the repo root
+3. Paste your key: `CENSUS_API_KEY=<paste>`
+4. `.env` is gitignored — your key stays local; each teammate uses their own
 
 ---
 
