@@ -2353,37 +2353,78 @@ table.rep td{border-bottom:1px solid var(--ice);padding:7px 9px;vertical-align:t
    are pure enhancement; the geometry + labels convey the whole message
    with JS off. See build_landscape_viz() for the rendering pipeline. */
 .lscape-section{margin:0 0 24px;max-width:1020px;}
-.lscape-caption{font-size:12px;color:var(--muted);margin:6px 0 8px;
-       max-width:900px;line-height:1.4;}
-.lscape-svg{display:block;width:100%;height:auto;max-width:1000px;
-       background:#FCFCFF;border:1px solid var(--ice);border-radius:8px;
-       margin:6px 0 10px;}
-.lscape-svg .lscape-prog{cursor:pointer;transition:filter .12s ease;}
-.lscape-svg .lscape-prog:hover rect{filter:brightness(0.92);
-       stroke-width:1.5;}
-.lscape-svg .lscape-prog:focus{outline:none;}
-.lscape-svg .lscape-prog:focus-visible rect{stroke:#C9A227;stroke-width:2;}
-.lscape-svg .lscape-prog:focus rect{stroke:#C9A227;stroke-width:2;}
-/* Fallback flex row rendered per-kind when squarified fails (all-zero sizes,
-   degenerate rect). Keeps the reader informed without breaking the whole
-   Home tab; stderr warning fires alongside. */
+.lscape-caption{font-size:12px;color:var(--muted);margin:6px 0 10px;
+       max-width:900px;line-height:1.45;}
+/* Redesign 2026-07-26: stacked full-width rows, one per dataset kind. Each
+   row is its own SVG (kind header + squarified program treemap) with a
+   subtle per-kind tint background, plus an optional <details> spill for
+   programs squeezed below the min-legibility floor. */
+.lscape-viz{display:flex;flex-direction:column;gap:10px;margin:6px 0 12px;}
+.lscape-kind-row{border:1px solid var(--line);border-radius:10px;
+       overflow:hidden;background:#FFF;
+       box-shadow:0 1px 2px rgba(31,42,92,0.05);}
+.lscape-kind-svg{display:block;width:100%;height:auto;}
+.lscape-kind-svg .lscape-prog{cursor:pointer;transition:filter .12s ease,
+       stroke-width .12s ease;}
+.lscape-kind-svg .lscape-prog:hover rect{filter:brightness(0.94);
+       stroke-width:2;}
+.lscape-kind-svg .lscape-prog:focus{outline:none;}
+.lscape-kind-svg .lscape-prog:focus-visible rect{stroke:var(--gold);stroke-width:2.5;}
+.lscape-kind-svg .lscape-prog:focus rect{stroke:var(--gold);stroke-width:2.5;}
+/* Alternate-row hint: pair rows share a very subtle brightness shift on the
+   shell shadow so the eye can zebra them. Tint is already row-specific. */
+.lscape-kind-row:nth-child(even){box-shadow:0 1px 2px rgba(31,42,92,0.08);}
+/* Spill disclosure - shown when squarify + min-box floor pushes small
+   programs out of the treemap. Native <details> so it works with JS off. */
+.lscape-spill{border-top:1px solid var(--ice);padding:8px 14px 10px;
+       background:rgba(255,255,255,0.55);}
+.lscape-spill > summary{list-style:none;cursor:pointer;font-size:12px;
+       color:var(--muted);display:flex;align-items:center;gap:8px;
+       flex-wrap:wrap;padding:2px 0;}
+.lscape-spill > summary::-webkit-details-marker{display:none;}
+.lscape-spill > summary::before{content:"\25B8";display:inline-block;
+       color:var(--muted);font-size:10px;transition:transform .15s ease;}
+.lscape-spill[open] > summary::before{transform:rotate(90deg);}
+.lscape-spill .lscape-spill-count{font-weight:700;color:var(--navy);
+       font-size:12px;}
+.lscape-spill .lscape-spill-preview{color:var(--ink);opacity:.75;
+       font-size:11.5px;}
+.lscape-spill .lscape-spill-total{font-family:ui-monospace,Consolas,monospace;
+       font-size:11px;color:var(--muted);}
+.lscape-spill-chips{margin-top:8px;}
+/* Fallback flex row rendered per-kind when squarify fully fails (all-zero
+   sizes, degenerate rect) - kept as a hard-failsafe path. */
 .lscape-fallback{margin:8px 0;padding:8px 10px;border:1px dashed var(--line);
        border-radius:6px;background:#FFF8E8;}
 .lscape-fallback-head{font-family:Georgia,serif;font-weight:700;
        color:var(--navy);font-size:13px;margin-bottom:5px;}
-.lscape-fallback-row{display:flex;flex-wrap:wrap;gap:4px;}
-.lscape-fallback-chip{padding:3px 8px;font-size:10.5px;border-radius:4px;
-       border:1px solid transparent;cursor:pointer;color:var(--ink);}
+.lscape-fallback-row{display:flex;flex-wrap:wrap;gap:5px;}
+.lscape-fallback-chip{padding:4px 9px;font-size:11px;border-radius:5px;
+       border:1px solid transparent;cursor:pointer;color:var(--ink);
+       transition:filter .12s ease;}
+.lscape-fallback-chip:hover{filter:brightness(0.94);}
+.lscape-fallback-chip:focus-visible{outline:2px solid var(--gold);outline-offset:1px;}
 .lscape-fallback-chip em{font-style:normal;font-family:ui-monospace,Consolas,monospace;
-       font-size:9.5px;color:var(--muted);margin-left:4px;}
-.lscape-tier-0{background:#EDF0F7;border-color:#D6DBE8;}
-.lscape-tier-1{background:#DCE7FA;border-color:#8FA8D8;}
-.lscape-tier-2{background:#B8E0DC;border-color:#5DB0A7;}
-.lscape-tier-3{background:#B7DEBB;border-color:#5FA76F;}
-.lscape-legend{display:flex;gap:14px;align-items:center;font-size:11px;
-       color:var(--muted);margin:6px 0 0;flex-wrap:wrap;}
-.lscape-legend .lscape-swatch{display:inline-block;width:11px;height:11px;
-       border-radius:3px;margin-right:4px;vertical-align:-1px;border:1px solid transparent;}
+       font-size:10px;color:var(--muted);margin-left:5px;}
+/* Tier fill/stroke - bumped in vividness during 2026-07-26 redesign so the
+   3 touched programs actually pop off the mostly-grey wall. Grey stayed
+   muted so untouched programs read as background. */
+.lscape-tier-0{background:#ECEEF5;border-color:#CBD1E0;}
+.lscape-tier-1{background:#B7CDF6;border-color:#5A7ED1;}
+.lscape-tier-2{background:#8BD3CC;border-color:#3D9E93;}
+.lscape-tier-3{background:#8FCD97;border-color:#3E9152;}
+.lscape-legend{display:flex;gap:14px;align-items:center;font-size:11.5px;
+       color:var(--muted);margin:8px 0 0;flex-wrap:wrap;padding:6px 12px;
+       background:var(--ice);border-radius:6px;}
+.lscape-legend b{color:var(--navy);font-weight:700;}
+.lscape-legend .lscape-legend-item{display:inline-flex;align-items:center;gap:2px;}
+.lscape-legend .lscape-legend-cnt{font-family:ui-monospace,Consolas,monospace;
+       font-size:10.5px;color:var(--muted);margin-left:2px;}
+.lscape-legend .lscape-swatch{display:inline-block;width:13px;height:13px;
+       border-radius:3px;margin-right:6px;vertical-align:-2px;
+       border:1px solid transparent;}
+.lscape-legend .lscape-legend-summary{margin-left:auto;color:var(--muted);
+       font-size:11px;font-family:ui-monospace,Consolas,monospace;}
 /* .rev-mode-details / .rev-mode-body removed Phase A #3 (2026-07-26) - the
    Home tab no longer carries a collapsed 'Reviewer mode data' block; the
    funnel + inventory + work-depth table + notebook-health it contained were
@@ -5515,70 +5556,112 @@ def build_what_learned(fams, review, worklog, git):
     return "".join(parts)
 
 # ============================================================================
-# HOME TAB "CENSUS DATA LANDSCAPE" VIZ (Phase A ceiling-push #1)
+# HOME TAB "CENSUS DATA LANDSCAPE" VIZ (redesign 2026-07-26)
 # ============================================================================
-# SVG squarified treemap (Bruls, Huijsen & van Wijk 2000) rendering the whole
-# Census product catalog in two nested partitions:
-#   * Outer: 4 kind rectangles (Aggregate / Microdata / Time series /
-#     Uncategorized) sized proportionally to product count.
-#   * Inner: program rectangles within each kind, area-proportional to product
-#     count in that program.
+# Stacked squarified treemap: one full-width row per kind, program boxes laid
+# out inside each row with a minimum-size floor so every box has a visible
+# always-on label (no more hover-only slivers). Rows are ordered largest kind
+# first and their height is proportional to product-count share.
+#
+# Layout, per row:
+#   * Header strip: kind name (Georgia bold) + product count + "top:" line
+#     listing the three largest programs so a reader gets a scannable summary
+#     even before scanning the boxes.
+#   * Treemap slice: Bruls et al. (2000) squarified layout with a post-layout
+#     spill pass - if the smallest program's box falls below the min-legibility
+#     floor (MIN_W x MIN_H), pop it, re-squarify with more area for the rest,
+#     and repeat until every visible box clears the floor. Spilled programs
+#     render below the SVG as a compact "+ N more programs" <details> chip.
+#   * Kind-tinted background: a very subtle hue per kind (warm beige /
+#     cool blue-grey / soft green / neutral) breaks up the "wall of grey"
+#     that reads as an abandoned dashboard when every tier is untouched.
+#
 # Each program box carries a data-landscape-prog attribute (the delegated JS
-# click handler downstream reuses the existing filter-jump logic). Color =
-# highest team-reach tier reached anywhere in the program's products: grey
-# (untouched), blue (repo evidence only), teal (probed via API), green
-# (sampled to disk). Text labels render on boxes >= 40x20 px; smaller boxes
-# rely on the SVG <title> tooltip. If squarified fails for a kind (all-zero
-# sizes, degenerate rect), we degrade to a simple flex row and log to stderr.
+# click handler downstream reuses the existing filter-jump logic - unchanged
+# from the pre-redesign version). Color = highest team-reach tier reached
+# anywhere in the program's products: grey (untouched), blue (repo evidence
+# only), teal (metadata fetched), green (data peeked).
 #
 # Design notes:
-#   * Layout computed server-side in Python at render time. Pure SVG in the
-#     HTML - no D3, no CDN, no JS-only rendering. Vanilla JS only for the
-#     click delegation (unchanged from the pre-treemap version).
-#   * Readable with JS off: SVG geometry + labels convey the whole message;
-#     hover tooltips via native <title>; click drills only work with JS.
-#   * SVG budget: ~30-60 KB for ~44 programs across 4 kinds. Regen budget
-#     stays under 1s.
-#
-# Squarified algorithm: at each recursion, walk the shorter side of the
-# remaining rectangle, accumulating siblings into a row while the worst
-# aspect ratio of the row improves; when adding the next sibling would make
-# the worst aspect worse, close the row, place it, and recurse into the
-# remaining rectangle with the remaining siblings.
+#   * Layout computed server-side in Python at render time. Pure SVG per row,
+#     plus small HTML disclosures for overflow. No D3, no CDN, no JS-only
+#     rendering. Vanilla JS only for the click delegation.
+#   * Readable with JS off: SVG geometry + always-on labels convey the whole
+#     message; hover tooltips via native <title>; click drills only work
+#     with JS.
+#   * Squarified algorithm: at each recursion, walk the shorter side of the
+#     remaining rectangle, accumulating siblings into a row while the worst
+#     aspect ratio of the row improves; when adding the next sibling would
+#     make the worst aspect worse, close the row and recurse.
 
-# Treemap canvas dimensions - tuned so the biggest program (SIPP at 176
-# products = 30.7% of the catalog) draws at ~350x330 px (very visible) and
-# the smallest singletons stay above the ~15x15 legibility floor.
+# Total viz width. Height is dynamic - each kind row sizes itself; total
+# stacks up between ~700-900 px depending on kind mix.
 LSCAPE_SVG_W = 1000
-LSCAPE_SVG_H = 380
-# Padding between adjacent boxes so nested rectangles read as distinct
-# tiles rather than one continuous fill. Uniform across levels.
-LSCAPE_PAD_KIND = 3     # gap between kind rectangles
-LSCAPE_PAD_PROG = 1     # gap between program rectangles inside a kind
 
-# 4-tier color palette. Grey / blue / teal / green matches the spec:
-# grey = untouched, blue = repo evidence only, teal = probed via API,
-# green = sampled to disk. Fill + stroke chosen so a color-blind reader
-# can still separate tier-1 (blue) from tier-2 (teal) via stroke contrast.
+# Per-kind row sizing. Header strip stays fixed; treemap slice height is
+# share-proportional between a floor (so singletons still fit at least one
+# labeled box) and a cap (so the biggest kinds don't blow the fold entirely).
+# The main loop also auto-grows row height (up to the hard cap) when spill
+# would exceed LSCAPE_MAX_SPILL programs - see build_landscape_viz().
+LSCAPE_HEADER_H  = 44    # kind header strip (name + count + top-3 line)
+LSCAPE_ROW_PAD   = 8     # inner padding around the program treemap slice
+LSCAPE_ROW_MIN_H = 44    # min treemap-slice height (one MIN_H row + a hair)
+LSCAPE_ROW_MAX_H = 340   # hard cap on treemap-slice height (auto-grow ceiling)
+LSCAPE_ROW_BASE  = 640   # share * base = initial target inner height
+LSCAPE_MAX_SPILL = 2     # acceptable spilled programs per kind before auto-grow
+
+# Minimum on-screen size for a program box so its label always renders
+# legibly. Tuned so 10px font + ellipsis fits comfortably; smaller boxes
+# fall into the "+ N more programs" spill drawer below the row.
+LSCAPE_MIN_BOX_W = 76
+LSCAPE_MIN_BOX_H = 30
+
+# Size-compression exponent applied to product counts before squarify. A
+# pure linear layout (exp=1.0) squeezes singletons to unreadable slivers
+# when one program dominates (SIPP is 176 of 235 Microdata products); an
+# exponent of ~0.65 keeps SIPP visibly the largest but gives small
+# programs enough relative area to clear the min-box floor. This is a
+# monotonic visual re-weighting only - the true product count still shows
+# on every box label and in the tooltip.
+LSCAPE_SIZE_EXP  = 0.65
+
+# Padding between adjacent program boxes so they read as distinct tiles.
+LSCAPE_PAD_PROG = 5
+
+# 4-tier color palette. Grey = untouched (still muted so the eye passes over
+# it), the three touched tiers were bumped in saturation from the prior
+# version so that when a program IS touched it actually pops off the row
+# instead of blending in. Fill + stroke chosen so a color-blind reader can
+# still separate tier-1 (blue) from tier-2 (teal) via lightness + stroke.
 LSCAPE_TIER_FILL = {
-    0: "#EDF0F7",   # grey - untouched
-    1: "#DCE7FA",   # blue - repo evidence only
-    2: "#B8E0DC",   # teal - probed via API
-    3: "#B7DEBB",   # green - sampled to disk
+    0: "#ECEEF5",   # grey - untouched (a hair cooler than before)
+    1: "#B7CDF6",   # blue - repo evidence only (bumped saturation)
+    2: "#8BD3CC",   # teal - metadata fetched (bumped)
+    3: "#8FCD97",   # green - data peeked (bumped)
 }
 LSCAPE_TIER_STROKE = {
-    0: "#D6DBE8",
-    1: "#8FA8D8",
-    2: "#5DB0A7",
-    3: "#5FA76F",
+    0: "#CBD1E0",
+    1: "#5A7ED1",
+    2: "#3D9E93",
+    3: "#3E9152",
 }
 LSCAPE_TIER_LABEL = {
     0: "untouched",
     1: "repo evidence",
-    # Beginner-UX pass commit #3: rename jargon "probed"/"sampled" -> plain
-    # English "metadata fetched" / "data peeked".
+    # Beginner-UX pass: plain-English tier labels (was "probed" / "sampled").
     2: "metadata fetched",
     3: "data peeked",
+}
+
+# Subtle per-kind row tint. Each kind gets a distinct low-saturation hue for
+# the row background so the four rows read as four distinct bands even when
+# every program box is grey (untouched). Border color echoes the tint at a
+# slightly darker step.
+LSCAPE_KIND_TINT = {
+    "Aggregate tables": {"bg": "#FDF7EB", "border": "#EAD9B0", "accent": "#B58A3E"},
+    "Microdata":        {"bg": "#F1F5FD", "border": "#C9D8F1", "accent": "#3A5DA3"},
+    "Time series":      {"bg": "#EEF7F0", "border": "#C8E1CE", "accent": "#3E7A4E"},
+    "Uncategorized":    {"bg": "#F5F5F7", "border": "#DCDEE6", "accent": "#5A6072"},
 }
 
 def _prog_tier(fams_in_prog, work, probes, data_cache):
@@ -5720,40 +5803,131 @@ def _sq_recurse(areas, x, y, w, h, out):
         _sq_recurse(areas[len(row):], x + rw, y, w - rw, h, out)
 
 def _lscape_prog_text_svg(pname, n, tier, rx, ry, rw, rh):
-    """Emit the SVG text label(s) for a program box. Program name shown on
-    boxes >= 40x20 (readable); count line added when the box is tall enough
-    (>= 34 px). Otherwise no text - the reader gets the hover tooltip only.
-    Text is centered horizontally; ink color contrasts against the tier
-    fill (dark for light greys, near-navy for the darker tier stains)."""
-    if rw < 40 or rh < 20:
-        return ""
-    # Truncate long program names so they don't spill outside the box.
-    # ~5.5px per char average at 10.5px font, so max chars ~ rw / 5.5 - 2 pad.
-    max_chars = max(6, int(rw / 5.5) - 2)
+    """Emit the SVG text label(s) for a program box. Every box is guaranteed
+    to render its program name (thanks to the min-box floor + spill pass in
+    _squarify_with_floor); this function just picks a font size that fits
+    and truncates the name to the box width with ellipsis. Count line renders
+    below the name when the box is tall enough (>= 44 px). Font size scales
+    12 -> 11 -> 10 -> 9 as the box shrinks; never below 9 so the label stays
+    legible at web zoom. Ink color contrasts against the tier fill."""
+    # Adaptive font size: prefer 12 for tall/wide boxes, step down for narrow.
+    if rw >= 130 and rh >= 34:
+        name_fs = 12
+    elif rw >= 100 and rh >= 30:
+        name_fs = 11
+    elif rw >= 80 and rh >= 26:
+        name_fs = 10
+    else:
+        name_fs = 9
+    # ~0.52 * font-size per character for a proportional sans-serif at web
+    # weights; leave 6 px padding on each side. Guarantee at least 4 chars so
+    # even the tightest legible slot shows meaningful truncation.
+    char_w = max(4.6, name_fs * 0.52)
+    max_chars = max(4, int((rw - 10) / char_w))
     label = pname if len(pname) <= max_chars else pname[:max_chars - 1] + "…"
-    font_ink = "#1F2A5C" if tier > 0 else "#3A4256"
-    parts = [f'<text x="{rx + rw / 2:.1f}" y="{ry + 14:.1f}" '
-             f'text-anchor="middle" font-size="11" font-weight="600" '
-             f'fill="{font_ink}" pointer-events="none">{_esc(label)}</text>']
-    if rh >= 34:
-        parts.append(f'<text x="{rx + rw / 2:.1f}" y="{ry + 28:.1f}" '
-                     f'text-anchor="middle" font-size="10" '
-                     f'font-family="ui-monospace,Consolas,monospace" '
-                     f'fill="#5A6072" pointer-events="none">{n}</text>')
+    # Darker ink on lighter (grey/blue) tiers; navy stays readable on all four
+    # because the palette is intentionally low-contrast on the touched tiers.
+    font_ink = "#0F1738" if tier == 0 else "#0E1B4A"
+    # Vertical layout: name center-y sits at roughly one-third from the top so
+    # the count line can sit under it without touching the bottom edge.
+    if rh >= 44:
+        name_y = ry + rh * 0.42
+        cnt_y  = name_y + name_fs + 4
+        parts = [
+            f'<text x="{rx + rw / 2:.1f}" y="{name_y:.1f}" '
+            f'text-anchor="middle" font-size="{name_fs}" font-weight="700" '
+            f'fill="{font_ink}" pointer-events="none">{_esc(label)}</text>',
+            f'<text x="{rx + rw / 2:.1f}" y="{cnt_y:.1f}" '
+            f'text-anchor="middle" font-size="{max(9, name_fs - 2)}" '
+            f'font-family="ui-monospace,Consolas,monospace" '
+            f'fill="#5A6072" pointer-events="none">{n}</text>',
+        ]
+    else:
+        # Short box: name only, vertically centered.
+        name_y = ry + rh / 2 + name_fs * 0.35
+        parts = [
+            f'<text x="{rx + rw / 2:.1f}" y="{name_y:.1f}" '
+            f'text-anchor="middle" font-size="{name_fs}" font-weight="700" '
+            f'fill="{font_ink}" pointer-events="none">{_esc(label)}</text>',
+        ]
     return "".join(parts)
 
-def _lscape_kind_head_svg(kind, total, n_progs, kx, ky, kw):
-    """Emit the SVG header row for a kind rectangle: name on the left,
-    count summary on the right. Sits inside the kind's bounding rect at
-    the top (y = ky + 14 baseline)."""
-    return (f'<text x="{kx + 4:.1f}" y="{ky + 13:.1f}" '
-            f'font-family="Georgia,serif" font-size="13" font-weight="700" '
-            f'fill="#1F2A5C" pointer-events="none">{_esc(kind)}</text>'
-            f'<text x="{kx + kw - 4:.1f}" y="{ky + 13:.1f}" '
-            f'text-anchor="end" font-family="ui-monospace,Consolas,monospace" '
-            f'font-size="10.5" fill="#5A6072" pointer-events="none">'
-            f'{total} products &#183; {n_progs} program'
-            f'{"s" if n_progs != 1 else ""}</text>')
+def _lscape_kind_head_svg(kind, total, n_progs, prog_items_by_size,
+                           kx, ky, kw, accent_color):
+    """Emit the SVG header strip for a kind row: kind name (left), product
+    count (right), and a small "top:" line naming the three largest programs
+    inline. The top-3 gives the reader a scannable summary of what's in this
+    kind even before their eye reaches the treemap boxes below.
+
+    `prog_items_by_size` is a list of (program_name, product_count) tuples
+    already sorted descending by count. `accent_color` is the kind's tint
+    accent (used to underline the kind name as a subtle row identifier)."""
+    top3 = prog_items_by_size[:3]
+    top_line = " · ".join(f"{pn} ({n})" for pn, n in top3)
+    top_prefix = "top:" if len(prog_items_by_size) > 3 else "all:"
+    # Truncate the top line if it would spill outside the header width.
+    max_top_chars = max(24, int((kw - 220) / 6.0))  # 220 px reserved for the count text right side
+    if len(top_line) > max_top_chars:
+        top_line = top_line[:max_top_chars - 1] + "…"
+    return (
+        # Kind name (left)
+        f'<text x="{kx + 12:.1f}" y="{ky + 22:.1f}" '
+        f'font-family="Georgia,serif" font-size="16" font-weight="700" '
+        f'fill="#1F2A5C" pointer-events="none">{_esc(kind)}</text>'
+        # Subtle underline accent under the kind name in the kind's tint
+        f'<rect x="{kx + 12:.1f}" y="{ky + 26:.1f}" '
+        f'width="34" height="2" fill="{accent_color}" opacity="0.55" '
+        f'pointer-events="none"/>'
+        # Product / program count summary (right)
+        f'<text x="{kx + kw - 12:.1f}" y="{ky + 22:.1f}" '
+        f'text-anchor="end" font-family="ui-monospace,Consolas,monospace" '
+        f'font-size="12" font-weight="600" fill="#3A4256" pointer-events="none">'
+        f'{total} product{"s" if total != 1 else ""} &#183; {n_progs} program'
+        f'{"s" if n_progs != 1 else ""}</text>'
+        # "top:" summary line (below name)
+        f'<text x="{kx + 12:.1f}" y="{ky + 39:.1f}" '
+        f'font-size="11" fill="#5A6072" pointer-events="none">'
+        f'<tspan font-weight="700" fill="#3A4256">{top_prefix}</tspan> '
+        f'{_esc(top_line)}</text>'
+    )
+
+def _squarify_with_floor(sizes, x, y, w, h, min_w, min_h):
+    """Squarify with a minimum-box-size floor.
+
+    Runs the normal Bruls et al. layout. If any resulting rectangle falls
+    below (min_w, min_h), drops the smallest input from the layout, re-runs
+    with more area for the survivors, and repeats until every visible rect
+    clears the floor OR the survivor list is empty.
+
+    Returns (rects_for_kept, kept_orig_indices, spilled_orig_indices).
+    Both index lists are in original input order; rects_for_kept is aligned
+    to kept_orig_indices."""
+    n = len(sizes)
+    if n == 0 or w <= 0 or h <= 0:
+        return [], [], list(range(n))
+    # Sort largest-first, remembering original index.
+    order = sorted(range(n), key=lambda i: -sizes[i])
+    kept = list(order)              # largest-first
+    spilled = []                    # in spill-order (smallest first)
+    while kept:
+        kept_sizes = [sizes[i] for i in kept]
+        rects_kept_order = _squarify(kept_sizes, x, y, w, h)
+        # Any rect below the floor? If yes, spill the smallest kept and retry.
+        bad = any(rw < min_w or rh < min_h
+                  for (_rx, _ry, rw, rh) in rects_kept_order)
+        if not bad:
+            # Reorder rects back to original input order for the kept subset.
+            kept_original = sorted(kept)
+            # rects_kept_order is aligned to `kept` (largest-first). We want
+            # rects aligned to kept sorted by original index for callers.
+            pos = {orig_i: rect for orig_i, rect in zip(kept, rects_kept_order)}
+            rects_out = [pos[i] for i in kept_original]
+            return rects_out, kept_original, sorted(spilled)
+        # Spill the smallest kept (which is the last element since
+        # `kept` is largest-first).
+        spilled.append(kept.pop())
+    # Everything spilled - no boxes big enough. Caller falls back to chip row.
+    return [], [], sorted(spilled + kept)
 
 def _lscape_prog_fallback_html(kind, progs, prog_names, work, probes,
                                 data_cache, warn=True):
@@ -5781,127 +5955,246 @@ def _lscape_prog_fallback_html(kind, progs, prog_names, work, probes,
             f'{_esc(kind)}</div><div class="lscape-fallback-row">'
             + "".join(chips) + '</div></div>')
 
+def _lscape_prog_box_svg(pname, items, work, probes, data_cache, kind,
+                          total_in_kind, frx, fry, frw, frh):
+    """Render a single program box as an SVG <g>. Extracted so both the main
+    treemap loop and any future reuse (e.g. spill mini-boxes) share one code
+    path for tooltip + accessibility metadata."""
+    n = len(items)
+    tier = _prog_tier4(items, work, probes, data_cache)
+    reached = sum(1 for f in items
+                   if (data_cache or {}).get(f["path"]) or
+                      ((probes or {}).get(f["path"]) or {}).get("ok") or
+                      (f.get("product") and
+                       (work or {}).get(f.get("product"), {}).get("status", 0) > 0))
+    sampled = sum(1 for f in items
+                  if (data_cache or {}).get(f["path"]))
+    share_pct = (100.0 * n / total_in_kind) if total_in_kind else 0.0
+    tip = (f"{pname} — {n} product"
+           f"{'s' if n != 1 else ''}, {share_pct:.1f}% of {kind}"
+           f" · {reached} touched · {sampled} sampled")
+    fill = LSCAPE_TIER_FILL.get(tier, LSCAPE_TIER_FILL[0])
+    stroke = LSCAPE_TIER_STROKE.get(tier, LSCAPE_TIER_STROKE[0])
+    # Slightly heavier stroke on non-grey tiers so touched programs pop off
+    # the row; 0.75 stays on grey to keep untouched programs visually quiet.
+    stroke_w = 1.25 if tier > 0 else 0.75
+    return (
+        f'<g class="lscape-prog lscape-tier-{tier}" '
+        f'data-landscape-prog="{_esc(pname)}" '
+        f'tabindex="0" role="button" '
+        f'aria-label="{_esc(tip)}">'
+        f'<title>{_esc(tip)}</title>'
+        f'<rect x="{frx:.1f}" y="{fry:.1f}" width="{frw:.1f}" '
+        f'height="{frh:.1f}" fill="{fill}" stroke="{stroke}" '
+        f'stroke-width="{stroke_w}" rx="3" ry="3"/>'
+        + _lscape_prog_text_svg(pname, n, tier, frx, fry, frw, frh)
+        + '</g>')
+
+def _lscape_spill_details_html(kind, spilled_progs, work, probes, data_cache):
+    """Render the "+ N more programs" disclosure that follows a kind row when
+    squarify + min-floor spilled some programs. Uses <details>/<summary> for
+    native accessibility - no JS required. Chips reuse the existing
+    .lscape-fallback-chip class so the drill click handler picks them up."""
+    if not spilled_progs:
+        return ""
+    n_spill = sum(len(items) for _, items in spilled_progs)
+    n_prog = len(spilled_progs)
+    # Preview: names of the first 3 spilled programs on the summary line.
+    preview_names = [p for p, _ in spilled_progs[:3]]
+    preview = " · ".join(preview_names)
+    if n_prog > 3:
+        preview += " · …"
+    chips = []
+    for pname, items in spilled_progs:
+        n = len(items)
+        tier = _prog_tier4(items, work, probes, data_cache)
+        chips.append(
+            f'<div class="lscape-fallback-chip lscape-tier-{tier}" '
+            f'data-landscape-prog="{_esc(pname)}" tabindex="0" role="button" '
+            f'title="{_esc(pname)} - {n} product{"s" if n != 1 else ""}">'
+            f'{_esc(pname)} <em>{n}</em></div>')
+    return (
+        f'<details class="lscape-spill">'
+        f'<summary><span class="lscape-spill-count">+{n_prog} more '
+        f'program{"s" if n_prog != 1 else ""}</span> '
+        f'<span class="lscape-spill-preview">{_esc(preview)}</span> '
+        f'<span class="lscape-spill-total">({n_spill} product'
+        f'{"s" if n_spill != 1 else ""})</span></summary>'
+        f'<div class="lscape-fallback-row lscape-spill-chips">'
+        + "".join(chips) + '</div></details>')
+
+def _kind_slug(kind):
+    """CSS-safe kind slug for per-row class hooks (e.g. 'Aggregate tables'
+    -> 'aggregate-tables')."""
+    return re.sub(r'[^a-z0-9]+', '-', kind.lower()).strip('-') or "kind"
+
+def _lscape_row_inner_h(share, n_progs):
+    """Compute the treemap-slice height for a kind row given its share of
+    total product count and how many programs it holds. Floor + cap keep
+    singleton kinds from disappearing and the biggest kinds from dominating."""
+    # Base target: linear in share.
+    target = share * LSCAPE_ROW_BASE
+    # Boost floor a bit when there are more programs to give squarify room to
+    # place multiple rows of boxes above the floor.
+    row_min = LSCAPE_ROW_MIN_H if n_progs <= 1 else max(LSCAPE_ROW_MIN_H, 78)
+    return int(max(row_min, min(LSCAPE_ROW_MAX_H, target)))
+
 def build_landscape_viz(fams, work, probes, data_cache):
-    """Home-tab SVG squarified treemap: Kind (outer) -> Program (inner),
-    area-proportional to product count, color-shaded by max team-reach tier.
-    Pure SVG with a delegated JS click handler for the drill-down. If the
-    squarified layout fails on some kind, that kind degrades to a simple
-    flex row without crashing the whole regen (see _lscape_prog_fallback_html)."""
+    """Home-tab landscape: stacked full-width rows, one per dataset kind, each
+    with its own squarified treemap of programs. Row height is proportional
+    to product-count share (Aggregate biggest, Uncategorized slimmest). Every
+    program box carries an always-on label - if squarify would produce a
+    slot below the min-legibility floor we spill it into a compact
+    "+ N more programs" disclosure at the end of the row. Pure SVG per row
+    with an HTML disclosure for spill; delegated JS click handler unchanged."""
 
     # Group by kind, then by program group. Use catalog `group` (the human
-    # program name) as the second level - matching the Products-tab section
+    # program name) as the second level - matches the Products-tab section
     # heads so the reader learns the same vocabulary in two places.
     by_kind = {}
     for f in fams.values():
         by_kind.setdefault(f["kind"], {}).setdefault(f.get("group") or "Other",
                                                       []).append(f)
 
-    # Outer partition: 4 kind rectangles, area = product count.
     kind_order = [k for k in KINDS if k in by_kind]
-    kind_sizes = [sum(len(v) for v in by_kind[k].values()) for k in kind_order]
-    # Reserve a top strip for the kind header text (14 px) inside each
-    # kind's SVG rectangle so program boxes don't overlap the header.
-    KIND_HEADER_H = 18
-    try:
-        kind_rects = _squarify(kind_sizes, 0, 0, LSCAPE_SVG_W, LSCAPE_SVG_H)
-    except Exception as ex:
-        print(f"  [landscape] outer squarified failed ({ex}); "
-              f"aborting SVG treemap", file=sys.stderr)
+    total_products = sum(sum(len(v) for v in by_kind[k].values())
+                         for k in kind_order)
+    if total_products <= 0:
         return _all_flex_fallback(by_kind, kind_order, work, probes, data_cache)
 
-    svg_parts = [
-        f'<svg class="lscape-svg" xmlns="http://www.w3.org/2000/svg" '
-        f'viewBox="0 0 {LSCAPE_SVG_W} {LSCAPE_SVG_H}" '
-        f'width="100%" height="{LSCAPE_SVG_H}" role="img" '
-        f'aria-label="Squarified treemap of Census products, grouped by '
-        f'dataset type and program.">',
-    ]
-    fallback_html_parts = []
     prog_boxes_rendered = 0
-    for (kind, k_rect) in zip(kind_order, kind_rects):
-        kx, ky, kw, kh = k_rect
+    spilled_boxes = 0
+    row_html_parts = []
+    smallest_box = None    # (pname, w*h) - reported in the caption
+
+    for kind in kind_order:
         progs = by_kind[kind]
         total_in_kind = sum(len(v) for v in progs.values())
+        # Largest-first ordering matches squarify's internal preference and
+        # also drives the "top:" line in the header.
         prog_names = sorted(progs, key=lambda n: (-len(progs[n]), n))
         prog_sizes = [len(progs[p]) for p in prog_names]
-        # Inset by LSCAPE_PAD_KIND on all sides + header strip on top so the
-        # program boxes read as nested inside their kind container.
-        pad = LSCAPE_PAD_KIND
-        inner_x = kx + pad
-        inner_y = ky + pad + KIND_HEADER_H
-        inner_w = max(0.0, kw - 2 * pad)
-        inner_h = max(0.0, kh - 2 * pad - KIND_HEADER_H)
-        # Kind bounding rectangle (light border, no fill - lets the program
-        # colors read directly).
-        svg_parts.append(
-            f'<rect x="{kx:.1f}" y="{ky:.1f}" width="{kw:.1f}" '
-            f'height="{kh:.1f}" fill="#FFFFFF" stroke="#CADCFC" '
-            f'stroke-width="1.5" rx="4" ry="4"/>')
-        svg_parts.append(_lscape_kind_head_svg(kind, total_in_kind,
-                                                len(prog_names), kx, ky, kw))
-        # Two failure modes: (a) inner rect too small to render (expected
-        # for tiny kinds like Uncategorized with one product) - degrade silently
-        # to a chip row; (b) zero total size (data-shape bug) - warn.
-        too_small = inner_w <= 0 or inner_h <= 0
-        no_sizes = not prog_sizes or sum(prog_sizes) <= 0
-        if too_small or no_sizes:
-            fallback_html_parts.append(_lscape_prog_fallback_html(
-                kind, progs, prog_names, work, probes, data_cache,
-                warn=no_sizes))
-            continue
-        try:
-            prog_rects = _squarify(prog_sizes, inner_x, inner_y,
-                                    inner_w, inner_h)
-        except Exception as ex:
-            print(f"  [landscape] inner squarified failed for kind '{kind}' "
-                  f"({ex}); degrading to flex fallback", file=sys.stderr)
-            fallback_html_parts.append(_lscape_prog_fallback_html(
-                kind, progs, prog_names, work, probes, data_cache))
+        # Compressed sizes for layout only - real counts still surface in
+        # labels + tooltips. Keeps SIPP visibly the biggest without
+        # squeezing singletons to invisible slivers.
+        prog_sizes_layout = [max(1e-6, s) ** LSCAPE_SIZE_EXP for s in prog_sizes]
+        share = total_in_kind / total_products if total_products else 0.0
+        inner_h = _lscape_row_inner_h(share, len(prog_names))
+        inner_x = LSCAPE_ROW_PAD
+        inner_y = LSCAPE_HEADER_H + LSCAPE_ROW_PAD
+        inner_w = LSCAPE_SVG_W - LSCAPE_ROW_PAD * 2
+
+        # Auto-grow row height to minimize spill. Squarify area-proportional
+        # inherently squeezes tiny programs; growing the row gives them more
+        # absolute area to clear the min-box floor. Cap at LSCAPE_ROW_MAX_H
+        # so a kind with 15 singletons can't push the viz to 3000px tall.
+        auto_rects_kept = []
+        auto_kept_i = []
+        auto_spilled_i = list(range(len(prog_names)))  # worst case: all spill
+        if sum(prog_sizes) > 0:
+            try_h = inner_h
+            for _grow in range(6):
+                try:
+                    rk, ki, si = _squarify_with_floor(
+                        prog_sizes_layout, inner_x, inner_y, inner_w, try_h,
+                        LSCAPE_MIN_BOX_W, LSCAPE_MIN_BOX_H)
+                except Exception as ex:
+                    print(f"  [landscape] squarify failed for kind '{kind}' "
+                          f"({ex}); degrading to flex fallback", file=sys.stderr)
+                    rk, ki, si = [], [], list(range(len(prog_names)))
+                    break
+                # Prefer the pass that gave us more visible boxes so we always
+                # take a monotonic improvement even if we bail out mid-loop.
+                if len(ki) > len(auto_kept_i):
+                    auto_rects_kept, auto_kept_i, auto_spilled_i = rk, ki, si
+                    inner_h = try_h
+                if len(si) <= LSCAPE_MAX_SPILL or try_h >= LSCAPE_ROW_MAX_H:
+                    break
+                # Grow ~35% and clamp to the hard cap; will re-squarify.
+                try_h = min(int(try_h * 1.35) + 1, LSCAPE_ROW_MAX_H)
+        row_svg_h = LSCAPE_HEADER_H + LSCAPE_ROW_PAD * 2 + inner_h
+
+        tint = LSCAPE_KIND_TINT.get(kind, LSCAPE_KIND_TINT["Uncategorized"])
+        # Row shell: background tint, rounded corners, kind slug for scoping.
+        slug = _kind_slug(kind)
+        svg_parts = [
+            f'<svg class="lscape-kind-svg" xmlns="http://www.w3.org/2000/svg" '
+            f'viewBox="0 0 {LSCAPE_SVG_W} {row_svg_h}" '
+            f'width="100%" height="{row_svg_h}" role="img" '
+            f'aria-label="{_esc(kind)}: {total_in_kind} products across '
+            f'{len(prog_names)} program{"s" if len(prog_names) != 1 else ""}.">',
+            # Row background fill (below program boxes)
+            f'<rect x="0" y="0" width="{LSCAPE_SVG_W}" height="{row_svg_h}" '
+            f'fill="{tint["bg"]}" rx="10" ry="10"/>',
+            # Header divider (subtle underline separating header from treemap)
+            f'<line x1="12" y1="{LSCAPE_HEADER_H - 1}" '
+            f'x2="{LSCAPE_SVG_W - 12}" y2="{LSCAPE_HEADER_H - 1}" '
+            f'stroke="{tint["border"]}" stroke-width="1"/>',
+        ]
+        # Header content (kind name, count summary, top-3 line)
+        prog_size_pairs = list(zip(prog_names, prog_sizes))
+        svg_parts.append(_lscape_kind_head_svg(
+            kind, total_in_kind, len(prog_names), prog_size_pairs,
+            0, 0, LSCAPE_SVG_W, tint["accent"]))
+
+        # Guard against pathological data shape (zero total).
+        if sum(prog_sizes) <= 0:
+            svg_parts.append('</svg>')
+            row_html_parts.append(
+                f'<div class="lscape-kind-row" data-kind="{_esc(slug)}" '
+                f'style="border-color:{tint["border"]}">'
+                + "".join(svg_parts)
+                + _lscape_prog_fallback_html(kind, progs, prog_names,
+                                              work, probes, data_cache,
+                                              warn=True)
+                + '</div>')
             continue
 
-        for pname, p_rect in zip(prog_names, prog_rects):
-            rx, ry, rw, rh = p_rect
-            # Apply a 1px inner padding so adjacent program boxes read as
-            # separated. Clamp to nonnegative so tiny slivers don't invert.
+        # Use the best pass captured by the auto-grow loop above.
+        rects_kept = auto_rects_kept
+        kept_orig_i = auto_kept_i
+        spilled_orig_i = auto_spilled_i
+
+        # Emit kept program boxes.
+        for orig_i, rect in zip(kept_orig_i, rects_kept):
+            rx, ry, rw, rh = rect
             pp = LSCAPE_PAD_PROG
             frx = rx + pp / 2
             fry = ry + pp / 2
             frw = max(0.0, rw - pp)
             frh = max(0.0, rh - pp)
+            pname = prog_names[orig_i]
             items = progs[pname]
-            n = len(items)
-            tier = _prog_tier4(items, work, probes, data_cache)
-            reached = sum(1 for f in items
-                           if (data_cache or {}).get(f["path"]) or
-                              ((probes or {}).get(f["path"]) or {}).get("ok") or
-                              (f.get("product") and
-                               (work or {}).get(f.get("product"), {}).get("status", 0) > 0))
-            sampled = sum(1 for f in items
-                          if (data_cache or {}).get(f["path"]))
-            share_pct = (100.0 * n / total_in_kind) if total_in_kind else 0.0
-            tip = (f"{pname} — {n} product"
-                   f"{'s' if n != 1 else ''}, {share_pct:.1f}% of {kind}"
-                   f" · {reached} touched · {sampled} sampled")
-            fill = LSCAPE_TIER_FILL.get(tier, LSCAPE_TIER_FILL[0])
-            stroke = LSCAPE_TIER_STROKE.get(tier, LSCAPE_TIER_STROKE[0])
-            svg_parts.append(
-                f'<g class="lscape-prog lscape-tier-{tier}" '
-                f'data-landscape-prog="{_esc(pname)}" '
-                f'tabindex="0" role="button" '
-                f'aria-label="{_esc(tip)}">'
-                f'<title>{_esc(tip)}</title>'
-                f'<rect x="{frx:.1f}" y="{fry:.1f}" width="{frw:.1f}" '
-                f'height="{frh:.1f}" fill="{fill}" stroke="{stroke}" '
-                f'stroke-width="0.75" rx="2" ry="2"/>'
-                + _lscape_prog_text_svg(pname, n, tier, frx, fry, frw, frh)
-                + '</g>')
+            svg_parts.append(_lscape_prog_box_svg(
+                pname, items, work, probes, data_cache, kind,
+                total_in_kind, frx, fry, frw, frh))
             prog_boxes_rendered += 1
+            box_area = frw * frh
+            if smallest_box is None or box_area < smallest_box[1]:
+                smallest_box = (pname, box_area, frw, frh)
 
-    svg_parts.append('</svg>')
+        svg_parts.append('</svg>')
 
-    # Legend + counts summary. Small color-swatch legend mapping tier ->
-    # color, followed by the aggregate touched/sampled counts on the right.
-    touched_total = 0; sampled_total = 0
+        # Spill disclosure below the SVG (if any).
+        spilled_pairs = [(prog_names[i], progs[prog_names[i]])
+                         for i in spilled_orig_i]
+        spilled_boxes += len(spilled_pairs)
+        spill_html = _lscape_spill_details_html(
+            kind, spilled_pairs, work, probes, data_cache) if spilled_pairs else ""
+
+        # Assemble the row (SVG + optional spill disclosure) inside a
+        # per-kind container so CSS can apply the tint border cleanly.
+        row_html_parts.append(
+            f'<div class="lscape-kind-row" data-kind="{_esc(slug)}" '
+            f'style="border-color:{tint["border"]}">'
+            + "".join(svg_parts)
+            + spill_html
+            + '</div>')
+
+    # Legend + counts summary. Same tier tally as before; now the legend
+    # doubles as a color key for the newly-vivid touched-tier palette.
+    touched_total = 0
+    sampled_total = 0
     tier_counts = {0: 0, 1: 0, 2: 0, 3: 0}
     for f in fams.values():
         path = f["path"]
@@ -5915,31 +6208,44 @@ def build_landscape_viz(fams, work, probes, data_cache):
         if prod and (work or {}).get(prod, {}).get("status", 0) > 0:
             tier_counts[1] += 1; touched_total += 1; continue
         tier_counts[0] += 1
+
     legend_bits = []
     for tier in (0, 1, 2, 3):
         legend_bits.append(
-            f'<span><span class="lscape-swatch lscape-tier-{tier}" '
-            f'style="background:{LSCAPE_TIER_FILL[tier]};'
+            f'<span class="lscape-legend-item"><span class="lscape-swatch '
+            f'lscape-tier-{tier}" style="background:{LSCAPE_TIER_FILL[tier]};'
             f'border-color:{LSCAPE_TIER_STROKE[tier]}"></span>'
-            f'{LSCAPE_TIER_LABEL[tier]} ({tier_counts[tier]})</span>')
-    # Beginner-UX pass commit #3: rename visible "kind" -> "dataset type".
-    caption = ('Every Census product family from the API catalog, grouped by '
-               'dataset type and program. Rectangle area is proportional to '
-               'product count (squarified treemap - Bruls et al. 2000); color '
-               'shows the deepest team-reach tier anywhere in the slice. '
+            f'<b>{LSCAPE_TIER_LABEL[tier]}</b> '
+            f'<span class="lscape-legend-cnt">({tier_counts[tier]})</span></span>')
+
+    caption = ('Every Census product family from the API catalog, stacked one '
+               'row per dataset type. Box size is weighted by product count '
+               '(squarified treemap - Bruls et al. 2000), mildly compressed '
+               'so small programs stay legible next to giants like SIPP; the '
+               'true product count for each program shows both on its box and '
+               'in the hover tooltip. Color shows the deepest team-reach tier '
+               'anywhere in the slice. '
                '<b>Click any program to jump to the matching products.</b>')
+
+    smallest_note = ""
+    if smallest_box:
+        _, _, sw, sh = smallest_box
+        smallest_note = (f'&middot; smallest box {sw:.0f}&times;{sh:.0f} px')
 
     return ('<div class="lscape-section">'
             '<h2>The Census data landscape</h2>'
             f'<div class="lscape-caption">{caption}</div>'
-            + "".join(svg_parts)
-            + ("".join(fallback_html_parts) if fallback_html_parts else "")
-            + '<div class="lscape-legend">'
+            f'<div class="lscape-viz">'
+            + "".join(row_html_parts)
+            + '</div>'
+            '<div class="lscape-legend">'
             + "".join(legend_bits)
-            + f'<span style="margin-left:auto">Team reach: {touched_total} '
+            + f'<span class="lscape-legend-summary">Team reach: {touched_total} '
               f'of {len(fams)} products touched &middot; {sampled_total} '
               f'with a data peek &middot; {prog_boxes_rendered} program '
-              f'boxes rendered</span>'
+              f'box{"es" if prog_boxes_rendered != 1 else ""} rendered'
+              f'{" &middot; " + str(spilled_boxes) + " in spill drawers" if spilled_boxes else ""}'
+              f' {smallest_note}</span>'
             '</div></div>')
 
 def _all_flex_fallback(by_kind, kind_order, work, probes, data_cache):
