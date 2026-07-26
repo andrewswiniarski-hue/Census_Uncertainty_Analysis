@@ -2490,6 +2490,43 @@ table.rep td{border-bottom:1px solid var(--ice);padding:7px 9px;vertical-align:t
    reached into the ~573-product catalog, and which products are we actually
    working with today? Replaces the funnel + curated-findings-first framing. */
 .wti-section{margin:0 0 24px;max-width:1020px;}
+/* Named-tier progress rail (UX pass 2026-07-26 commit #2).
+   Replaces the pre-existing 3-bar coverage list ("Has repo evidence: 6/573
+   1.0%" style). One horizontal segmented bar; segment widths are proportional
+   to mutually-exclusive tier counts (cataloged / probed / sampled / reviewed).
+   All raw sub-25% percentages have been removed: the visual IS the summary. */
+.pipeline-rail{margin:14px 0 6px;}
+.pipeline-bar{display:flex;height:28px;border-radius:14px;overflow:hidden;
+       background:#F6F7FA;border:1px solid var(--line);
+       box-shadow:inset 0 1px 2px rgba(31,42,92,0.05);}
+.pipeline-seg{height:100%;transition:width .18s ease-out;
+       display:flex;align-items:center;justify-content:center;
+       font-family:var(--f-mono);font-variant-numeric:tabular-nums;
+       font-size:var(--fs-1);font-weight:var(--w-head);color:var(--navy);
+       overflow:hidden;white-space:nowrap;
+       border-right:1px solid rgba(255,255,255,.55);}
+.pipeline-seg:last-child{border-right:0;}
+.pipeline-seg[data-stage="cataloged"]{background:#DDE3EE;}
+.pipeline-seg[data-stage="probed"]   {background:#B7CDF6;}
+.pipeline-seg[data-stage="sampled"]  {background:#8BD3CC;color:#0F3E39;}
+.pipeline-seg[data-stage="reviewed"] {background:#8FCD97;color:#153A20;}
+.pipeline-seg .pipeline-seg-n{font-family:var(--f-mono);}
+.pipeline-labels{display:flex;margin-top:10px;font-size:var(--fs-2);
+       color:var(--muted);flex-wrap:wrap;gap:22px;line-height:var(--lh-2);}
+.pipeline-label{display:inline-flex;align-items:baseline;gap:8px;}
+.pipeline-swatch{display:inline-block;width:11px;height:11px;border-radius:3px;
+       transform:translateY(1px);}
+.pipeline-swatch[data-stage="cataloged"]{background:#DDE3EE;}
+.pipeline-swatch[data-stage="probed"]   {background:#B7CDF6;}
+.pipeline-swatch[data-stage="sampled"]  {background:#8BD3CC;}
+.pipeline-swatch[data-stage="reviewed"] {background:#8FCD97;}
+.pipeline-label-n{font-family:var(--f-mono);font-variant-numeric:tabular-nums;
+       font-weight:var(--w-head);color:var(--navy);font-size:var(--fs-2);}
+.pipeline-label-name{color:var(--ink);}
+.pipeline-caption{font-size:var(--fs-2);color:var(--muted);
+       line-height:var(--lh-3);margin-top:12px;max-width:860px;}
+/* Deprecated wti-cov-* rules kept for one release cycle in case a plugin
+   or a stale HTML snippet still references them; unused after 2026-07-26. */
 .wti-cov-list{display:flex;flex-direction:column;gap:8px;margin:8px 0 6px;}
 .wti-cov-row{display:flex;align-items:center;gap:12px;font-size:var(--fs-2);}
 .wti-cov-label{flex:0 0 200px;color:var(--navy);font-weight:var(--w-emph);font-size:var(--fs-2);}
@@ -3719,6 +3756,16 @@ GLOSSARY = {
     "kind":               "Type of dataset - aggregate tables, microdata "
                           "(individual records), time series, or "
                           "uncategorized.",
+    # UX pass 2026-07-26 commit #2: research pipeline vocabulary. Named-tier
+    # rail replaces the old coverage bars; readers see the noun for the first
+    # time in that rail's caption and each pipeline label.
+    "research pipeline":  "How a product moves from a catalog listing to a "
+                          "fully reviewed reliability note: "
+                          "cataloged -> probed -> sampled -> reviewed. "
+                          "Each stage adds evidence.",
+    "reviewed":           "The team has recorded uncertainty notes for this "
+                          "product (its uncertainty_metrics field is filled "
+                          "in). The deliverable of the research pipeline.",
 }
 _GLOSS_SEEN = set()
 
@@ -5422,6 +5469,46 @@ def _coverage_tone(pct):
     if pct >= 5.0:  return "amber"
     return "red"
 
+# UX pass 2026-07-26 commit #2 (named-tier progress rail) --------------------
+# Mutually-exclusive per-product pipeline stage assignment: each catalog path
+# sits at exactly one of {cataloged, probed, sampled, reviewed}, chosen by
+# the deepest evidence attached to it. Feeds the segmented rail on Home.
+
+PIPELINE_STAGES = ["cataloged", "probed", "sampled", "reviewed"]
+
+def _pipeline_counts(fams, review, work, probes, data_cache):
+    """Mutually-exclusive per-product pipeline-stage counts.
+
+    Priority (deepest wins):
+      reviewed  - stage == "focus" OR non-empty uncertainty_metrics
+                  (i.e. the team has written down what they found)
+      sampled   - path present in scope_data_cache
+      probed    - path present in product_probes with ok=True
+      cataloged - everything else (only the catalog listing exists)
+
+    Returns dict with the four stage counts + total. Sum of stages == total,
+    which is the invariant the named-tier progress rail rides on.
+    """
+    counts = {s: 0 for s in PIPELINE_STAGES}
+    probes = probes or {}
+    data_cache = data_cache or {}
+    review = review or {}
+    for path in fams:
+        r = review.get(path) or {}
+        has_review = (r.get("stage") == "focus"
+                      or bool((r.get("uncertainty_metrics") or "").strip())
+                      or bool((r.get("note") or "").strip()))
+        if has_review:
+            counts["reviewed"] += 1; continue
+        if path in data_cache:
+            counts["sampled"] += 1; continue
+        pe = probes.get(path)
+        if isinstance(pe, dict) and pe.get("ok"):
+            counts["probed"] += 1; continue
+        counts["cataloged"] += 1
+    counts["total"] = sum(counts[s] for s in PIPELINE_STAGES)
+    return counts
+
 def _iso_to_dt(ts):
     """Parse an ISO-8601 timestamp (optionally 'Z'-terminated) to a UTC-aware
     datetime. Returns None on any parse failure - callers treat that as 'no
@@ -5568,37 +5655,80 @@ def build_phase1_hero_card():
         f'</div>')
 
 def build_where_team_is(fams, review, work, probes, data_cache, git, repo):
-    """Home-tab top: coverage bars + 'Recently touched' list. Renders in place
-    of the previous funnel + curated-findings hero. See the reframe spec #1.
+    """Home-tab top: named-tier research-pipeline rail + 'Recently touched' list.
+
+    UX pass 2026-07-26 commit #2. Replaces the pre-existing 3-bar coverage
+    list (Has repo evidence / Probed / Sampled with raw percentages) with a
+    single segmented horizontal bar showing mutually-exclusive pipeline
+    stages: cataloged -> probed -> sampled -> reviewed. Sub-25% raw
+    percentages are gone entirely; segment area IS the percentage, and the
+    named counts below the rail carry the exact numbers.
     """
-    cov = _evidence_coverage(fams, work, probes, data_cache)
-    total = cov["total"] or 1  # avoid div-by-zero if catalog is empty
-    def _bar(label_html, n):
-        # label_html is already-escaped HTML (may include a gloss `?` span);
-        # every current caller passes safe text or _esc-safe strings.
-        pct = 100.0 * n / total
-        tone = _coverage_tone(pct)
-        # Minimum sliver width so 0-count bars aren't invisible.
-        w = max(1.5, min(100.0, pct))
-        return ('<div class="wti-cov-row">'
-                f'<div class="wti-cov-label">{label_html}</div>'
-                f'<div class="wti-cov-bar" title="{n} of {cov["total"]}">'
-                f'<div class="wti-cov-bar-fill {tone}" '
-                f'style="width:{w:.2f}%"></div></div>'
-                f'<div class="wti-cov-cnt">{n:,} / {cov["total"]:,} '
-                f'&middot; {pct:.1f}%</div></div>')
+    pc = _pipeline_counts(fams, review, work, probes, data_cache)
+    total = pc["total"] or 1  # avoid div-by-zero if catalog is empty
+
+    # Human-friendly labels for the pipeline vocabulary. Kept alongside the
+    # tone/colour map so the label + swatch never drift.
+    STAGE_LABEL = {
+        "cataloged": "cataloged",
+        "probed":    "probed",
+        "sampled":   "sampled",
+        "reviewed":  "reviewed",
+    }
+
+    # Segmented bar: one <div> per stage, width proportional to its share.
+    # Zero-count stages render at 0% width so the visual invariant (widths
+    # sum to 100%) is preserved without giving empty tiers false weight.
+    seg_html = []
+    for stage in PIPELINE_STAGES:
+        n = pc[stage]
+        share = 100.0 * n / total
+        # Only paint the count inside the segment when there's room. At
+        # under ~6% the number wouldn't fit; the label below carries it.
+        inline_n = f'<span class="pipeline-seg-n">{n:,}</span>' if share >= 6.0 else ""
+        seg_html.append(
+            f'<div class="pipeline-seg" data-stage="{stage}" '
+            f'style="width:{share:.3f}%" '
+            f'title="{n:,} of {pc["total"]:,} products - {STAGE_LABEL[stage]}">'
+            f'{inline_n}</div>')
+
+    # Labels below the bar: swatch + count + name. Reads left-to-right in
+    # the same order as the segments.
+    lbl_html = []
+    for stage in PIPELINE_STAGES:
+        n = pc[stage]
+        lbl_html.append(
+            f'<span class="pipeline-label">'
+            f'<span class="pipeline-swatch" data-stage="{stage}"></span>'
+            f'<span class="pipeline-label-n">{n:,}</span>'
+            f'<span class="pipeline-label-name">{STAGE_LABEL[stage]}</span>'
+            f'</span>')
 
     parts = ['<div class="wti-section">',
              '<h2>Where the team is</h2>',
-             '<div class="sub">How far the team has reached into the Census '
-             f'catalog of {cov["total"]:,} product families, and which '
-             'products we are actually working with today.</div>',
-             '<div class="wti-cov-list">',
-             _bar("Has repo evidence", cov["evidence"]),
-             # Beginner-UX pass commit #2: `?` glossary tooltip after the first
-             # visible appearance of the jargon term (probed / sampled).
-             _bar("Probed (API metadata)" + gloss("probe"), cov["probed"]),
-             _bar("Sampled (actual data)" + gloss("sample"), cov["sampled"]),
+             '<div class="sub">Every product moves through the '
+             f'research pipeline{gloss("research pipeline")} on its way to a '
+             'finished uncertainty note. This shows where each of the '
+             f'{pc["total"]:,} catalog product families currently sits.</div>',
+             '<div class="pipeline-rail">',
+             '<div class="pipeline-bar" role="img" aria-label='
+             f'"Research pipeline: {pc["cataloged"]:,} cataloged, '
+             f'{pc["probed"]:,} probed, {pc["sampled"]:,} sampled, '
+             f'{pc["reviewed"]:,} reviewed{gloss("reviewed")}.">',
+             "".join(seg_html),
+             '</div>',
+             '<div class="pipeline-labels">',
+             "".join(lbl_html),
+             '</div>',
+             '<div class="pipeline-caption">'
+             'Each product moves from '
+             '<b>cataloged</b> (listed in the Census catalog) &rarr; '
+             '<b>probed</b> (variables + geographies fetched from the API) &rarr; '
+             '<b>sampled</b> (a small data slice pulled + summarized) &rarr; '
+             '<b>reviewed</b> (uncertainty notes written by the team). '
+             'The deliverable is a reviewed uncertainty note; the earlier '
+             'stages are just how we get enough evidence to write one.'
+             '</div>',
              '</div>']
 
     signals = _recency_signals(fams, review, work, probes, data_cache, repo)
