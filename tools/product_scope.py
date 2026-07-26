@@ -2012,6 +2012,57 @@ table.rep td{border-bottom:1px solid var(--ice);padding:7px 9px;vertical-align:t
 .wli{font-size:12px;line-height:1.45;margin:5px 0 0;padding-left:10px;border-left:2px solid var(--ice);}
 .wli b{display:inline-block;background:var(--ice);color:var(--navy);border-radius:9px;padding:1px 8px;
        font-size:10.5px;margin-right:6px;font-family:ui-monospace,Consolas,monospace;}
+/* "Where the team is" section (reframe pass commit #1). Answers a cold
+   teammate's first two questions on opening the report: how far has the team
+   reached into the ~573-product catalog, and which products are we actually
+   working with today? Replaces the funnel + curated-findings-first framing. */
+.wti-section{margin:0 0 24px;max-width:1020px;}
+.wti-cov-list{display:flex;flex-direction:column;gap:8px;margin:8px 0 6px;}
+.wti-cov-row{display:flex;align-items:center;gap:12px;font-size:12.5px;}
+.wti-cov-label{flex:0 0 200px;color:var(--navy);font-weight:600;font-size:12px;}
+.wti-cov-bar{flex:1;height:14px;background:#F6F7FA;border-radius:7px;overflow:hidden;
+       position:relative;border:1px solid var(--ice);min-width:60px;}
+.wti-cov-bar-fill{height:100%;border-radius:6px;transition:width .18s ease-out;}
+.wti-cov-bar-fill.green{background:#7ABF89;}
+.wti-cov-bar-fill.amber{background:#E9CD7A;}
+.wti-cov-bar-fill.red{background:#D0876E;}
+.wti-cov-cnt{flex:0 0 128px;font-family:ui-monospace,Consolas,monospace;
+       font-size:11px;color:var(--muted);text-align:right;}
+.wti-recent{margin-top:16px;}
+.wti-recent h3{font-family:Georgia,serif;font-size:15px;color:var(--navy);margin:0 0 6px;}
+.wti-recent-list{list-style:none;padding:0;margin:0;border-top:1px solid var(--ice);}
+.wti-recent-list li{padding:6px 8px;border-bottom:1px solid var(--ice);
+       display:flex;gap:10px;align-items:baseline;font-size:12px;flex-wrap:wrap;}
+.wti-recent-list li a.wti-path{font-family:ui-monospace,Consolas,monospace;
+       font-weight:700;color:var(--navy);text-decoration:none;flex:0 0 auto;
+       border-bottom:1px dotted #8FA8D8;cursor:pointer;}
+.wti-recent-list li a.wti-path:hover{color:#3A4890;border-bottom-style:solid;}
+.wti-recent-list li .wti-what{color:var(--ink);flex:1;min-width:180px;line-height:1.4;}
+.wti-recent-list li .wti-when{font-family:ui-monospace,Consolas,monospace;
+       font-size:10.5px;color:var(--muted);flex:0 0 auto;}
+.wti-tier-chip{display:inline-block;padding:1px 7px;border-radius:8px;font-size:9.5px;
+       font-weight:700;letter-spacing:.03em;margin-right:2px;text-transform:uppercase;}
+.wti-tier-chip.t2{background:#D6EDD9;color:#1F5A2E;}
+.wti-tier-chip.t1{background:#DCE7FA;color:#1F2A5C;}
+.wti-tier-chip.t0{background:#EDF0F7;color:#5A6072;}
+.wti-empty{font-size:12px;color:var(--muted);font-style:italic;padding:8px 0;}
+.wti-empty code{font-family:ui-monospace,Consolas,monospace;background:var(--ice);
+       color:var(--navy);padding:1px 5px;border-radius:3px;font-style:normal;}
+/* Reviewer-mode data collapse: quietly demotes the funnel + composite-role
+   scaffolding from the primary Home surface. The reviewer flow is still one
+   click away and the CLI paths that write it (--review) are untouched. */
+.rev-mode-details{margin-top:34px;padding-top:14px;border-top:1px solid var(--ice);
+       max-width:1020px;}
+.rev-mode-details > summary{cursor:pointer;font-size:11px;color:var(--muted);
+       font-weight:700;letter-spacing:.09em;text-transform:uppercase;padding:6px 0;
+       list-style:none;}
+.rev-mode-details > summary::-webkit-details-marker{display:none;}
+.rev-mode-details > summary::marker{content:"";}
+.rev-mode-details > summary:before{content:"\25B8  ";color:var(--muted);}
+.rev-mode-details[open] > summary:before{content:"\25BE  ";color:var(--navy);}
+.rev-mode-details[open] > summary{color:var(--navy);}
+.rev-mode-details > summary:hover{color:var(--navy);}
+.rev-mode-body{margin-top:12px;}
 .nohit{display:none;font-size:12.5px;color:var(--muted);font-style:italic;padding:10px 0;}
 footer{padding:22px 44px;color:var(--muted);font-size:11.5px;}
 /* Freshness pill bar (shown on every page - reads data-generated-at at page load). */
@@ -2586,6 +2637,68 @@ document.querySelectorAll('.filter input').forEach(function(inp){
     if (!target) return;
     e.preventDefault();
     target.open = !target.open;
+  });
+})();
+/* --- Reframe pass commit #1 - Home tab "Recently touched" jump handler ---
+   Each list item on Home carries data-jump-path="<catalog path>" pointing at
+   a product card in one of the Products tabs. Clicking:
+     1. Locates the .prod card by data-path.
+     2. Ensures the panel containing it is the active tab.
+     3. If the card is currently hidden by the actively-managed default
+        (data-actively-managed missing on a non-AM product), flips the
+        show-all toggle on so the reader lands on a visible card.
+     4. Unfolds any collapsed program/subject scaffolding above the card.
+     5. Scrolls the card into view with a mild top offset.
+   Anchor fallback works when JS is disabled: id="prod-<path>" is set at
+   render time so the browser jumps to the DOM node directly, though panel
+   visibility can't be flipped without JS. */
+(function(){
+  function _findCard(path){
+    return document.querySelector('.prod[data-path="' + CSS.escape(path) + '"]');
+  }
+  function _ensureVisible(card){
+    /* Unfold every ancestor .psec / .gsec so the card can be reached. */
+    var el = card.parentElement;
+    while (el){
+      if (el.classList){
+        el.classList.remove('gfold');
+        el.classList.remove('pfold');
+      }
+      el = el.parentElement;
+    }
+  }
+  document.addEventListener('click', function(e){
+    var a = e.target.closest && e.target.closest('a.wti-path[data-jump-path]');
+    if (!a) return;
+    e.preventDefault();
+    var path = a.getAttribute('data-jump-path');
+    var card = _findCard(path);
+    if (!card) return;
+    /* Which panel is this card in? */
+    var panel = card.closest('.panel');
+    if (panel){
+      /* If card isn't actively-managed and body is in AM-only mode, flip. */
+      var isAM = card.dataset.activelyManaged === 'true';
+      if (!isAM && !document.body.classList.contains('am-showall')){
+        var cb = document.querySelector('.am-cb');
+        if (cb){ cb.checked = true;
+          cb.dispatchEvent(new Event('change', {bubbles: true})); }
+      }
+      /* Switch to the panel's tab. */
+      var pid = panel.id; var key = pid.replace(/^panel-/, '');
+      var tab = document.querySelector('.tab[data-k="' + key + '"]');
+      if (tab && !tab.classList.contains('on')) tab.click();
+    }
+    _ensureVisible(card);
+    /* Scroll after the layout settles (tab switch may have hidden/shown). */
+    setTimeout(function(){
+      var y = card.getBoundingClientRect().top + window.pageYOffset - 40;
+      window.scrollTo({top: y, behavior: 'smooth'});
+      card.style.transition = 'background-color .4s ease';
+      var prev = card.style.backgroundColor;
+      card.style.backgroundColor = '#FBF6E7';
+      setTimeout(function(){ card.style.backgroundColor = prev; }, 1600);
+    }, 30);
   });
 })();
 /* --- Phase 5 #6 - Quick Look TL;DR "N more" button opens the sibling
@@ -3696,7 +3809,13 @@ def product_row(f, review, work, probes, ctx=None):
     # hide the ~560 cataloged-but-untouched cards on page load without losing
     # them - the box unchecks to reveal all 573. Post-audit UX pass #3.
     am_attr = ' data-actively-managed="true"' if _is_actively_managed(f, r) else ""
-    return (f'<div class="prod{folded}" data-s="{_esc(search)}" data-path="{_esc(f["path"])}" '
+    # id="prod-<path>" is the anchor target used by the Home tab's
+    # "Recently touched" links. The path can contain '/' which is valid in
+    # HTML5 fragment IDs but breaks some browsers' scrollIntoView; the
+    # accompanying JS handler in the page script uses querySelector with the
+    # escaped attribute value so both patterns work.
+    return (f'<div class="prod{folded}" id="prod-{_esc(f["path"])}" '
+            f'data-s="{_esc(search)}" data-path="{_esc(f["path"])}" '
             f'{facet_attrs}{am_attr}><div class="pnode">{node}</div>'
             f'<div class="branches">{"".join(branches)}</div></div>')
 
@@ -3866,11 +3985,233 @@ def build_am_panel(fams, review, work, probes, git=None, snapshot=None,
     return ('<div class="products-shell">' + sidebar
             + f'<div class="products-main">{body}</div></div>')
 
-def build_home(fams, review, work, counts, worklog, notebooks, probes, git=None,
-               diff=None, eda_diffs=None):
+# ============================================================================
+# HOME TAB "WHERE THE TEAM IS" SECTION (reframe pass commit #1)
+# ============================================================================
+# Cold-teammate onramp: replaces the funnel + curated-findings-first framing.
+# The two questions this section answers before the reader has to click:
+#   (a) How much of the ~573-product Census catalog has the team actually
+#       reached into (repo evidence, API probes, sampled data)?
+#   (b) Which products are we currently working with, and how recently?
+# The prior scope-decision framing (funnel, work-depth table, curated
+# insights list, WORKLOG headline hero) moves into a collapsed "Reviewer mode
+# data" details block at the bottom of the tab. The composite-role machinery
+# is untouched in the schema and CLI - a future mode toggle can promote it back.
+
+def _evidence_coverage(fams, work, probes, data_cache):
+    """Return three coverage counts + the total, for the top-of-Home stats bars.
+
+    Fields:
+      total    - number of catalog paths (all products, ~573 today).
+      evidence - # of catalog paths whose family_product() maps to a tracked
+                 product with any repo evidence hits. Same signal the
+                 data-evidence="yes" card facet uses.
+      probed   - # of catalog paths present in product_probes.json with ok=True.
+      sampled  - # of catalog paths present in scope_data_cache.json.
+    Untouched (no signal at all) = total - max(evidence, probed, sampled)."""
+    total = len(fams)
+    evidence = 0
+    for f in fams.values():
+        prod = f.get("product")
+        if prod and (work or {}).get(prod, {}).get("status", 0) > 0:
+            evidence += 1
+    probed  = sum(1 for v in (probes or {}).values()
+                  if isinstance(v, dict) and v.get("ok"))
+    sampled = sum(1 for _ in (data_cache or {}))
+    return {"total": total, "evidence": evidence,
+            "probed": probed, "sampled": sampled}
+
+def _coverage_tone(pct):
+    """Color the coverage bars by team-reach percentage: green >20%, amber
+    5-20%, red <5%. The point is calibration, not alarm - a low percent on a
+    fresh clone is expected; the color just says 'don't misread this as high'."""
+    if pct >= 20.0: return "green"
+    if pct >= 5.0:  return "amber"
+    return "red"
+
+def _iso_to_dt(ts):
+    """Parse an ISO-8601 timestamp (optionally 'Z'-terminated) to a UTC-aware
+    datetime. Returns None on any parse failure - callers treat that as 'no
+    timestamp' and skip the relative-time bit rather than crashing."""
+    if not ts: return None
+    try:
+        if isinstance(ts, str) and ts.endswith("Z"):
+            ts = ts[:-1] + "+00:00"
+        d = datetime.datetime.fromisoformat(ts) if isinstance(ts, str) else None
+        if d and d.tzinfo is None:
+            d = d.replace(tzinfo=datetime.timezone.utc)
+        return d
+    except Exception:
+        return None
+
+def _rel_time_str(when, now=None):
+    """Compact 'Xs / Xm / Xh / Xd / Xmo ago' from a datetime. Empty on None."""
+    if not when: return ""
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    age = (now - when).total_seconds()
+    if age < 0: age = 0
+    if age < 90:         return f"{max(1, int(age))}s ago"
+    if age < 3600:       return f"{int(round(age/60))}m ago"
+    if age < 86400:      return f"{int(round(age/3600))}h ago"
+    if age < 30 * 86400: return f"{int(round(age/86400))}d ago"
+    return f"{int(round(age/(30*86400)))}mo ago"
+
+def _recency_signals(fams, review, work, probes, data_cache, repo):
+    """One dict per catalog path with any team-reach signal.
+
+    Signal priority (highest tier first):
+      Tier 2 (sampled) - scope_data_cache.json entry's `sampled_at` timestamp
+        plus the sample's rows x cols shape.
+      Tier 1 (probed)  - product_probes.json entry's `probed` YYYY-MM-DD date
+        plus a compact metadata summary (MOE var count, allocation groups).
+      Tier 0+ (repo)   - via family_product() -> work[product]. Uses the
+        newest mtime across evidence files (walked via receipts' repo-relative
+        paths + repo/<path>.stat().st_mtime). WORKLOG mentions are not folded
+        in here because WORKLOG doesn't record catalog paths - guessing the
+        product<->entry link is exactly the kind of inference this tool
+        deliberately avoids.
+    Untouched paths (no signal at all) are excluded.
+
+    Return list sorted by (highest tier first, most-recent-within-tier first,
+    then path). Downstream callers slice the first N for the visible list.
+    """
+    out = []
+    now = datetime.datetime.now(datetime.timezone.utc)
+    probes = probes or {}
+    data_cache = data_cache or {}
+    for path, f in fams.items():
+        # Tier 2: sample cache is the strongest team-engagement signal.
+        ce = data_cache.get(path)
+        if isinstance(ce, dict):
+            when = _iso_to_dt(ce.get("sampled_at"))
+            shape = ce.get("shape") or [0, 0]
+            rows = int(shape[0]) if shape else 0
+            cols = int(shape[1]) if shape else 0
+            rel = _rel_time_str(when, now) if when else ""
+            what = (f"sampled {rel}, {rows:,} rows &times; {cols:,} cols"
+                    if rel else f"sampled: {rows:,} rows &times; {cols:,} cols")
+            out.append({"path": path, "tier": 2, "when": when, "what": what})
+            continue
+        # Tier 1: probed metadata.
+        pe = probes.get(path)
+        if isinstance(pe, dict) and pe.get("ok"):
+            # `probed` is a YYYY-MM-DD date string; parse as midnight-UTC so
+            # ordering still works alongside the ISO-8601-full timestamps.
+            when = _iso_to_dt(str(pe.get("probed") or "") + "T00:00:00Z")
+            rel = _rel_time_str(when, now) if when else ""
+            bits = []
+            if pe.get("moe_variables") is not None:
+                bits.append(f"{int(pe['moe_variables']):,} MOE vars")
+            if pe.get("allocation_group_count") is not None:
+                ag = int(pe['allocation_group_count'])
+                if ag: bits.append(f"{ag} alloc group{'s' if ag != 1 else ''}")
+            detail = ", ".join(bits) if bits else "metadata cached"
+            what = f"probed {rel}, {detail}" if rel else f"probed: {detail}"
+            out.append({"path": path, "tier": 1, "when": when, "what": what})
+            continue
+        # Tier 0+: repo evidence via the family_product map.
+        prod = f.get("product")
+        w = (work or {}).get(prod, {}) if prod else {}
+        if w.get("status", 0) > 0:
+            newest = None
+            files = []
+            for rc in (w.get("receipts") or []):
+                rel_path = rc.get("path") or ""
+                if not rel_path: continue
+                abs_p = repo / rel_path if repo else None
+                if abs_p and abs_p.exists():
+                    try:
+                        mt = abs_p.stat().st_mtime
+                        d = datetime.datetime.fromtimestamp(
+                            mt, tz=datetime.timezone.utc)
+                        if newest is None or d > newest: newest = d
+                    except OSError:
+                        pass
+                fname = rc.get("file") or ""
+                if fname and fname not in files: files.append(fname)
+            rel = _rel_time_str(newest, now) if newest else ""
+            hit_count = int(w.get("hit_count", 0))
+            preview = ", ".join(files[:3])
+            more = f" (+{len(files) - 3} more)" if len(files) > 3 else ""
+            what = (f"{hit_count} repo evidence hit"
+                    f"{'s' if hit_count != 1 else ''}"
+                    + (f" in {_esc(preview)}{more}" if preview else ""))
+            if rel: what += f", last touched {rel}"
+            out.append({"path": path, "tier": 0, "when": newest, "what": what})
+    out.sort(key=lambda r: (-r["tier"],
+                             -(r["when"].timestamp() if r["when"] else 0),
+                             r["path"]))
+    return out
+
+def build_where_team_is(fams, review, work, probes, data_cache, git, repo):
+    """Home-tab top: coverage bars + 'Recently touched' list. Renders in place
+    of the previous funnel + curated-findings hero. See the reframe spec #1.
+    """
+    cov = _evidence_coverage(fams, work, probes, data_cache)
+    total = cov["total"] or 1  # avoid div-by-zero if catalog is empty
+    def _bar(label, n):
+        pct = 100.0 * n / total
+        tone = _coverage_tone(pct)
+        # Minimum sliver width so 0-count bars aren't invisible.
+        w = max(1.5, min(100.0, pct))
+        return ('<div class="wti-cov-row">'
+                f'<div class="wti-cov-label">{_esc(label)}</div>'
+                f'<div class="wti-cov-bar" title="{n} of {cov["total"]}">'
+                f'<div class="wti-cov-bar-fill {tone}" '
+                f'style="width:{w:.2f}%"></div></div>'
+                f'<div class="wti-cov-cnt">{n:,} / {cov["total"]:,} '
+                f'&middot; {pct:.1f}%</div></div>')
+
+    parts = ['<div class="wti-section">',
+             '<h2>Where the team is</h2>',
+             '<div class="sub">How far the team has reached into the Census '
+             f'catalog of {cov["total"]:,} product families, and which '
+             'products we are actually working with today.</div>',
+             '<div class="wti-cov-list">',
+             _bar("Has repo evidence", cov["evidence"]),
+             _bar("Probed (API metadata)", cov["probed"]),
+             _bar("Sampled (actual data)", cov["sampled"]),
+             '</div>']
+
+    signals = _recency_signals(fams, review, work, probes, data_cache, repo)
+    parts.append('<div class="wti-recent">')
+    parts.append('<h3>Recently touched</h3>')
+    if not signals:
+        parts.append('<div class="wti-empty">No products touched yet. '
+                     'Every product still reads as catalog-only. Try '
+                     '<code>python tools/product_scope.py --probe acs/acs5</code> '
+                     'to reach into the first one.</div>')
+    else:
+        parts.append('<ul class="wti-recent-list">')
+        tier_lbl = {2: "sample", 1: "probe", 0: "repo"}
+        for s in signals[:10]:
+            when_str = _rel_time_str(s["when"]) if s.get("when") else ""
+            when_html = (f'<div class="wti-when">{_esc(when_str)}</div>'
+                         if when_str else "")
+            # data-jump-path hooks the client-side "jump into Products tab"
+            # handler wired below the panel HTML - anchor works even without
+            # JS thanks to the id="prod-<path>" on the .prod card.
+            parts.append(
+                f'<li><span class="wti-tier-chip t{s["tier"]}">'
+                f'{tier_lbl[s["tier"]]}</span>'
+                f'<a class="wti-path" href="#prod-{_esc(s["path"])}" '
+                f'data-jump-path="{_esc(s["path"])}">'
+                f'{_esc(s["path"])}</a>'
+                f'<div class="wti-what">{s["what"]}</div>'
+                f'{when_html}</li>')
+        parts.append('</ul>')
+    parts.append('</div></div>')
+    return "".join(parts)
+
+def _build_reviewer_mode_details(fams, review, work, counts, worklog,
+                                  notebooks, git=None):
+    """Reviewer-mode data block, collapsed behind a <details> toggle at the
+    bottom of Home. Holds the pre-reframe funnel + inventory + work-depth
+    table + notebook health so the composite/scope-decision machinery is not
+    destroyed - just quietly demoted. Curated findings and WORKLOG headline
+    do NOT live here after commit #2 (they promote into 'What we've learned');
+    for this commit they stay put so the tool renders cleanly at every step."""
     h = []
-    if diff is not None:
-        h.append(build_diff_banner(diff, eda_diffs))
     h.append('<div class="funnel">'
              f'<div class="fstep"><b>{counts["cataloged"]}</b><span>cataloged<br>(the wide start)</span></div><div class="farrow">&rarr;</div>'
              f'<div class="fstep"><b>{counts["reviewed"]}</b><span>reviewed<br>(uncertainty documented)</span></div><div class="farrow">&rarr;</div>'
@@ -3932,10 +4273,6 @@ def build_home(fams, review, work, counts, worklog, notebooks, probes, git=None,
                      f'<em>{_esc(x["family"])} &bull; nb {x["nb"]}</em></div>'
                      f'<div class="tkd">{_esc(x["detail"])}</div></div>')
 
-    # Latest WORKLOG headline only (audit cut 3). Prior behaviour rendered the
-    # full log inline - useful once, then a megabyte of duplicated content in
-    # every report, including ghost quotes of dropped code (--serve, etc.).
-    # Reader clicks the link for the full log.
     total = sum(len(e["items"]) for e in worklog)
     h.append(f'<h2>From the work log ({total} findings, {len(worklog)} entries)</h2>'
              '<div class="sub">Latest entry only. Follow the link for the full log.</div>')
@@ -3955,6 +4292,33 @@ def build_home(fams, review, work, counts, worklog, notebooks, probes, git=None,
                  f'class="receipt-link">open WORKLOG.md</a></span></div></div>')
     else:
         h.append('<div class="nowork">No parseable entries in WORKLOG.md.</div>')
+    return "".join(h)
+
+def build_home(fams, review, work, counts, worklog, notebooks, probes, git=None,
+               diff=None, eda_diffs=None, data_cache=None, repo=None):
+    """Home tab. Reframe pass commit #1: leads with 'Where the team is' -
+    coverage bars + Recently touched list. The prior funnel + inventory +
+    work-depth + notebook health + WORKLOG headline block collapses behind a
+    <details> at the bottom labelled 'Reviewer mode data'. The diff banner
+    (contextual 'since last regeneration' surface) stays at the very top
+    because it's about the pending session, not the reframe. `data_cache`
+    and `repo` are new parameters used by the reach signals; both default
+    to None so any external caller keeps working."""
+    h = []
+    if diff is not None:
+        h.append(build_diff_banner(diff, eda_diffs))
+    # Primary framing: where we are + recently touched.
+    h.append(build_where_team_is(fams, review, work, probes, data_cache or {},
+                                  git, repo))
+    # Everything else demoted behind a details toggle.
+    rev_body = _build_reviewer_mode_details(fams, review, work, counts,
+                                              worklog, notebooks, git)
+    h.append('<details class="rev-mode-details">'
+             '<summary>Reviewer mode data '
+             '<span style="font-weight:400;text-transform:none;letter-spacing:0">'
+             '(funnel, inventory, work depth, notebook health, findings, WORKLOG)'
+             '</span></summary>'
+             '<div class="rev-mode-body">' + rev_body + '</div></details>')
     return "".join(h)
 
 # ============================================================================
@@ -4071,8 +4435,17 @@ def render(fams, review, work, worklog, notebooks, probes, repo_name, catnote, o
 
     kinds_present = [k for k in KINDS if any(f["kind"] == k for f in fams.values())]
     tabs = ['<button class="tab on" data-k="home">Home</button>']
+    # Repo path is threaded down so the "Recently touched" list can stat the
+    # evidence files on disk to compute a last-touched timestamp per product.
+    # Falls back gracefully to no timestamps if repo is unresolvable.
+    _repo_for_home = None
+    try:
+        _repo_for_home = Path(git.get("repo_abs")) if git and git.get("repo_abs") else None
+    except Exception:
+        _repo_for_home = None
     panels = ['<div class="panel on" id="panel-home">'
-              + build_home(fams, review, work, counts, worklog, notebooks, probes, git, diff, eda_diffs) + '</div>']
+              + build_home(fams, review, work, counts, worklog, notebooks, probes, git, diff, eda_diffs,
+                           data_cache=data_cache, repo=_repo_for_home) + '</div>']
 
     # Phase A #2 - "Actively managed" tab + panel replaces the 4 kind tabs in
     # the default view (see the body:not(.am-showall) CSS above). Only emitted
