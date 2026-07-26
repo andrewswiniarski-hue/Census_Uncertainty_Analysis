@@ -1834,6 +1834,14 @@ header p{color:#CADCFC;font-size:13px;max-width:940px;}
 .filter{margin:0 0 14px;}
 .filter input{width:340px;padding:7px 11px;border:1px solid var(--line);border-radius:7px;font:inherit;font-size:13px;}
 .filter span{font-size:11.5px;color:var(--muted);margin-left:10px;}
+/* Phase A ceiling-push #2: keyboard-hint chip injected at load time under
+   every products-panel filter input. Wraps if the filter row gets narrow. */
+.filter-kbd-hint{display:inline-block;font-size:10.5px;color:var(--muted);
+     margin-left:12px;letter-spacing:.01em;}
+.filter-kbd-hint kbd{display:inline-block;padding:0 5px;font-family:ui-monospace,Consolas,monospace;
+     font-size:10px;background:var(--ice);color:var(--navy);border:1px solid var(--line);
+     border-radius:3px;box-shadow:inset 0 -1px 0 #CADCFC;font-weight:700;line-height:14px;
+     margin:0 1px;}
 /* .funnel / .fstep / .farrow / .f-cand / .f-focus removed Phase A #3
    alongside _build_reviewer_mode_details() — the pre-reframe funnel bar
    was 568 -> 0 -> 0 -> 5 -> 0 (depressing without being informative). */
@@ -1857,6 +1865,13 @@ table.rep td{border-bottom:1px solid var(--ice);padding:7px 9px;vertical-align:t
 .phead em{font-style:normal;color:var(--muted);font-size:11px;margin-left:7px;font-weight:400;}
 .ghead em{font-family:"Segoe UI",sans-serif;font-style:normal;color:var(--muted);font-size:12px;margin-left:8px;}
 .prod{display:table;width:100%;margin:9px 0;}
+/* Phase A ceiling-push #2: subtle focus ring for keyboard j/k nav so the
+   reader knows which card Enter would toggle. :focus-visible so a mouse
+   click doesn't paint the ring; :focus is a fallback for browsers that
+   don't yet support :focus-visible. */
+.prod:focus{outline:none;}
+.prod:focus-visible{outline:2px solid #C9A227;outline-offset:2px;
+     border-radius:5px;}
 .pnode,.branches{display:table-cell;vertical-align:top;}
 .pnode{width:350px;min-width:350px;}
 .pcard{border:1px solid var(--line);border-left:6px solid var(--line);border-radius:8px;padding:9px 12px;cursor:pointer;background:#fff;}
@@ -2822,6 +2837,229 @@ document.querySelectorAll('.filter input').forEach(function(inp){
         body.scrollIntoView({behavior: 'smooth', block: 'start'});
       }
     }
+  });
+})();
+/* --- Phase A ceiling-push #2: triage-nav keyboard shortcuts + URL hash filter state ---
+   Three progressive-enhancement additions to the Products tabs. All degrade
+   gracefully if JS is disabled: native anchor scroll, native <details>
+   toggle, and localStorage-only filter state still work.
+
+     1. "/" focuses the sidebar text-filter input on the active panel.
+        Never fires when the user is already typing in an input; typing "/"
+        in the filter box types the literal slash character as expected.
+
+     2. "j" / "k" cycles focus through visible .prod cards on the active
+        panel with wrap-around at the ends. Enter on a focused card opens
+        that card's Quick Look drill-down. Tab still works normally for
+        general keyboard navigation.
+
+     3. Every facet click, text-filter change, or reviewer-mode toggle
+        serializes state to location.hash (URLSearchParams format:
+        #tab=k0&q=income&f_kind=Aggregate%20tables&am=1). On page load, if
+        the hash is non-empty it's parsed FIRST and its keys override
+        localStorage defaults for those keys. Absent keys leave localStorage
+        alone, so a bookmark that only pins the text query doesn't wipe
+        the reader's AM-toggle preference. */
+(function(){
+  function _isTypingTarget(el){
+    if (!el) return false;
+    if (el.isContentEditable) return true;
+    var tag = (el.tagName || '').toUpperCase();
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+  }
+  function _activePanel(){
+    return document.querySelector('.panel.on');
+  }
+  function _visibleCards(panel){
+    if (!panel) return [];
+    return Array.prototype.filter.call(
+      panel.querySelectorAll('.prod'),
+      function(p){ return p.offsetParent !== null &&
+                          getComputedStyle(p).display !== 'none'; });
+  }
+  /* --- "/" shortcut: focus the sidebar text-filter input --- */
+  document.addEventListener('keydown', function(e){
+    if (e.key !== '/') return;
+    if (e.ctrlKey || e.altKey || e.metaKey) return;
+    if (_isTypingTarget(e.target)) return;
+    var panel = _activePanel();
+    if (!panel) return;
+    var inp = panel.querySelector('.filter input');
+    if (!inp) return;
+    e.preventDefault();
+    inp.focus({preventScroll: false});
+    inp.select();
+  });
+  /* --- "j" / "k" card nav + "Enter" to toggle Quick Look drill-down --- */
+  document.addEventListener('keydown', function(e){
+    if (e.ctrlKey || e.altKey || e.metaKey) return;
+    if (_isTypingTarget(e.target)) return;
+    var panel = _activePanel();
+    if (!panel) return;
+    if (e.key === 'j' || e.key === 'k'){
+      var cards = _visibleCards(panel);
+      if (!cards.length) return;
+      var current = document.activeElement && document.activeElement.closest
+                    ? document.activeElement.closest('.prod')
+                    : null;
+      var idx = current ? cards.indexOf(current) : -1;
+      var next;
+      if (e.key === 'j'){
+        next = idx < 0 ? cards[0] : cards[(idx + 1) % cards.length];
+      } else {
+        next = idx < 0 ? cards[cards.length - 1]
+                       : cards[(idx - 1 + cards.length) % cards.length];
+      }
+      if (!next) return;
+      e.preventDefault();
+      next.focus({preventScroll: false});
+      /* scrollIntoView so the reader doesn't lose the card off-viewport. */
+      if (next.scrollIntoView){
+        next.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+      }
+    } else if (e.key === 'Enter'){
+      var focused = document.activeElement && document.activeElement.closest
+                    ? document.activeElement.closest('.prod')
+                    : null;
+      if (!focused) return;
+      var details = focused.querySelector('details[data-product-id]');
+      if (!details) return;
+      e.preventDefault();
+      details.open = !details.open;
+    }
+  });
+  /* --- URL hash filter state (per-panel: active tab, text query, facets, AM) ---
+     Encoding: URLSearchParams with keys 'tab' (data-k of active tab),
+     'q' (text filter), 'f_<facet-key>' (comma-separated values), 'am' ('1'
+     when reviewer mode is on). Decoded on load; unspecified keys fall back
+     to their localStorage / default values. */
+  var _restoringHash = false;    /* suppress write while restore is running */
+  function _serializeState(){
+    var params = new URLSearchParams();
+    var activeTab = document.querySelector('.tab.on');
+    if (activeTab && activeTab.dataset.k) params.set('tab', activeTab.dataset.k);
+    var panel = _activePanel();
+    if (panel){
+      var inp = panel.querySelector('.filter input');
+      if (inp && inp.value) params.set('q', inp.value);
+      var facets = {};
+      panel.querySelectorAll('.facet input:checked').forEach(function(cb){
+        var f = cb.dataset.f;
+        (facets[f] = facets[f] || []).push(cb.value);
+      });
+      for (var f in facets) params.set('f_' + f, facets[f].join(','));
+    }
+    if (document.body.classList.contains('am-reviewer')) params.set('am', '1');
+    return params.toString();
+  }
+  function _writeHash(){
+    if (_restoringHash) return;
+    try {
+      var s = _serializeState();
+      var newHash = s ? ('#' + s) : '';
+      if ((location.hash || '') !== newHash){
+        history.replaceState(null, '',
+          location.pathname + location.search + newHash);
+      }
+    } catch(_) { /* history API disabled - no-op */ }
+  }
+  function _restoreFromHash(){
+    var hash = location.hash || '';
+    if (hash.length < 2) return false;
+    _restoringHash = true;
+    try {
+      var params = new URLSearchParams(hash.slice(1));
+      /* AM toggle: hash overrides localStorage. Only touched if 'am' present. */
+      if (params.has('am')){
+        var amOn = params.get('am') === '1';
+        document.body.classList.toggle('am-reviewer', amOn);
+        document.querySelectorAll('.panel').forEach(function(p){
+          if (p.querySelector('.am-cb')) p.classList.toggle('am-reviewer', amOn);
+        });
+        document.querySelectorAll('.am-cb').forEach(function(cb){
+          cb.checked = amOn;
+        });
+      }
+      /* Tab: switch to the specified panel BEFORE reading filters. */
+      var t = params.get('tab');
+      if (t){
+        var tab = document.querySelector('.tab[data-k="' + CSS.escape(t) + '"]');
+        if (tab && !tab.classList.contains('on')) tab.click();
+      }
+      var panel = _activePanel();
+      if (panel){
+        if (params.has('q')){
+          var inp = panel.querySelector('.filter input');
+          if (inp){ inp.value = params.get('q') || ''; }
+        }
+        /* Facets: clear any pre-checked defaults, then apply hash's picks. */
+        var anyFacetKey = false;
+        params.forEach(function(v, k){ if (k.indexOf('f_') === 0) anyFacetKey = true; });
+        if (anyFacetKey){
+          panel.querySelectorAll('.facet input:checked').forEach(function(cb){
+            cb.checked = false;
+          });
+        }
+        params.forEach(function(val, key){
+          if (key.indexOf('f_') !== 0) return;
+          var f = key.slice(2);
+          (val || '').split(',').forEach(function(v){
+            if (!v) return;
+            var cb = panel.querySelector(
+              '.facet[data-f="' + CSS.escape(f) + '"] input[value="' + CSS.escape(v) + '"]');
+            if (cb) cb.checked = true;
+          });
+        });
+        if (typeof _applyFacets === 'function') _applyFacets(panel);
+      }
+    } catch(_) { /* malformed hash - fall through to defaults */ }
+    _restoringHash = false;
+    return true;
+  }
+  /* Wire state-writes to every input the reader can change. Uses event
+     delegation so cards / facets added later would still fire (though the
+     tool renders everything server-side, so all listeners exist at load). */
+  document.addEventListener('change', function(e){
+    var t = e.target;
+    if (!t) return;
+    if (t.matches && (t.matches('.facet input') || t.matches('.am-cb'))){
+      _writeHash();
+    }
+  });
+  document.addEventListener('input', function(e){
+    var t = e.target;
+    if (t && t.matches && t.matches('.filter input')) _writeHash();
+  });
+  document.addEventListener('click', function(e){
+    var t = e.target;
+    if (t && t.closest && t.closest('.tab')){
+      /* Defer so the tab-click handler above runs first, flipping .panel.on. */
+      setTimeout(_writeHash, 0);
+    }
+    if (t && t.closest && t.closest('.facet-clear')){
+      setTimeout(_writeHash, 0);
+    }
+  });
+  /* Kick off restore on load: hash wins over localStorage for any key it
+     specifies. Runs AFTER the existing AM-reviewer restore block so any
+     'am' key in the hash properly overrides. */
+  _restoreFromHash();
+  /* Also react to manual hash edits (back/forward button, or user typing
+     into the address bar). */
+  window.addEventListener('hashchange', function(){ _restoreFromHash(); });
+})();
+/* --- Phase A ceiling-push #2: sidebar "/" hint injection -------------
+   Added at load time so a JS-disabled reader isn't shown a hint about a
+   shortcut that wouldn't work. Sits directly below the filter input on
+   every products panel. */
+(function(){
+  document.querySelectorAll('.filter').forEach(function(f){
+    if (f.querySelector('.filter-kbd-hint')) return;
+    var hint = document.createElement('span');
+    hint.className = 'filter-kbd-hint';
+    hint.setAttribute('title', 'Press / anywhere on the page to focus this filter');
+    hint.innerHTML = 'Press <kbd>/</kbd> to focus &middot; <kbd>j</kbd>/<kbd>k</kbd> to move between cards &middot; <kbd>Enter</kbd> to open';
+    f.appendChild(hint);
   });
 })();
 </script>
@@ -4127,8 +4365,12 @@ def product_row(f, review, work, probes, ctx=None):
     # HTML5 fragment IDs but breaks some browsers' scrollIntoView; the
     # accompanying JS handler in the page script uses querySelector with the
     # escaped attribute value so both patterns work.
+    # tabindex="0" so the Phase-A j/k keyboard-nav script can focus each
+    # visible card and Enter can toggle its Quick Look drill-down. Focus
+    # outline is subtle (CSS :focus-visible on .prod).
     return (f'<div class="prod{folded}" id="prod-{_esc(f["path"])}" '
             f'data-s="{_esc(search)}" data-path="{_esc(f["path"])}" '
+            f'tabindex="0" '
             f'{facet_attrs}{am_attr}><div class="pnode">{node}</div>'
             f'<div class="branches">{"".join(branches)}</div></div>')
 
