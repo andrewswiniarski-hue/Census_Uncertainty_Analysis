@@ -3032,6 +3032,56 @@ body:not(.am-reviewer) .panel.panel-am{display:none;}
 .ins-empty code{font-family:var(--f-mono);font-size:var(--fs-1);
      background:var(--ice);color:var(--navy);padding:0 4px;border-radius:3px;
      font-style:normal;}
+/* UX pass 2026-07-26 commit #5 - empty states as teaching moments.
+   Every "No X yet" empty state on the page gets replaced with either a
+   click-to-copy scaffold, a keyboard cheatsheet, or both. Nothing that
+   just says "empty." Selectors below dress up the new empty variants. */
+.ins-empty-scaffolds{padding:8px 4px;font-style:normal;color:var(--ink);}
+.ins-empty-lead{font-size:var(--fs-2);color:var(--ink);margin-bottom:8px;
+       line-height:var(--lh-2);font-style:normal;}
+.ins-empty-scaffold-list{list-style:none;padding:0;margin:0 0 10px;
+       display:flex;flex-direction:column;gap:8px;}
+.ins-empty-scaffold{display:flex;flex-direction:column;gap:4px;
+       padding:8px 10px;background:#FBFCFE;border:1px dashed var(--line);
+       border-radius:6px;}
+.ins-empty-scaffold-label{font-size:var(--fs-1);color:var(--gold);
+       font-weight:var(--w-head);letter-spacing:.08em;text-transform:uppercase;}
+.ins-empty-kbd{margin-top:6px;padding-top:8px;border-top:1px dotted var(--line);
+       font-size:var(--fs-1);color:var(--muted);line-height:var(--lh-2);}
+.ins-empty-kbd-lbl{color:var(--navy);font-weight:var(--w-head);
+       letter-spacing:.05em;text-transform:uppercase;font-size:var(--fs-1);}
+.ins-empty-kbd kbd{display:inline-block;padding:0 6px;font-family:var(--f-mono);
+       font-size:var(--fs-1);background:var(--ice);color:var(--navy);
+       border:1px solid var(--line);border-radius:3px;font-weight:var(--w-head);
+       box-shadow:inset 0 -1px 0 var(--line);margin:0 2px;}
+/* Per-card uncertainty_metrics empty state - inline copyable scaffold. */
+.ql-unc-empty{display:inline-flex;flex-wrap:wrap;gap:8px;align-items:center;
+       font-style:normal;color:var(--muted);}
+.ql-unc-empty .copy-cmd{margin-top:2px;}
+/* Home tab "What we've learned" no-team-notes teaching block. */
+.wwl-teach{padding:12px 14px;background:#FBFCFE;border:1px solid var(--line);
+       border-radius:8px;font-style:normal;color:var(--ink);}
+.wwl-teach-lead{font-size:var(--fs-2);margin-bottom:10px;line-height:var(--lh-3);
+       color:var(--ink);}
+.wwl-teach-lead b{color:var(--navy);font-weight:var(--w-emph);}
+.wwl-teach-cheat{display:flex;flex-wrap:wrap;gap:18px;padding:6px 0 10px;
+       border-bottom:1px dotted var(--line);}
+.wwl-teach-kbd{font-size:var(--fs-2);color:var(--muted);line-height:1.6;}
+.wwl-teach-kbd kbd{display:inline-block;padding:0 7px;font-family:var(--f-mono);
+       font-size:var(--fs-1);background:var(--ice);color:var(--navy);
+       border:1px solid var(--line);border-radius:3px;font-weight:var(--w-head);
+       box-shadow:inset 0 -1px 0 var(--line);margin:0 3px;}
+.wwl-teach-then{margin-top:10px;font-size:var(--fs-2);color:var(--muted);
+       line-height:var(--lh-3);}
+/* "No products touched yet" teaching block. */
+.wti-teach{background:#FBFCFE;padding:12px 14px;border:1px solid var(--line);
+       border-radius:8px;font-style:normal;color:var(--ink);}
+.wti-teach-more{margin-top:10px;font-size:var(--fs-1);color:var(--muted);
+       line-height:var(--lh-2);}
+.wti-teach kbd{display:inline-block;padding:0 6px;font-family:var(--f-mono);
+       font-size:var(--fs-1);background:var(--ice);color:var(--navy);
+       border:1px solid var(--line);border-radius:3px;font-weight:var(--w-head);
+       margin:0 2px;}
 .ins-row{display:flex;gap:8px;align-items:flex-start;padding:5px 0;
      border-bottom:1px dotted #E1E7F0;font-size:var(--fs-2);}
 .ins-row:last-child{border-bottom:0;}
@@ -4752,9 +4802,23 @@ def _ql_catalog_detail_html(f, non_api, uncertainty_metrics=""):
         parts.append(f'<div class="ql-d-row"><span class="ql-k">Uncertainty</span> '
                      f'<span>{_esc(unc)}</span></div>')
     else:
-        parts.append('<div class="ql-d-row"><span class="ql-k">Uncertainty</span> '
-                     '<span class="ql-muted">not yet documented - fill '
-                     '<code>uncertainty_metrics</code> in product_review.json.</span></div>')
+        # UX pass 2026-07-26 commit #5 - teaching-moment empty state.
+        # Pre-fills a --review --notes scaffold so a first draft can land in
+        # one paste. product_id comes from f["path"] on the parent scope.
+        path = f.get("path", "")
+        scaffold = (f'python tools/product_scope.py --review {path} '
+                    f'--notes "Reliability of {path}: '
+                    f'(one paragraph on what could go wrong with numbers '
+                    f'from this product)"')
+        parts.append(
+            '<div class="ql-d-row"><span class="ql-k">Uncertainty</span> '
+            '<span class="ql-muted ql-unc-empty">'
+            'No one\'s characterized reliability yet. '
+            '<span class="copy-cmd light">'
+            f'<code>{_esc(scaffold)}</code>'
+            f'<button data-copy="{_esc(scaffold)}">Copy scaffold</button>'
+            '</span>'
+            '</span></div>')
     # Phase-1 findings report cross-link (2026-07-26). Turns the tool into a
     # wayfinder into the report - not a replacement for it. Only rendered when
     # this product's path appears in PHASE1_REPORT_SECTIONS (i.e. the report
@@ -4989,9 +5053,49 @@ def _ql_insights_drill_html(insights, product_id):
     rows_html = curated_rows + "".join(
         _insight_row_html(i, kind="drill") for i in (human + auto))
     if not rows_html:
-        insights_html = ('<div class="ins-empty">No notes yet on this product. '
-                         'Click <b>+ Add a note</b> below to record one from '
-                         'your browser (no terminal needed).</div>')
+        # UX pass 2026-07-26 commit #5 - empty states become teaching moments.
+        # Replaces "No notes yet on this product." with three Notion-style
+        # click-to-copy scaffolds. Each is a --review CLI invocation pre-
+        # filled with a starter question so the reader learns the shape of
+        # an insight while writing one.
+        scaffolds = [
+            ("What did the team learn?",
+             f"What did the team learn about {product_id}? "
+             f"(one sentence)"),
+            ("What's the reliability caveat?",
+             f"Reliability caveat for {product_id}: "
+             f"(what should a data user know before trusting a number here?)"),
+            ("Where is this used at Census?",
+             f"Where {product_id} is used inside Census, and by whom: "
+             f"(link a Bureau page if you have one)"),
+        ]
+        scaffold_rows = []
+        for label, prompt in scaffolds:
+            cmd = (f'python tools/product_scope.py --review {product_id} '
+                   f'--insight "{prompt}"')
+            scaffold_rows.append(
+                f'<li class="ins-empty-scaffold">'
+                f'<span class="ins-empty-scaffold-label">{_esc(label)}</span>'
+                f'<span class="copy-cmd light">'
+                f'<code>{_esc(cmd)}</code>'
+                f'<button data-copy="{_esc(cmd)}">Copy</button></span>'
+                f'</li>')
+        insights_html = (
+            '<div class="ins-empty ins-empty-scaffolds">'
+            '<div class="ins-empty-lead">'
+            'No notes yet. Pick a prompt to start &mdash; each one copies a '
+            'ready-to-run CLI command:'
+            '</div>'
+            '<ul class="ins-empty-scaffold-list">'
+            + "".join(scaffold_rows) +
+            '</ul>'
+            '<div class="ins-empty-kbd">'
+            '<span class="ins-empty-kbd-lbl">Keyboard:</span> '
+            'press <kbd>E</kbd> to toggle this drill-down &middot; '
+            '<kbd>j</kbd>/<kbd>k</kbd> next / previous card &middot; '
+            '<kbd>/</kbd> focus filter'
+            '</div>'
+            '</div>')
     else:
         insights_html = ('<ul class="scope-insights-feed" style="max-height:none">'
                          + rows_html + '</ul>')
@@ -5950,10 +6054,20 @@ def build_where_team_is(fams, review, work, probes, data_cache, git, repo):
     parts.append('<div class="wti-recent">')
     parts.append('<h3>Recently touched</h3>')
     if not signals:
-        parts.append('<div class="wti-empty">No products touched yet. '
-                     'Every product still reads as catalog-only. Try '
-                     '<code>python tools/product_scope.py --probe acs/acs5</code> '
-                     'to reach into the first one.</div>')
+        # UX pass 2026-07-26 commit #5 - teaching-moment empty state. Pre-
+        # fills the first suggested command so a beginner never has to type.
+        first_cmd = 'python tools/product_scope.py --probe acs/acs5'
+        parts.append(
+            '<div class="wti-empty wti-teach">'
+            'No products touched yet. Fetch metadata for the first one:'
+            '<div style="margin-top:8px"><span class="copy-cmd light">'
+            f'<code>{_esc(first_cmd)}</code>'
+            f'<button data-copy="{_esc(first_cmd)}">Copy</button>'
+            '</span></div>'
+            '<div class="wti-teach-more">Or press <kbd>/</kbd> to focus the '
+            'filter on any Products tab, then <kbd>j</kbd>/<kbd>k</kbd> to '
+            'walk the catalog card by card.</div>'
+            '</div>')
     else:
         parts.append('<ul class="wti-recent-list">')
         # Beginner-UX pass commit #3: chip labels renamed from jargon
@@ -6113,10 +6227,31 @@ def build_what_learned(fams, review, worklog, git):
              'auto-generated signals when sample data drifts or a composite '
              'role gets declared.</div>']
     if n_human == 0:
-        parts.append('<div class="wwl-empty-team">No team notes yet on '
-                     'individual products. Add one with '
-                     '<code>python tools/product_scope.py --review acs/acs5 '
-                     '--insight "your observation"</code>.</div>')
+        # UX pass 2026-07-26 commit #5 - teaching-moment empty state.
+        # No team notes yet -> show the Linear-style keyboard cheatsheet so
+        # the empty space is doing something (teaching the reader that this
+        # tool is keyboard-navigable) rather than just marking silence.
+        parts.append(
+            '<div class="wwl-empty-team wwl-teach">'
+            '<div class="wwl-teach-lead">'
+            '<b>No team notes yet on individual products.</b> '
+            'While you wait, learn the keyboard shortcuts:'
+            '</div>'
+            '<div class="wwl-teach-cheat">'
+            '<span class="wwl-teach-kbd"><kbd>/</kbd> focus filter</span>'
+            '<span class="wwl-teach-kbd"><kbd>j</kbd> / <kbd>k</kbd> next / prev card</span>'
+            '<span class="wwl-teach-kbd"><kbd>Enter</kbd> open card</span>'
+            '<span class="wwl-teach-kbd"><kbd>E</kbd> toggle drill-down</span>'
+            '</div>'
+            '<div class="wwl-teach-then">'
+            'Then add your first note with '
+            '<span class="copy-cmd light">'
+            '<code>python tools/product_scope.py --review acs/acs5 '
+            '--insight "your observation"</code>'
+            '<button data-copy=\'python tools/product_scope.py --review acs/acs5 '
+            '--insight "your observation"\'>Copy</button></span>.'
+            '</div>'
+            '</div>')
 
     def _row(e):
         # Meta line composition: product link, when (relative), who, extra.
