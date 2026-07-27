@@ -246,9 +246,10 @@ def program_dcgov_url(path):
     return f"{DCGOV_BASE}/all?q={q}"
 
 # ---- Phase-1 findings report anchors (2026-07-26) ---------------------------
-# Repo-relative path to the plain-language Phase 1 findings report. Used both
-# by the Home-tab hero card CTA and by the per-card "Related in the Phase 1
-# report" footer link. The path resolves against wherever product_report.html
+# Repo-relative path to the plain-language Phase 1 findings report. Used by
+# the Team Pulse tail link on Home and by the per-card "Related in the
+# Phase 1 report" footer link. (The Home hero card that also used it was
+# retired 2026-07-26 - findings now lead as stat cards in Team Pulse.) The path resolves against wherever product_report.html
 # sits (repo root), so any teammate opening the report locally lands in the
 # same file, and on GitHub the same href resolves to the rendered .md.
 PHASE1_REPORT_PATH = "docs/phase1-findings-report.md"
@@ -466,8 +467,9 @@ DOMAIN_PATTERNS = {
 # either the phase-1 findings report or the seeded FOCUS product_review
 # entry - no fabrication. See the SOURCE citation on each line.
 #
-# Placement: renders below the phase-1 hero card on Home ("if you want to
-# read first, do that; if you want to explore in the tool, walk this list").
+# Placement: right column of the Get-oriented grid on Home, beside the
+# "Find a product" search ("have a question? search; no idea where to
+# start? walk this list").
 # Order chosen so each concept builds on the previous one - sampling noise
 # is the intuitive starting point, then privacy noise (a totally different
 # mechanism), then a demo dataset that lets you SEE the privacy noise, then
@@ -2279,7 +2281,7 @@ TEMPLATE = r"""<!doctype html><html><head><meta charset="utf-8">
 /* Base body: 16px/24 Radix step 3 sans, per the type system rip-replace. */
 body{font-family:var(--f-sans);font-size:var(--fs-3);line-height:var(--lh-3);font-weight:var(--w-body);color:var(--ink);background:#fff;padding:0 0 60px;font-feature-settings:"ss01","cv11";}
 /* Every headline gets weight 600 + tight tracking. 24px+ -> -.02em, 36px+ -> -.03em. */
-h1,h2,h3,.starthere .sh-title,.home-hero-p1 .hero-title,.wti-recent h3,.lscape-fallback-head{font-family:var(--f-display);font-weight:var(--w-head);letter-spacing:var(--lsp-tight);}
+h1,h2,h3,.starthere .sh-title,.wti-recent h3,.lscape-fallback-head{font-family:var(--f-display);font-weight:var(--w-head);letter-spacing:var(--lsp-tight);}
 h1{letter-spacing:var(--lsp-tighter);}
 header{background:var(--deep);color:#fff;padding:26px 44px 0;}
 .kicker{color:var(--gold);font-weight:var(--w-head);font-size:var(--fs-2);letter-spacing:.22em;text-transform:uppercase;}
@@ -2320,40 +2322,13 @@ header p{color:#CADCFC;font-size:var(--fs-2);max-width:940px;}
      border:0;color:var(--muted);font-size:var(--fs-3);line-height:1;cursor:pointer;
      padding:4px 6px;border-radius:4px;font-family:inherit;}
 .starthere .sh-dismiss:hover{background:var(--ice);color:var(--navy);}
-/* Phase-1 findings report hero card (2026-07-26). Sits at the top of the Home
-   panel, above "Where the team is". Distinct from other cards: warmer gold
-   accent, larger type, book emoji anchor. The single most important call to
-   action for a first-time reader - the report is the plain-English tour that
-   makes the rest of the tool make sense. */
-.home-hero-p1{background:linear-gradient(135deg,#FFF6DC 0%,#FBF0C2 100%);
-     border:1.5px solid var(--gold);border-radius:10px;
-     padding:18px 22px 20px;margin:0 0 26px;max-width:1020px;
-     box-shadow:0 2px 6px rgba(201,162,39,0.14);position:relative;}
-.home-hero-p1 .hero-eyebrow{color:#7A5C0F;font-weight:var(--w-head);font-size:var(--fs-1);
-     letter-spacing:.16em;text-transform:uppercase;margin-bottom:6px;}
-.home-hero-p1 .hero-title{font-family:var(--f-display);color:var(--navy);
-     font-size:var(--fs-5);font-weight:var(--w-head);line-height:1.28;margin:0 0 8px;}
-.home-hero-p1 .hero-title .hero-emoji{font-size:var(--fs-6);margin-right:9px;
-     vertical-align:-1px;}
-.home-hero-p1 .hero-body{color:#3A2E0B;font-size:var(--fs-2);line-height:1.55;
-     margin:0 0 14px;max-width:820px;}
-.home-hero-p1 .hero-cta{display:inline-block;background:var(--navy);color:#fff;
-     text-decoration:none;font-weight:var(--w-head);font-size:var(--fs-2);letter-spacing:.02em;
-     padding:9px 16px;border-radius:6px;
-     box-shadow:0 1px 2px rgba(31,42,92,0.20);transition:background .12s ease-out;}
-.home-hero-p1 .hero-cta:hover{background:#0F1740;}
-.home-hero-p1 .hero-cta:focus-visible{outline:2px solid var(--gold);
-     outline-offset:3px;}
-.home-hero-p1 .hero-cta .arrow{margin-left:6px;}
-.home-hero-p1 .hero-meta{display:inline-block;margin-left:14px;color:#6B5518;
-     font-size:var(--fs-2);font-style:italic;vertical-align:middle;}
-/* Home-tab "Find a product" search (2026-07-26). Sits directly under the
-   Phase-1 hero card, above the 5-item curriculum: after the "read the report
-   first" invitation, the next thing a reader sees is "or find something
-   specific." Curriculum is the "no idea where to start" path; search is the
+/* Home-tab "Find a product" search (2026-07-26). Leads the Get-oriented
+   chapter (the Phase-1 hero card that used to sit above it was retired
+   2026-07-26 per Garrett's live test - the findings now live in the Team
+   Pulse stat cards, with a small report link in the wwl tail).
+   Curriculum is the "no idea where to start" path; search is the
    "I have a question" path. Both are first-order discovery moves.
-   Neutral / no gold accent so the hero above stays the loudest thing on the
-   page; navy header + ice input surfaces match the rest of the report chrome. */
+   Neutral palette; navy header + ice input surfaces match the report chrome. */
 .home-search{background:#F7F9FC;border:1px solid var(--line);border-radius:9px;
      padding:16px 20px 18px;margin:0 0 26px;max-width:1020px;}
 .home-search h2{font-family:var(--f-display);font-size:var(--fs-5);color:var(--navy);
@@ -2450,8 +2425,8 @@ header p{color:#CADCFC;font-size:var(--fs-2);max-width:940px;}
 .ql-dcgov-tag b{color:var(--navy);font-weight:var(--w-emph);}
 /* Phase-1 report footer link on card drill-downs (2026-07-26). Small tinted
    row anchoring the drill-down back to the report section that covers this
-   product. Same gold-family palette as the hero card so the two read as one
-   system. */
+   product. Gold-family palette matches the report's identity elsewhere in
+   the tool (e.g. the Team Pulse report link). */
 .ql-d-p1link{background:#FBF6E4;border:1px solid #E8D9A5;border-radius:5px;
      padding:8px 11px;margin:8px 0 2px;font-size:var(--fs-2);color:#4E3E11;
      line-height:1.45;}
@@ -2697,7 +2672,6 @@ details.disc[open] > summary .disc-preview{display:none;}
      letter-spacing:0.06em;text-transform:none;font-weight:var(--w-body);}
 /* Within-chapter section spacing (overrides each section's default
    bottom-margin so the chapter body reads as one tight block). */
-.home-chapter > .home-hero-p1,
 .home-chapter > .home-search,
 .home-chapter > .curriculum-section,
 .home-chapter > .onboard-grid,
@@ -2706,10 +2680,11 @@ details.disc[open] > summary .disc-preview{display:none;}
 .home-chapter > .cpress-section,
 .home-chapter > .wwl-section{margin-bottom:16px;}
 .home-chapter > *:last-child{margin-bottom:0;}
-/* Get-oriented two-column onboarding grid (condense pass 2026-07-26).
-   Left column: Phase-1 hero + "Find a product" search stacked. Right column:
-   the 5-product curriculum. One "get started" moment instead of three
-   stacked full-width bands; collapses to a single column under 960px. */
+/* Get-oriented two-column onboarding grid (condense pass 2026-07-26;
+   Phase-1 hero card retired 2026-07-26 - findings live in the Team Pulse
+   stat cards now). Left column: "Find a product" search. Right column:
+   the 5-product curriculum. One "get started" moment instead of stacked
+   full-width bands; collapses to a single column under 960px. */
 .onboard-grid{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);
      gap:18px;align-items:start;max-width:1020px;}
 .onboard-col{min-width:0;display:flex;flex-direction:column;gap:16px;}
@@ -2976,7 +2951,7 @@ details.disc[open] > summary .disc-preview{display:none;}
 /* Start-here curriculum (UX pass 2026-07-26 commit #4).
    Five-item ordered list that walks a first-time reader through the four
    uncertainty mechanisms via the products that illustrate them best. Sits
-   directly below the phase-1 hero card on Home. Type steps 7 & 8 anchor the
+   in the right column of the Get-oriented grid. Type steps 7 & 8 anchor the
    numbers so the eye lands on 1..5 first; each item is scannable in <5s. */
 .curriculum-section{margin:0 0 30px;max-width:1020px;}
 .curriculum-intro{font-size:var(--fs-3);color:var(--ink);line-height:var(--lh-3);
@@ -4719,11 +4694,11 @@ document.querySelectorAll('.filter input').forEach(function(inp){
      body:  "This small banner is the shortest way in - three bullets that "
           + "tell you what to do next. Dismiss it when you know your way "
           + "around."},
-    {sel: '.home-hero-p1',
-     title: "The findings report",
-     body:  "Every mechanism this tool measures - sampling noise, privacy "
-          + "noise, imputation - is explained in plain English in the Phase 1 "
-          + "findings report. Read it first if you have 10 minutes."},
+    {sel: '.home-search',
+     title: "Find a product",
+     body:  "Already have a question - housing, income, trade? Search the "
+          + "full catalog by keyword, topic, or geography level and jump "
+          + "straight to the matching product card."},
     {sel: '.curriculum-section',
      title: "5-product curriculum",
      body:  "If you'd rather explore in the tool, walk these five products "
@@ -7025,41 +7000,12 @@ def _recency_signals(fams, review, work, probes, data_cache, repo):
                              r["path"]))
     return out
 
-def build_phase1_hero_card():
-    """Home-tab hero card (2026-07-26). Renders as the very first element in
-    the Home panel, above "Where the team is", so it survives dismissal of the
-    Start-here banner (which is outside the panel and gets hidden per-machine
-    once acknowledged). The report it points at is the plain-English tour that
-    frames what everything else in the tool is measuring - sampling noise,
-    imputation, differential privacy, and the composite score we're building.
-    Warm gold accent + book emoji make it visually distinct from the neutral
-    grey/navy cards below."""
-    return (
-        f'<div class="home-hero-p1" role="region" '
-        f'aria-label="New here? Start with the Phase 1 findings report">'
-        f'<div class="hero-eyebrow">New here? Start here.</div>'
-        f'<div class="hero-title">'
-        f'<span class="hero-emoji" aria-hidden="true">&#128214;</span>'
-        f'Read the team&rsquo;s Phase 1 findings report first.'
-        f'</div>'
-        f'<div class="hero-body">'
-        f'A plain-English tour of how Census data reliability actually works &mdash; '
-        f'sampling noise, imputation, differential privacy, the composite score, '
-        f'and what we found while analyzing New Jersey ACS and Decennial data. '
-        f'Everything else in this tool makes more sense after you&rsquo;ve read it.'
-        f'</div>'
-        f'<a class="hero-cta" href="{_esc(PHASE1_REPORT_PATH)}" '
-        f'target="_blank" rel="noopener">'
-        f'Open the Phase 1 findings report'
-        f'<span class="arrow" aria-hidden="true">&rarr;</span>'
-        f'</a>'
-        f'<span class="hero-meta">{_esc(PHASE1_REPORT_MIN_READ)}</span>'
-        f'</div>')
-
 def build_curriculum_card(fams):
     """Start-here 5-product curriculum (UX pass 2026-07-26 commit #4).
 
-    Renders below the phase-1 hero card on Home. Each of the 5 CURRICULUM
+    Renders in the right column of the Get-oriented grid on Home (the Phase-1
+    hero card that used to sit above it was retired 2026-07-26; the report
+    link now lives in the Team Pulse tail). Each of the 5 CURRICULUM
     products becomes a scannable numbered card - large numeral, plain-English
     concept + reasoning, and an 'Open card' CTA that jumps to the matching
     product card on the Products tab. All 5 blurbs are grounded in either the
@@ -7075,11 +7021,10 @@ def build_curriculum_card(fams):
         'aria-label="Start here: five-product curriculum">',
         '<h2>Start here &mdash; 5 products to learn Census data reliability</h2>',
         '<div class="curriculum-intro">'
-        'If you want to <b>read first</b>, open the Phase 1 findings report '
-        'above. If you want to <b>explore in the tool</b>, walk this list top '
-        'to bottom. Each product illustrates one of the four uncertainty '
-        'mechanisms &mdash; sampling noise, differential privacy, imputation, '
-        'and pre-DP baselines.'
+        'Walk this list top to bottom &mdash; each product illustrates one of '
+        'the four uncertainty mechanisms: sampling noise, differential '
+        'privacy, imputation, and pre-DP baselines. The headline numbers the '
+        'team found live in <b>Team pulse</b> at the bottom of this page.'
         '</div>',
         '<div class="curriculum-list">'
     ]
@@ -7887,7 +7832,10 @@ def build_what_learned(fams, review, worklog, git):
         f'<a href="{_esc(wl_url)}" target="_blank" rel="noopener">'
         f'Full team log &rarr;</a> (WORKLOG.md{entries_note}). '
         'Process notes live there; auto-generated drift signals stay on '
-        'the product cards.</div>')
+        'the product cards. Prefer the plain-English write-up behind these '
+        f'numbers? <a href="{_esc(PHASE1_REPORT_PATH)}" target="_blank" '
+        f'rel="noopener">Phase 1 findings report &rarr;</a> '
+        f'({_esc(PHASE1_REPORT_MIN_READ)}).</div>')
     parts.append('</div>')
     return "".join(parts)
 
@@ -8972,10 +8920,9 @@ def _iso_to_ord(when):
 # ============================================================================
 # Goal-directed lookup on the Home tab. Addresses the 4/10 gap from the last
 # head-to-head audit against census.gov (which scored 9/10 on the same
-# dimension). Sits directly below the Phase-1 hero card, above the 5-item
-# curriculum: after the "read the report first" invitation, the next thing a
-# reader sees is "or find something specific." Curriculum is the "no idea
-# where to start" path; search is the "I have a question" path.
+# dimension). Leads the Get-oriented chapter, beside the 5-item curriculum:
+# curriculum is the "no idea where to start" path; search is the "I have a
+# question" path.
 #
 # All logic lives client-side (pure vanilla JS, no dependencies). The Python
 # helper below emits three pieces: (1) a small JSON search index baked into
@@ -9223,9 +9170,9 @@ def build_home_search(fams, review):
       4. Inline <script> that carries the search index + wiring.
 
     Design decisions:
-      - Placement below the Phase-1 hero, above the curriculum: this is the
-        "I have a question" path complementing the "no idea where to start"
-        curriculum. Both are first-order discovery moves.
+      - Placement: left column of the Get-oriented grid, beside the
+        curriculum. This is the "I have a question" path complementing the
+        "no idea where to start" curriculum. Both are first-order moves.
       - No new deps; pure vanilla JS.
       - Text search matches title, description, program, subject, topic tags.
       - Ranking = title-word match (10) > title substring (6) > program
@@ -9632,18 +9579,18 @@ def build_home(fams, review, work, counts, worklog, notebooks, probes, git=None,
                 '</section>')
 
     # ---- Chapter 1: Get oriented -----------------------------------------
-    # Phase-1 findings report hero card (2026-07-26): the plain-English tour
-    # that makes the rest of the tool make sense. Then "Find a product" search
-    # (I have a question) and the 5-item curriculum (no idea where to start).
-    # All three are first-order onboarding paths a first-time reader picks
-    # between on this visit. Hero + search sit in the LEFT column and the
-    # curriculum in the RIGHT column of a two-column grid (collapsing to one
-    # column under ~960px) so "read first" / "find something" / "walk the
-    # list" read as ONE get-started moment instead of three stacked bands.
+    # Two first-order onboarding paths a first-time reader picks between:
+    # "Find a product" search (I have a question) in the LEFT column and the
+    # 5-item curriculum (no idea where to start) in the RIGHT column of a
+    # two-column grid (collapsing to one column under ~960px). The Phase-1
+    # findings hero card that used to lead this chapter was retired
+    # 2026-07-26 (Garrett's live test: the stat cards in Team Pulse carry
+    # the findings more clearly); the report link survives in the Team
+    # Pulse tail and in each product card's "Related in the Phase 1 report"
+    # footer.
     ch1 = [
         '<div class="onboard-grid">'
         '<div class="onboard-col">'
-        + build_phase1_hero_card()
         + build_home_search(fams, review)
         + '</div>'
         '<div class="onboard-col">'
@@ -9652,7 +9599,7 @@ def build_home(fams, review, work, counts, worklog, notebooks, probes, git=None,
         '</div>'
     ]
     h.append(_chapter("get-oriented", "Get oriented",
-                      "report &middot; search &middot; curriculum", ch1))
+                      "search &middot; curriculum", ch1))
 
     # ---- Chapter 2: The landscape ----------------------------------------
     # One pipeline moment (Sankey flow as the visual, tier counts as its
