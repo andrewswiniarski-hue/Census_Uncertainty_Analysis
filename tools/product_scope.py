@@ -3127,6 +3127,54 @@ details.lscape-kind-details[open]{padding-left:0;}
    both compact and expanded states - it frames what the count means. */
 .lscape-scope-note{font-size:var(--fs-1);color:var(--muted);margin:2px 0 10px;
        max-width:900px;line-height:1.55;}
+/* "Beyond the API" coverage element (2026-07-26, Garrett: "is there anyway
+   to raise awareness on what the API is not pulling in the datasets?").
+   Sits directly after the treemap in The Landscape chapter. One proportional
+   bar (API-mapped share filled navy, the file-only remainder hatched) + a
+   details.disc list of the six non-API categories that matter for the
+   capstone + a one-line mentor-question pointer. Honest-units caveat is in
+   the visible copy AND a title tooltip on the bar - 6,000+ counts every
+   release FILE while this tool counts product FAMILIES, so the bar is a
+   rough proportion, not a measured share. */
+.bapi-section{background:#F7F9FC;border:1px solid var(--line);border-radius:9px;
+       padding:16px 20px 14px;margin:0 0 26px;max-width:1020px;}
+.bapi-section h3{font-family:var(--f-display);font-size:var(--fs-4);
+       color:var(--navy);font-weight:var(--w-head);margin:0 0 6px;
+       letter-spacing:var(--lsp-tight);}
+.bapi-sub{font-size:var(--fs-2);color:var(--muted);line-height:1.55;
+       margin:0 0 12px;max-width:860px;}
+.bapi-sub b{color:var(--navy);font-weight:var(--w-emph);}
+.bapi-bar{display:flex;height:34px;border-radius:6px;overflow:hidden;
+       border:1px solid var(--line);margin:0 0 6px;cursor:help;}
+.bapi-seg{display:flex;align-items:center;min-width:0;}
+.bapi-seg-api{background:var(--navy);}
+.bapi-seg-api span{color:#fff;font-family:var(--f-mono);font-size:var(--fs-1);
+       padding:0 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.bapi-seg-rest{background:repeating-linear-gradient(135deg,#E4E9F2 0,#E4E9F2 6px,
+       #F1F4F9 6px,#F1F4F9 12px);}
+.bapi-seg-rest span{color:var(--muted);font-family:var(--f-mono);
+       font-size:var(--fs-1);padding:0 10px;white-space:nowrap;overflow:hidden;
+       text-overflow:ellipsis;}
+.bapi-legend{display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;
+       font-size:var(--fs-1);color:var(--muted);line-height:1.5;margin:0 0 12px;}
+.bapi-legend .bapi-leg-api b{color:var(--navy);}
+.bapi-legend .bapi-leg-rest{text-align:right;}
+.bapi-more{margin:0 0 10px;}
+.bapi-more > summary{font-weight:var(--w-emph);color:var(--navy);
+       font-size:var(--fs-2);}
+.bapi-list{list-style:none;margin:8px 0 2px;padding:0;}
+.bapi-list li{padding:7px 0 7px 2px;border-top:1px solid var(--ice);
+       font-size:var(--fs-2);line-height:1.5;color:var(--ink);}
+.bapi-list li b{color:var(--navy);font-weight:var(--w-emph);}
+.bapi-list li a{color:#3A4890;text-decoration:none;white-space:nowrap;
+       border-bottom:1px dotted #8FA8D8;}
+.bapi-list li a:hover{color:var(--navy);border-bottom-style:solid;}
+.bapi-list .bapi-inhere{display:inline-block;background:#E8F1E4;color:#2F5D31;
+       border:1px solid #BDD8B8;border-radius:4px;font-size:var(--fs-1);
+       font-family:var(--f-mono);padding:0 6px;margin-left:6px;
+       vertical-align:1px;}
+.bapi-mentors{font-size:var(--fs-1);color:var(--muted);line-height:1.5;
+       border-top:1px solid var(--ice);padding-top:9px;font-style:italic;}
 .lscape-compact{margin:6px 0 0;}
 .lscape-compact-caption{font-size:var(--fs-2);color:var(--muted);
        line-height:1.45;margin:0 0 10px;max-width:900px;}
@@ -4713,7 +4761,9 @@ document.querySelectorAll('.filter input').forEach(function(inp){
      title: "The Census data landscape",
      body:  "All 573 product families laid out by type and program. Box size "
           + "is proportional to product count. Click any box to drill into "
-          + "that program's cards."},
+          + "that program's cards. Below the treemap, 'Beyond the API' shows "
+          + "what this tool does NOT cover - the Bureau publishes thousands "
+          + "more file-only datasets."},
     {sel: '.wwl-section',
      title: "What we've learned",
      body:  "One feed for every insight the team has recorded: curated head-"
@@ -8837,12 +8887,9 @@ def build_landscape_viz(fams, work, probes, data_cache, review=None):
             # which other non-API products belong lives in the repo-root
             # README's "Open Questions for Mentors" list.
             '<div class="lscape-scope-note">'
-            '~570 product families from the Census Data API catalog. The API '
-            'covers ~1,800 dataset-vintages; the Bureau&rsquo;s full '
-            'file-level catalog is larger (~6,000+ files counting every '
-            'release) &mdash; non-API bulk products like TIGER shapefiles '
-            'and DAS demonstration files are hand-added where relevant to '
-            'our analysis.'
+            '~570 product families from the Census Data API catalog &mdash; '
+            'not the Bureau&rsquo;s full output. See <b>&ldquo;Beyond the '
+            'API&rdquo;</b> below the treemap for what is not mapped here.'
             '</div>'
             # Default state (condense pass 2026-07-26): treemap EXPANDED -
             # it is the chapter's centerpiece visual. The compact text
@@ -8907,6 +8954,122 @@ def _all_flex_fallback(by_kind, kind_order, work, probes, data_cache, review=Non
                                                   review=review))
     parts.append('</div>')
     return "".join(parts)
+
+# ---- "Beyond the API" coverage element (2026-07-26) -------------------------
+# Garrett's live-test worry: "not having 4000+ datasets represented is hurting
+# the effectiveness" - i.e. a new reader might mistake this tool's ~570 API
+# families for ALL of Census data, and uncertainty-relevant products (variance
+# replicates, PUMS replicate weights) live OUTSIDE the API. This element makes
+# the boundary visible: a proportional bar, a what's-not-here category list,
+# and a pointer to the standing mentor question in the repo README.
+#
+# Numbers + units (kept honest per CLAUDE.md "never bluff"):
+#   * ~1,800 API dataset-vintages -> the Data API's data.json catalog (the
+#     cached crawl loads 1,790); this tool groups them into len(fams)
+#     product families (~570).
+#   * 6,000+ full-catalog datasets -> the census.gov file-level dataset
+#     listing, which counts every release FILE (e.g. each state x year TIGER
+#     file separately). Different unit than families - the bar says so, and
+#     the title tooltip repeats it. The share shown (~29%) is 1,800/6,158
+#     from the last listing check, rounded and labeled "rough".
+# Category list grounded in this project's own history: variance replicates
+# (EDA replicate-SE work), PUMS (allocation-rate microdata), TIGER + DAS demo
+# (both already hand-added to this catalog), historical FTP archive,
+# experimental products.
+
+BEYOND_API_CATEGORIES = [
+    ("ACS Variance Replicate Tables",
+     "bulk CSVs of 80 replicate estimates per table - the exact-variance "
+     "path our composite score may need for aggregated geographies",
+     "https://www.census.gov/programs-surveys/acs/data/variance-tables.html",
+     False),
+    ("PUMS microdata (full downloads)",
+     "person/household records with replicate weights for computing your own "
+     "standard errors; the API serves a slice, the full files ship via FTP",
+     "https://www.census.gov/programs-surveys/acs/microdata/access.html",
+     False),
+    ("TIGER/Line &amp; geodatabase files",
+     "the boundary files every map in this project draws",
+     "https://www.census.gov/geographies/mapping-files/time-series/geo/"
+     "tiger-line-file.html",
+     True),
+    ("DAS demonstration files",
+     "the privacy-noise test data behind our EDA 04 findings",
+     "https://www.census.gov/programs-surveys/decennial-census/decade/2020/"
+     "planning-management/process/disclosure-avoidance/2020-das-development.html",
+     True),
+    ("Historical / archived releases",
+     "pre-2000 decennial and survey files, mostly never API-ified; they live "
+     "on the Bureau's FTP archive",
+     "https://www2.census.gov/",
+     False),
+    ("Experimental data products",
+     "new estimates published as downloadable tables before (or instead of) "
+     "any API endpoint",
+     "https://www.census.gov/data/experimental-data-products.html",
+     False),
+]
+
+def build_beyond_api(fams):
+    """'Beyond the API' coverage element for The Landscape chapter (see the
+    block comment above for numbers, units, and why it exists). Renders:
+    proportional bar (API share filled, file-only remainder hatched) ->
+    details.disc category list -> mentor-question pointer line."""
+    n_fams = len(fams)
+    unit_note = ("Counts use different units: 6,000+ counts every release "
+                 "file on census.gov; this tool groups the API's ~1,800 "
+                 "dataset-vintages into product families. The split shown "
+                 "(~29%) is a rough proportion, not a measured share.")
+    items = []
+    for name, why, url, in_here in BEYOND_API_CATEGORIES:
+        badge = ('<span class="bapi-inhere" title="Already hand-added to '
+                 'this catalog where relevant">hand-added here</span>'
+                 if in_here else '')
+        items.append(
+            f'<li><b>{name}</b>{badge} &mdash; {why}. '
+            f'<a href="{url}" target="_blank" rel="noopener">'
+            f'where it lives &rarr;</a></li>')
+    return (
+        '<div class="bapi-section" role="region" '
+        'aria-label="Beyond the API: what this tool does not map">'
+        '<h3>Beyond the API &mdash; what this tool does <u>not</u> map</h3>'
+        '<div class="bapi-sub">'
+        f'Everything above comes from the Census <b>Data API</b> catalog: '
+        f'~1,800 dataset-vintages, grouped into the {n_fams} product '
+        f'families on this page. The Bureau&rsquo;s full file-level catalog '
+        f'on census.gov is much larger &mdash; <b>6,000+ datasets</b> '
+        f'counting every release file &mdash; so roughly '
+        f'<b>4,400 file-only datasets</b> (bulk downloads, FTP releases, '
+        f'historical files) are not represented here. '
+        f'One caveat: the two counts use different units, so the bar is a '
+        f'rough proportion &mdash; hover it for the note.'
+        '</div>'
+        f'<div class="bapi-bar" role="img" title="{_esc(unit_note)}" '
+        f'aria-label="Rough proportion: about 29% of the Bureau&rsquo;s '
+        f'file-level catalog is reachable through the Data API this tool '
+        f'maps; about 71% is file-only. {_esc(unit_note)}">'
+        '<div class="bapi-seg bapi-seg-api" style="width:29%">'
+        f'<span>mapped here: ~1,800 API dataset-vintages &rarr; {n_fams} '
+        'families</span></div>'
+        '<div class="bapi-seg bapi-seg-rest" style="width:71%">'
+        '<span>not mapped: ~4,400 file-only datasets on census.gov</span>'
+        '</div></div>'
+        '<div class="bapi-legend">'
+        '<span class="bapi-leg-api"><b>In this tool</b> &mdash; every '
+        'dataset the Data API serves</span>'
+        '<span class="bapi-leg-rest">Not in this tool &mdash; bulk '
+        'downloads, FTP releases, historical files (rough share; units '
+        'differ)</span>'
+        '</div>'
+        '<details class="disc bapi-more" data-persist-key="bapi_more">'
+        '<summary>What&rsquo;s NOT in here &mdash; six categories that '
+        'matter for this project</summary>'
+        '<ul class="bapi-list">' + "".join(items) + '</ul>'
+        '</details>'
+        '<div class="bapi-mentors">We&rsquo;re asking our Census mentors '
+        'which of these belong in our analysis &mdash; see &ldquo;Open '
+        'Questions for Mentors&rdquo; in the repo README.</div>'
+        '</div>')
 
 def _iso_to_ord(when):
     """Turn an ISO-8601 string into a sortable float (POSIX seconds).
@@ -9612,9 +9775,13 @@ def build_home(fams, review, work, counts, worklog, notebooks, probes, git=None,
                              git, repo),
         build_landscape_viz(fams, work, probes, data_cache or {},
                              review=review),
+        # "Beyond the API" (2026-07-26): what the treemap does NOT cover.
+        # Directly after the treemap so the boundary lands while the shape
+        # of the API catalog is still on screen.
+        build_beyond_api(fams),
     ]
     h.append(_chapter("landscape", "The landscape",
-                      "pipeline &middot; treemap", ch2))
+                      "pipeline &middot; treemap &middot; coverage", ch2))
 
     # ---- Chapter 3: Team pulse -------------------------------------------
     # Action first, then signals. The "Up next" queue (mission-statement
