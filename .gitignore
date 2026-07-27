@@ -28,6 +28,11 @@ Thumbs.db
 # script output too — regenerate on demand, don't commit.
 product_report.html
 scope_field_cache.json
+# File-only second catalog layer - ~6,000 slimmed data.gov CKAN records,
+# fetched once via `python tools/product_scope.py --pull-file-catalog`.
+# Regenerable from data.gov; a fetch-failure stub (marked "stub": true)
+# may sit here on machines without internet access.
+file_catalog_cache.json
 product_review.csv
 product_review.xlsx
 # Diff snapshot - captures per-product state so successive runs can show

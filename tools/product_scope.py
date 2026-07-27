@@ -739,6 +739,287 @@ def fetch_catalog(cache_path: Path, online: bool):
     return fams
 
 # ============================================================================
+# FILE-ONLY CATALOG (second layer) - data.gov CKAN ingestion + dedup
+# ============================================================================
+# The Data API catalog above covers ~1,800 dataset-vintages -> ~573 families.
+# The Bureau's FULL universe on data.gov is ~6,000 records; the remainder is
+# published only as files (bulk CSV/ZIP, FTP trees, geodatabases) or pages.
+# This layer ingests that universe once (--pull-file-catalog), dedups away
+# everything the API already serves, and feeds the "File-only datasets"
+# panel + the live "Beyond the API" numbers. File-only entries NEVER enter
+# `fams` and never touch product_review.json - the probe/sample/review
+# workflow stays API-side only.
+
+FILE_CATALOG_CACHE = "file_catalog_cache.json"
+
+# CKAN package_search on catalog.data.gov, filtered to the Census Bureau
+# organization. Pageable (rows/start), light (~1-2 MB per 1,000-row page),
+# ~6,000 records total. Fallback source if CKAN ever changes shape or
+# blocks: the Bureau's own DCAT file at https://www.census.gov/data.json
+# carries the same universe, but it is a single ~100+ MB document that
+# needs a chunked/streaming read - CKAN first because it pages.
+CKAN_SEARCH_URL = ("https://catalog.data.gov/api/3/action/package_search"
+                   "?fq=organization:census-gov&rows={rows}&start={start}")
+CKAN_PAGE_ROWS = 1000
+CKAN_TIMEOUT = 30          # seconds per page; one retry per page
+
+def _slim_ckan(pkg):
+    """Reduce one CKAN package (which can run to tens of KB of harvest
+    metadata) to the handful of fields this tool renders: title, one-line
+    description, tags, resource urls+formats (pathway classification), and
+    a landing link. Keeps the ~6,000-record cache in the single-digit MB."""
+    tags = [t.get("name", "") for t in (pkg.get("tags") or []) if t.get("name")]
+    resources = [{"url": (r.get("url") or "").strip(),
+                  "format": (r.get("format") or "").strip()}
+                 for r in (pkg.get("resources") or [])][:20]
+    notes = re.sub(r"\s+", " ", pkg.get("notes") or "").strip()
+    landing = ""
+    for ex in (pkg.get("extras") or []):
+        if ex.get("key") in ("landingPage", "landing_page") and ex.get("value"):
+            landing = ex["value"]; break
+    if not landing and pkg.get("name"):
+        landing = "https://catalog.data.gov/dataset/" + pkg["name"]
+    return {"name": pkg.get("name", ""),
+            "title": (pkg.get("title") or "").strip(),
+            "notes": notes[:400],
+            "tags": tags[:12],
+            "resources": resources,
+            "landing": landing}
+
+def _norm_title(t):
+    """Normalization used to dedup CKAN records against API families by
+    title: lowercase, collapse every non-alphanumeric run to one space."""
+    return re.sub(r"[^a-z0-9]+", " ", (t or "").lower()).strip()
+
+def split_api_covered(packages, fams):
+    """Dedup the CKAN universe against the API catalog. data.gov harvests
+    EVERYTHING, so many records are API datasets wearing a data.gov coat.
+    A record is API-covered when (a) any of its resources points at
+    api.census.gov, or (b) its normalized title exactly matches an API
+    family's title. Both tests are mechanical - no similarity scoring, no
+    guessing. Returns (file_only_packages, api_covered_count)."""
+    api_titles = {_norm_title(f.get("title", "")) for f in fams.values()}
+    api_titles.discard("")
+    file_only, covered = [], 0
+    for pkg in packages:
+        urls = " ".join((r.get("url") or "") for r in (pkg.get("resources") or []))
+        if "api.census.gov" in urls or _norm_title(pkg.get("title", "")) in api_titles:
+            covered += 1
+        else:
+            file_only.append(pkg)
+    return file_only, covered
+
+# ~20 hand-written representative records covering the six known file-only
+# categories (variance replicates, PUMS bulk, TIGER products, DAS demo
+# files, historical archives, experimental products) plus the tool-only and
+# page-only shapes. Every URL is a real census.gov location. Written to the
+# cache with "stub": true ONLY when --pull-file-catalog cannot reach
+# data.gov (e.g. from a sandboxed machine), so every render path downstream
+# is exercised and visibly labeled a stub until the real pull runs.
+STUB_FILE_CATALOG = [
+    {"name": "stub-acs-variance-replicate-2023",
+     "title": "ACS 5-Year Variance Replicate Estimate Tables (2019-2023)",
+     "notes": "Bulk tables of 80 replicate estimates per published table, for computing "
+              "exact variances of aggregated ACS estimates. Not available through the API.",
+     "tags": ["american community survey", "variance", "replicate estimates"],
+     "resources": [{"url": "https://www2.census.gov/programs-surveys/acs/replicate_estimates/2023/data/5-year/", "format": ""},
+                   {"url": "https://www.census.gov/programs-surveys/acs/data/variance-tables.html", "format": "HTML"}],
+     "landing": "https://www.census.gov/programs-surveys/acs/data/variance-tables.html"},
+    {"name": "stub-acs-variance-replicate-2018",
+     "title": "ACS 5-Year Variance Replicate Estimate Tables (2014-2018)",
+     "notes": "Earlier vintage of the variance replicate tables; FTP tree of per-table CSVs.",
+     "tags": ["american community survey", "variance", "replicate estimates"],
+     "resources": [{"url": "https://www2.census.gov/programs-surveys/acs/replicate_estimates/2018/data/5-year/", "format": ""}],
+     "landing": "https://www.census.gov/programs-surveys/acs/data/variance-tables.html"},
+    {"name": "stub-acs-pums-5yr-2023",
+     "title": "ACS 5-Year Public Use Microdata Sample, full files (2019-2023)",
+     "notes": "Person and household record files with 80 replicate weights. The API serves "
+              "a slice; the complete state files ship as bulk ZIPs on the FTP tree.",
+     "tags": ["american community survey", "pums", "microdata", "replicate weights"],
+     "resources": [{"url": "https://www2.census.gov/programs-surveys/acs/data/pums/2023/5-Year/", "format": ""},
+                   {"url": "https://www2.census.gov/programs-surveys/acs/data/pums/2023/5-Year/csv_hus.zip", "format": "ZIP"},
+                   {"url": "https://data.census.gov/mdat/", "format": "HTML"}],
+     "landing": "https://www.census.gov/programs-surveys/acs/microdata/access.html"},
+    {"name": "stub-acs-pums-1yr-2023",
+     "title": "ACS 1-Year Public Use Microdata Sample, full files (2023)",
+     "notes": "One-year PUMS person/household bulk files with replicate weights.",
+     "tags": ["american community survey", "pums", "microdata"],
+     "resources": [{"url": "https://www2.census.gov/programs-surveys/acs/data/pums/2023/1-Year/", "format": ""},
+                   {"url": "https://www2.census.gov/programs-surveys/acs/data/pums/2023/1-Year/csv_pus.zip", "format": "ZIP"}],
+     "landing": "https://www.census.gov/programs-surveys/acs/microdata/access.html"},
+    {"name": "stub-tiger-line-2024",
+     "title": "TIGER/Line Shapefiles, 2024",
+     "notes": "Full-detail geographic boundary shapefiles for every legal and statistical "
+              "geography, organized as an FTP directory tree by layer and state.",
+     "tags": ["tiger", "shapefile", "boundaries", "geography"],
+     "resources": [{"url": "https://www2.census.gov/geo/tiger/TIGER2024/", "format": ""}],
+     "landing": "https://www.census.gov/geographies/mapping-files/time-series/geo/tiger-line-file.html"},
+    {"name": "stub-cartographic-boundary-2023",
+     "title": "Cartographic Boundary Files, 2023 (500k county shapefile)",
+     "notes": "Generalized boundary files optimized for thematic mapping; direct ZIP downloads.",
+     "tags": ["cartographic boundary", "shapefile", "geography"],
+     "resources": [{"url": "https://www2.census.gov/geo/tiger/GENZ2023/shp/cb_2023_us_county_500k.zip", "format": "ZIP"}],
+     "landing": "https://www.census.gov/geographies/mapping-files/time-series/geo/cartographic-boundary.html"},
+    {"name": "stub-tigerweb-rest",
+     "title": "TIGERweb REST Services",
+     "notes": "Live REST map services exposing TIGER geography layers for GIS clients; "
+              "no file download - the service IS the product.",
+     "tags": ["tigerweb", "rest", "geography", "gis"],
+     "resources": [{"url": "https://tigerweb.geo.census.gov/arcgis/rest/services", "format": "ArcGIS GeoServices REST API"}],
+     "landing": "https://tigerweb.geo.census.gov/tigerwebmain/TIGERweb_main.html"},
+    {"name": "stub-tiger-geodatabase-2024",
+     "title": "TIGER Geodatabases, 2024",
+     "notes": "Nationwide Esri file geodatabases of TIGER layers (blocks, tracts, roads).",
+     "tags": ["tiger", "geodatabase", "geography"],
+     "resources": [{"url": "https://www2.census.gov/geo/tiger/TGRGDB24/", "format": ""},
+                   {"url": "https://www2.census.gov/geo/tiger/TGRGDB24/tlgdb_2024_a_us_block.gdb.zip", "format": "ZIP"}],
+     "landing": "https://www.census.gov/geographies/mapping-files/time-series/geo/tiger-geodatabase-file.html"},
+    {"name": "stub-gazetteer-2024",
+     "title": "U.S. Gazetteer Files, 2024",
+     "notes": "Name, GEOID, and centroid coordinates for every geographic area; plain-text files.",
+     "tags": ["gazetteer", "geography"],
+     "resources": [{"url": "https://www2.census.gov/geo/docs/maps-data/data/gazetteer/2024_Gazetteers/", "format": ""}],
+     "landing": "https://www.census.gov/geographies/reference-files/time-series/geo/gazetteer-files.html"},
+    {"name": "stub-das-2010-demonstration",
+     "title": "2010 Demonstration Data Products (Disclosure Avoidance System)",
+     "notes": "Successive DAS test runs applied to 2010 Census data so researchers can "
+              "measure privacy-noise impact - the files behind our EDA 04 findings.",
+     "tags": ["decennial", "disclosure avoidance", "differential privacy", "demonstration"],
+     "resources": [{"url": "https://www2.census.gov/programs-surveys/decennial/2020/program-management/data-product-planning/2010-demonstration-data-products/", "format": ""}],
+     "landing": "https://www.census.gov/programs-surveys/decennial-census/decade/2020/planning-management/process/disclosure-avoidance/2020-das-development.html"},
+    {"name": "stub-2020-noisy-measurement",
+     "title": "2020 Census Noisy Measurement Files",
+     "notes": "The unrounded, unprocessed statistical output of the 2020 DAS before "
+              "post-processing - released for research into the privacy noise itself.",
+     "tags": ["decennial", "disclosure avoidance", "noisy measurement"],
+     "resources": [{"url": "https://www.census.gov/programs-surveys/decennial-census/decade/2020/planning-management/process/disclosure-avoidance/2020-census-data-products.html", "format": "HTML"}],
+     "landing": "https://www.census.gov/programs-surveys/decennial-census/decade/2020/planning-management/process/disclosure-avoidance/2020-census-data-products.html"},
+    {"name": "stub-census-1990-stf",
+     "title": "1990 Census of Population and Housing, Summary Tape Files (archive)",
+     "notes": "Pre-2000 decennial summary files; never API-ified, they live on the "
+              "Bureau's FTP archive tree.",
+     "tags": ["decennial", "1990", "historical", "archive"],
+     "resources": [{"url": "https://www2.census.gov/census_1990/", "format": ""}],
+     "landing": "https://www.census.gov/data/datasets/1990/dec/summary-tape-file-1.html"},
+    {"name": "stub-census-2000-sf3",
+     "title": "Census 2000 Summary File 3 (archive datasets)",
+     "notes": "Long-form sample estimates from Census 2000; FTP tree of state archives.",
+     "tags": ["decennial", "2000", "summary file 3", "historical"],
+     "resources": [{"url": "https://www2.census.gov/census_2000/datasets/Summary_File_3/", "format": ""}],
+     "landing": "https://www.census.gov/data/datasets/2000/dec/summary-file-3.html"},
+    {"name": "stub-cbp-complete-2022",
+     "title": "County Business Patterns: Complete County File, 2022",
+     "notes": "Full establishment/employment/payroll file as a direct ZIP download.",
+     "tags": ["county business patterns", "business", "economy"],
+     "resources": [{"url": "https://www2.census.gov/programs-surveys/cbp/datasets/2022/cbp22co.zip", "format": "ZIP"}],
+     "landing": "https://www.census.gov/programs-surveys/cbp/data/datasets.html"},
+    {"name": "stub-popest-county-2024",
+     "title": "County Population Totals and Components of Change: 2020-2024 (CSV)",
+     "notes": "Vintage 2024 county estimates as one direct CSV download.",
+     "tags": ["population estimates", "counties"],
+     "resources": [{"url": "https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/counties/totals/co-est2024-alldata.csv", "format": "CSV"}],
+     "landing": "https://www.census.gov/programs-surveys/popest/data/data-sets.html"},
+    {"name": "stub-hps-puf",
+     "title": "Household Pulse Survey Public Use Files",
+     "notes": "Experimental rapid-response survey microdata; bulk PUF downloads plus the "
+              "MDAT tool for browser-side tabulation.",
+     "tags": ["household pulse survey", "experimental", "microdata"],
+     "resources": [{"url": "https://www2.census.gov/programs-surveys/demo/datasets/hhp/", "format": ""},
+                   {"url": "https://data.census.gov/mdat/", "format": "HTML"}],
+     "landing": "https://www.census.gov/programs-surveys/household-pulse-survey/datasets.html"},
+    {"name": "stub-sbps",
+     "title": "Small Business Pulse Survey (experimental data product)",
+     "notes": "Weekly small-business condition estimates published as downloadable tables "
+              "before (or instead of) any API endpoint.",
+     "tags": ["experimental", "business", "pulse"],
+     "resources": [{"url": "https://www.census.gov/data/experimental-data-products/small-business-pulse-survey.html", "format": "HTML"}],
+     "landing": "https://www.census.gov/data/experimental-data-products/small-business-pulse-survey.html"},
+    {"name": "stub-cre-equity",
+     "title": "Community Resilience Estimates: Equity Supplement (experimental)",
+     "notes": "Experimental supplement released as downloadable files on the demo FTP tree.",
+     "tags": ["community resilience", "experimental", "equity"],
+     "resources": [{"url": "https://www2.census.gov/programs-surveys/demo/datasets/community-resilience/", "format": ""}],
+     "landing": "https://www.census.gov/programs-surveys/community-resilience-estimates.html"},
+    {"name": "stub-surnames-2010",
+     "title": "Frequently Occurring Surnames from the 2010 Census (file release)",
+     "notes": "Surname frequency tables as a direct ZIP download.",
+     "tags": ["genealogy", "surnames"],
+     "resources": [{"url": "https://www2.census.gov/topics/genealogy/2010surnames/names.zip", "format": "ZIP"}],
+     "landing": "https://www.census.gov/topics/population/genealogy/data/2010_surnames.html"},
+    {"name": "stub-dhc-tables-dcgov",
+     "title": "2020 Census Detailed DHC-A tables on data.census.gov",
+     "notes": "Detailed race/ethnicity population tables reachable through the "
+              "data.census.gov table viewer rather than a bulk endpoint.",
+     "tags": ["decennial", "detailed dhc", "race", "ethnicity"],
+     "resources": [{"url": "https://data.census.gov/table?q=DHC-A", "format": "HTML"}],
+     "landing": "https://www.census.gov/data/tables/2023/dec/2020-census-detailed-dhc-a.html"},
+    {"name": "stub-idb-page",
+     "title": "International Data Base (IDB) release notes",
+     "notes": "Landing-page record with no direct data resource - the honest floor: "
+              "there is a page for it.",
+     "tags": ["international", "demographic"],
+     "resources": [],
+     "landing": "https://www.census.gov/programs-surveys/international-programs/about/idb.html"},
+]
+
+def pull_file_catalog(repo: Path):
+    """--pull-file-catalog: crawl the Census Bureau's full dataset universe
+    from data.gov's CKAN API (paged; ~6,000 records expected, ~6-7 pages)
+    and cache the slimmed records to file_catalog_cache.json at the repo
+    root (gitignored, same pattern as scope_field_cache.json).
+
+    Needs: internet access to catalog.data.gov. Produces: the cache file;
+    regen then picks it up automatically (a plain regen NEVER pulls - this
+    flag is the only network path). On total failure with no existing cache,
+    writes the STUB_FILE_CATALOG marked "stub": true so the report's
+    file-only surfaces render (clearly labeled) until a networked machine
+    runs the real pull. Returns True if a real (non-stub) pull landed."""
+    cache_path = repo / FILE_CATALOG_CACHE
+    packages, start, total, err = [], 0, None, None
+    while True:
+        url = CKAN_SEARCH_URL.format(rows=CKAN_PAGE_ROWS, start=start)
+        payload = None
+        for attempt in (1, 2):   # one retry per page
+            try:
+                req = urllib.request.Request(
+                    url, headers={"User-Agent": "census-uncertainty-capstone/1.0"})
+                with urllib.request.urlopen(req, timeout=CKAN_TIMEOUT) as r:
+                    payload = json.load(r)
+                break
+            except Exception as ex:
+                err = ex
+                if attempt == 1:
+                    time.sleep(2)
+        if payload is None or not payload.get("success"):
+            print(f"  [file-catalog] pull failed at start={start} ({err}) - run "
+                  f"`python tools/product_scope.py --pull-file-catalog` from a "
+                  f"machine with internet access; the report renders without "
+                  f"the file-only layer until then")
+            if not cache_path.exists():
+                stub = {"fetched_at": _now_iso_z(), "source": "stub (hand-written)",
+                        "stub": True, "packages": STUB_FILE_CATALOG}
+                cache_path.write_text(json.dumps(stub, indent=1), encoding="utf-8")
+                print(f"  [file-catalog] wrote {len(STUB_FILE_CATALOG)}-record STUB cache "
+                      f"so the file-only render paths stay visible (clearly labeled)")
+            return False
+        res = payload.get("result") or {}
+        total = res.get("count", 0)
+        batch = res.get("results") or []
+        if not batch:
+            break
+        packages.extend(_slim_ckan(p) for p in batch)
+        start += len(batch)
+        print(f"  [file-catalog] page fetched: {start}/{total} records")
+        if start >= total:
+            break
+    cache = {"fetched_at": _now_iso_z(), "source": "ckan:catalog.data.gov "
+             "(package_search fq=organization:census-gov)", "stub": False,
+             "packages": packages}
+    cache_path.write_text(json.dumps(cache, separators=(",", ":")), encoding="utf-8")
+    print(f"  [file-catalog] cached {len(packages)} data.gov records -> {cache_path.name}")
+    return True
+
+# ============================================================================
 # REVIEW FILE (team-owned funnel) - append-only, never seeded
 # ============================================================================
 
@@ -9995,6 +10276,14 @@ def main():
     ap.add_argument("--out", default=None,
                     help="default: <repo>/product_report.html (or product_review.<ext> with --export)")
     ap.add_argument("--online", action="store_true")
+    ap.add_argument("--pull-file-catalog", dest="pull_file_catalog",
+                    action="store_true",
+                    help="one-time fetch of the Bureau's FULL dataset universe "
+                         "(~6,000 records) from data.gov's CKAN API into "
+                         f"{FILE_CATALOG_CACHE} - the file-only second catalog "
+                         "layer. Heavy network call, so a plain regen never "
+                         "does it; without the cache the report simply renders "
+                         "without the file-only layer.")
     ap.add_argument("--probe", metavar="PATH", action="append",
                     help="probe a single catalog path, e.g. --probe acs/acs5 (repeatable)")
     ap.add_argument("--export", choices=("csv", "xlsx"), default=None,
@@ -10064,6 +10353,13 @@ def main():
         out = Path(args.out).resolve() if args.out else repo / default_name
     else:
         out = Path(args.out).resolve() if args.out else repo / "product_report.html"
+
+    # File-only second layer: --pull-file-catalog fetches (or stubs) the
+    # data.gov universe into file_catalog_cache.json, then falls through to
+    # the normal regen/no-regen flow so the report reflects the fresh cache.
+    # Every plain regen just reads whatever cache is present - never pulls.
+    if getattr(args, "pull_file_catalog", False):
+        pull_file_catalog(repo)
 
     # Phase 5 pivot - --review runs cli_review_action() first (atomic write to
     # product_review.json under the shared lock; validation errors exit 2 with
