@@ -402,10 +402,12 @@ def subject_of(path, title):
 EXTRA_PRODUCTS = [
     {"path": "dec/das-demo", "title": "DAS Demonstration Data (privacy-noise evaluation files)",
      "vintages": [2022, 2023], "kind": "Aggregate tables",
+     "pathways": ["BULK", "FTP"],
      "desc": "Demonstration products released so researchers can measure the effect of the 2020 "
              "Disclosure Avoidance System. Not an API product; downloaded by ingestion/pull_das_demo_nj.py."},
     {"path": "geo/tiger", "title": "TIGER / Cartographic Boundary Files",
      "vintages": [2024], "kind": "Uncategorized",
+     "pathways": ["BULK", "FTP", "TIGERWEB"],
      "desc": "Geographic boundary files. Not an API dataset."},
 ]
 
@@ -729,7 +731,8 @@ def fetch_catalog(cache_path: Path, online: bool):
             fams[ex["path"]] = {"path": ex["path"], "title": ex["title"],
                                 "vintages": set(ex["vintages"]), "desc": ex["desc"], "doc": "",
                                 "spatial": set(), "variables_url": "", "geography_url": "",
-                                "flags": {}, "kind": ex["kind"]}
+                                "flags": {}, "kind": ex["kind"],
+                                "pathways": ex.get("pathways") or []}
     for f in fams.values():
         f["vintages"] = sorted(f["vintages"])
         f["group"] = program_label(f["path"])
@@ -1018,6 +1021,220 @@ def pull_file_catalog(repo: Path):
     cache_path.write_text(json.dumps(cache, separators=(",", ":")), encoding="utf-8")
     print(f"  [file-catalog] cached {len(packages)} data.gov records -> {cache_path.name}")
     return True
+
+# ============================================================================
+# ACCESS-PATHWAY CLASSIFICATION (both catalog layers)
+# ============================================================================
+# Every dataset - API family or file-only record - gets badged with HOW you
+# actually get it. Classification is mechanical: resource URL patterns +
+# CKAN format fields only, no guessing. A record that matches nothing gets
+# PAGE, the honest floor ("there's a page for it"). A dataset can carry
+# several pathways (PUMS = API + BULK + FTP); badges render primary-first
+# in PATHWAYS order.
+
+PATHWAYS = ["API", "BULK", "FTP", "TIGERWEB", "TOOL", "PAGE"]
+PATHWAY_INFO = {   # chip tooltip text + chip color (navy/gold/brown/teal/blue/grey)
+    "API":      ("Queryable through api.census.gov - the layer this tool "
+                 "probes and samples.", "#1F2A5C"),
+    "BULK":     ("Direct file download (CSV / XLSX / ZIP) from census.gov.",
+                 "#A8871F"),
+    "FTP":      ("Directory tree on www2.census.gov - browse the folder, "
+                 "pick your files.", "#8A6D4A"),
+    "TIGERWEB": ("TIGERweb REST services or TIGER geodatabase products.",
+                 "#2E7D74"),
+    "TOOL":     ("Reached through an interactive tool (data.census.gov "
+                 "tables, MDAT).", "#3A6EA5"),
+    "PAGE":     ("Landing page only - the record carries no direct data "
+                 "resource.", "#8A8F9C"),
+}
+
+# File extensions / CKAN format strings that mean "this URL is a data file"
+# (BULK) rather than a directory tree (FTP) or an HTML page (PAGE).
+_DATA_EXTS = (".csv", ".txt", ".dat", ".xls", ".xlsx", ".zip", ".gz",
+              ".json", ".dbf", ".shp", ".kml", ".kmz", ".parquet", ".tsv")
+_DATA_FORMATS = {"csv", "xls", "xlsx", "zip", "json", "txt", "dat", "tsv",
+                 "shapefile", "gzip", "gz", "parquet", "excel"}
+
+def classify_pathways(resources):
+    """Derive the access-pathway badge set for one dataset from its resource
+    list [{url, format}, ...]. Rules, in per-resource priority order:
+      api.census.gov URL / format 'API'        -> API
+      tigerweb host, ArcGIS REST format, .gdb  -> TIGERWEB
+      data.census.gov / MDAT URL               -> TOOL
+      www2.census.gov or ftp:// - data file    -> BULK, bare tree -> FTP
+      any census.gov URL that IS a data file   -> BULK
+    Anything else (HTML landing pages, doc links) contributes nothing; a
+    dataset whose resources all fall through gets PAGE. Returns pathways in
+    canonical PATHWAYS order, primary first."""
+    pws = set()
+    for res in (resources or []):
+        u = (res.get("url") or "").strip().lower()
+        fmt = (res.get("format") or "").strip().lower()
+        if not u and not fmt:
+            continue
+        if "api.census.gov" in u or fmt == "api":
+            pws.add("API"); continue
+        if ("tigerweb" in u or "arcgis" in fmt or ".gdb" in u
+                or "geodatabase" in u):
+            pws.add("TIGERWEB"); continue
+        if "data.census.gov" in u or "/mdat" in u:
+            pws.add("TOOL"); continue
+        is_file = u.endswith(_DATA_EXTS) or fmt in _DATA_FORMATS
+        if u.startswith("ftp://") or "www2.census.gov" in u:
+            pws.add("BULK" if is_file else "FTP"); continue
+        if "census.gov" in u and is_file:
+            pws.add("BULK"); continue
+    if not pws:
+        pws.add("PAGE")
+    return [p for p in PATHWAYS if p in pws]
+
+# API-side families carry no resource list (the API catalog has no
+# distribution URLs), so their badge is API - plus a short mechanical table
+# for families whose full files are documented to also ship outside the
+# API. Source for the PUMS row: census.gov/programs-surveys/acs/microdata/
+# access.html (full state files ship as bulk ZIPs on the www2 FTP tree).
+_FAMILY_FILE_SIDE = [
+    (re.compile(r"(^|/)pums(pr)?$"), ["BULK", "FTP"]),
+]
+
+def family_pathways(f):
+    """Pathway list for an API-catalog family. EXTRA_PRODUCTS (hand-added
+    non-API products) declare theirs explicitly via a 'pathways' key."""
+    if f.get("pathways"):
+        return [p for p in PATHWAYS if p in f["pathways"]]
+    pws = {"API"}
+    for rx, extra in _FAMILY_FILE_SIDE:
+        if rx.search(f["path"]):
+            pws.update(extra)
+    return [p for p in PATHWAYS if p in pws]
+
+def pathway_chips_html(pws):
+    """Small colored chips, primary pathway first, tooltip per chip."""
+    return "".join(
+        f'<span class="pwchip pw-{p.lower()}" '
+        f'title="{_esc(PATHWAY_INFO[p][0])}">{p}</span>'
+        for p in pws)
+
+def pathway_legend_html(subset=None, lead="Access pathways"):
+    """Mini-legend rendered where badges first appear. `subset` limits the
+    legend to the pathways actually present on that surface."""
+    show = [p for p in PATHWAYS if subset is None or p in subset]
+    bits = "".join(
+        f'<span class="pwleg"><span class="pwchip pw-{p.lower()}">{p}</span>'
+        f'<span class="pwleg-t">{_esc(PATHWAY_INFO[p][0])}</span></span>'
+        for p in show)
+    return (f'<div class="pw-legend"><b>{_esc(lead)}</b> - how you actually '
+            f'get each dataset: {bits}</div>')
+
+# ---------------------------------------------------------------------------
+# Program grouping for file-only records. The API side derives programs from
+# catalog paths (program_label); CKAN records have no path, so the program
+# comes from title + tags patterns. Ordered - first match wins, so specific
+# rules (ACS, TIGER) sit above broad ones (economic). MEANT TO BE EDITED,
+# same contract as SUBJECTS above: these drive display grouping only.
+FILE_PROGRAM_PATTERNS = [
+    ("American Community Survey",
+     r"american community survey|\bacs\b|public use microdata|\bpums\b"),
+    ("Decennial Census",
+     r"decennial|2020 census|2010 census|census 2000|1990 census|1980 census|"
+     r"redistricting|demographic profile|summary (file|tape)|apportionment|"
+     r"island areas|count question|disclosure avoidance|noisy measurement|"
+     r"demonstration (data|product)|\bdhc\b|urbanized"),
+    ("TIGER / Geography",
+     r"tiger|cartographic boundary|gazetteer|shapefile|geodatabase|"
+     r"address count|\bzcta\b|block assignment|relationship file|"
+     r"geographic (areas|reference)"),
+    ("Current Population Survey",
+     r"current population survey|\bcps\b"),
+    ("Survey of Income and Program Participation",
+     r"survey of income and program participation|\bsipp\b"),
+    ("Population Estimates & Projections",
+     r"population estimates|population projections|intercensal|"
+     r"components of (population )?change|resident population"),
+    ("Small-Area Models (SAIPE / SAHIE)",
+     r"saipe|small area income|sahie|small area health"),
+    ("International Trade",
+     r"international trade|foreign trade|imports of|exports of|"
+     r"trade in goods"),
+    ("Economic Surveys & Censuses",
+     r"economic census|county business patterns|nonemployer|"
+     r"business (formation|dynamics|patterns|owners)|annual business survey|"
+     r"manufactur|retail|wholesale|construction spending|"
+     r"quarterly (financial|services)|e-?commerce|entrepreneur|"
+     r"survey of market absorption|building permits"),
+    ("Government Statistics",
+     r"census of governments|government (finance|employment|unit)|"
+     r"public (employment|pension)|tax collection|school system finance"),
+    ("Housing Surveys",
+     r"american housing survey|housing vacanc|residential (construction|"
+     r"sales|improvement)|rental housing|manufactured (housing|home)"),
+    ("Health & Social Surveys",
+     r"health insurance|household pulse|food security|child care|"
+     r"national survey of"),
+    ("International Programs",
+     r"international data ?base|\bidb\b|international programs"),
+    ("Experimental & Special Products",
+     r"experimental|community resilience|small business pulse|"
+     r"opportunity|research data"),
+    ("Genealogy & Surnames", r"surname|genealogy"),
+]
+_FILE_PROGRAM_RE = [(name, re.compile(pat)) for name, pat in FILE_PROGRAM_PATTERNS]
+FILE_PROGRAM_FALLBACK = "Other Census Programs"
+
+def file_program_of(title, tags):
+    """Program group for one file-only record, from title + tags text."""
+    hay = (title or "").lower() + " " + " ".join(tags or []).lower()
+    for name, rx in _FILE_PROGRAM_RE:
+        if rx.search(hay):
+            return name
+    return FILE_PROGRAM_FALLBACK
+
+def load_file_catalog(repo: Path, fams):
+    """Read file_catalog_cache.json (if present), dedup against the API
+    catalog (split_api_covered), classify each remaining record's access
+    pathways, and group by program. Returns None when no cache exists -
+    every caller then renders without the file-only layer. Shape:
+      {"datasets": [{title, desc, tags, url, pathways, program}, ...]
+                    sorted by (program, title),
+       "groups":   {program name: [dataset indices]},
+       "meta":     {stub, fetched_at, total_ckan, api_covered, file_only,
+                    pathway_counts}}"""
+    p = repo / FILE_CATALOG_CACHE
+    if not p.exists():
+        return None
+    try:
+        cache = json.loads(p.read_text(encoding="utf-8"))
+    except Exception as ex:
+        print(f"  [file-catalog] cache unreadable ({ex}); re-run "
+              f"--pull-file-catalog", file=sys.stderr)
+        return None
+    packages = cache.get("packages") or []
+    file_only_pkgs, api_covered = split_api_covered(packages, fams)
+    datasets = []
+    for pkg in file_only_pkgs:
+        title = pkg.get("title") or pkg.get("name") or "(untitled)"
+        tags = pkg.get("tags") or []
+        datasets.append({
+            "title": title,
+            "desc": (pkg.get("notes") or "")[:240],
+            "tags": tags,
+            "url": pkg.get("landing") or "",
+            "pathways": classify_pathways(pkg.get("resources")),
+            "program": file_program_of(title, tags),
+        })
+    datasets.sort(key=lambda d: (d["program"], d["title"].lower()))
+    groups, pw_counts = {}, {}
+    for i, d in enumerate(datasets):
+        groups.setdefault(d["program"], []).append(i)
+        for pw in d["pathways"]:
+            pw_counts[pw] = pw_counts.get(pw, 0) + 1
+    meta = {"stub": bool(cache.get("stub")),
+            "fetched_at": cache.get("fetched_at", ""),
+            "total_ckan": len(packages),
+            "api_covered": api_covered,
+            "file_only": len(datasets),
+            "pathway_counts": pw_counts}
+    return {"datasets": datasets, "groups": groups, "meta": meta}
 
 # ============================================================================
 # REVIEW FILE (team-owned funnel) - append-only, never seeded
@@ -3417,6 +3634,27 @@ details.lscape-kind-details[open]{padding-left:0;}
    the visible copy AND a title tooltip on the bar - 6,000+ counts every
    release FILE while this tool counts product FAMILIES, so the bar is a
    rough proportion, not a measured share. */
+/* --- Access-pathway chips (file-only layer pass 2026-07-26) ---
+   Six mechanical badges - API/BULK/FTP/TIGERWEB/TOOL/PAGE - showing HOW a
+   dataset is reached. Colors fixed per pathway (navy/gold/brown/teal/blue/
+   grey), tooltip carries the one-line definition, mini-legend (.pw-legend)
+   sits where the chips first appear on each surface. */
+.pwchip{display:inline-block;font-family:var(--f-mono);font-size:10px;line-height:1;
+       font-weight:600;letter-spacing:.5px;padding:3px 6px;border-radius:4px;
+       color:#fff;margin-right:4px;vertical-align:middle;cursor:help;}
+.pw-api{background:#1F2A5C;}
+.pw-bulk{background:#A8871F;}
+.pw-ftp{background:#8A6D4A;}
+.pw-tigerweb{background:#2E7D74;}
+.pw-tool{background:#3A6EA5;}
+.pw-page{background:#8A8F9C;}
+.pw-legend{font-size:var(--fs-1);line-height:1.9;color:var(--muted);
+       background:#F7F9FC;border:1px solid var(--line);border-radius:7px;
+       padding:8px 12px;margin:0 0 12px;}
+.pw-legend b{color:var(--navy);font-weight:var(--w-emph);}
+.pw-legend .pwleg{display:inline-block;margin:0 14px 0 0;white-space:nowrap;
+       max-width:100%;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom;}
+.pw-legend .pwleg-t{margin-left:2px;}
 .bapi-section{background:#F7F9FC;border:1px solid var(--line);border-radius:9px;
        padding:16px 20px 14px;margin:0 0 26px;max-width:1020px;}
 .bapi-section h3{font-family:var(--f-display);font-size:var(--fs-4);
@@ -6751,7 +6989,10 @@ def product_row(f, review, work, probes, ctx=None):
     # Look drill-down where the review workflow lives. The pcard's left border
     # keeps the stage color so a reader who's learned the color still gets
     # peripheral signal without a loud chip.
-    mini = f'<span class="workchip w{ws}">{STATUS_LABELS[ws]}</span>'
+    # Access-pathway chips (file-only layer pass 2026-07-26): primary
+    # pathway first. Mechanical derivation - see family_pathways().
+    mini = pathway_chips_html(family_pathways(f))
+    mini += f'<span class="workchip w{ws}">{STATUS_LABELS[ws]}</span>'
     if finds:
         plural = "s" if len(finds) > 1 else ""
         mini += f'<span class="fcount">{len(finds)} insight{plural}</span>'
@@ -7024,8 +7265,14 @@ def build_kind_panel(kind, fams, review, work, probes, git=None, snapshot=None,
         secs.append(f'<div class="gsec gfold"><div class="ghead">{_esc(g)} '
                     f'<em>{tail}</em></div>{"".join(inner)}</div>')
     sidebar = build_facet_sidebar(prods, review, work, probes, top_families, data_cache)
+    # Mini-legend for the access-pathway chips on the cards below, limited
+    # to the pathways actually present in this panel.
+    pw_present = set()
+    for f in prods:
+        pw_present.update(family_pathways(f))
     body = ('<div class="blurb">' + KIND_BLURB.get(kind, "") + '</div>'
-            f'<div class="filter"><input type="text" placeholder="Filter {len(prods)} products '
+            + pathway_legend_html(subset=pw_present)
+            + f'<div class="filter"><input type="text" placeholder="Filter {len(prods)} products '
             f'by path, title, subject or program..."><span class="fcnt">{len(prods)} shown</span></div>'
             '<div class="nohit">Nothing matches that filter.</div>' + "".join(secs))
     return ('<div class="products-shell">' + sidebar
