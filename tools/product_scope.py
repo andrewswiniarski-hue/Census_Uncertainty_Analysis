@@ -1214,9 +1214,16 @@ def load_file_catalog(repo: Path, fams):
     for pkg in file_only_pkgs:
         title = pkg.get("title") or pkg.get("name") or "(untitled)"
         tags = pkg.get("tags") or []
+        # desc capped at 140 chars + tags at 90: with ~4,400 records the
+        # JSON blob shipped into the report is the dominant size cost, and
+        # these caps keep the full-catalog HTML growth under ~1.5 MB
+        # (measured in the full-scale simulation, 2026-07-26).
+        desc = (pkg.get("notes") or "")
+        if len(desc) > 140:
+            desc = desc[:137].rstrip() + "…"
         datasets.append({
             "title": title,
-            "desc": (pkg.get("notes") or "")[:240],
+            "desc": desc,
             "tags": tags,
             "url": pkg.get("landing") or "",
             "pathways": classify_pathways(pkg.get("resources")),
@@ -3655,6 +3662,61 @@ details.lscape-kind-details[open]{padding-left:0;}
 .pw-legend .pwleg{display:inline-block;margin:0 14px 0 0;white-space:nowrap;
        max-width:100%;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom;}
 .pw-legend .pwleg-t{margin-left:2px;}
+/* --- File-only datasets panel (5th Products tab) ---
+   Program-group cards in the unified details.disc grammar; dataset rows
+   are compact list rows rendered lazily by JS from window.__FO_DATA (never
+   full product cards - these entries carry no review workflow). */
+.fo-panel{max-width:1020px;}
+.fo-banner{background:#FBF6E7;border:1px solid var(--gold);border-radius:8px;
+       padding:10px 14px;margin:0 0 12px;font-size:var(--fs-2);line-height:1.55;}
+.fo-banner code{font-family:var(--f-mono);font-size:var(--fs-1);
+       background:#fff;border:1px solid var(--line);border-radius:4px;padding:1px 5px;}
+.fo-meta{font-size:var(--fs-2);color:var(--muted);line-height:1.6;margin:0 0 12px;}
+.fo-meta b{color:var(--navy);font-family:var(--f-mono);}
+.fo-group{background:#fff;border:1px solid var(--line);border-radius:8px;
+       margin:0 0 10px;padding:4px 12px;}
+.fo-group[open]{border-left:3px solid var(--gold);}
+.fo-group > summary{padding:8px 4px;}
+.fo-gname{font-weight:var(--w-emph);color:var(--navy);}
+.fo-gcount{font-family:var(--f-mono);color:var(--muted);margin-left:10px;
+       font-size:var(--fs-1);}
+.fo-glist{padding:2px 6px 10px;}
+.fo-loading{color:var(--muted);font-size:var(--fs-2);padding:6px 0;}
+.fo-row{padding:6px 6px;border-bottom:1px dashed var(--line);
+       font-size:var(--fs-2);line-height:1.55;transition:background-color .4s ease;}
+.fo-row:last-of-type{border-bottom:0;}
+.fo-row.fo-hit{background:#FBF6E7;}
+.fo-t{margin-right:8px;}
+.fo-t a{color:var(--navy);font-weight:var(--w-emph);text-decoration:none;}
+.fo-t a:hover{text-decoration:underline;}
+.fo-d{display:block;color:var(--muted);font-size:var(--fs-1);line-height:1.5;
+       margin-top:1px;}
+.fo-showall{display:block;margin:8px 0 0;background:var(--ice);color:var(--navy);
+       border:1px solid var(--line);border-radius:6px;padding:6px 12px;
+       font-size:var(--fs-2);cursor:pointer;font-family:var(--f-sans);}
+.fo-showall:hover{background:#E2EAF8;}
+/* Treemap file-only tier: hatched summary echoing .bapi-seg-rest, so
+   "hatched = outside the API pipeline" reads the same in both places. */
+.lscape-fo-details > summary{background:repeating-linear-gradient(135deg,
+       #E4E9F2 0,#E4E9F2 6px,#F1F4F9 6px,#F1F4F9 12px);border-radius:7px;}
+.lscape-fo-stubtag{font-family:var(--f-mono);font-size:10px;color:#8A6D1F;
+       background:#FBF6E7;border:1px solid var(--gold);border-radius:4px;
+       padding:1px 5px;margin-left:8px;vertical-align:middle;}
+.lscape-fo-row{padding:4px 2px 8px;}
+.lscape-fo-cap{font-size:var(--fs-2);color:var(--muted);line-height:1.55;
+       margin:6px 0 10px;}
+.lscape-fo-cap b{color:var(--navy);}
+.lscape-fo-chips{display:flex;flex-wrap:wrap;gap:7px;}
+.lscape-fo-chip{background:repeating-linear-gradient(135deg,#E4E9F2 0,
+       #E4E9F2 6px,#F1F4F9 6px,#F1F4F9 12px);border:1px solid var(--line);
+       border-radius:6px;padding:5px 10px;font-size:var(--fs-1);
+       color:var(--ink);text-decoration:none;line-height:1.4;}
+.lscape-fo-chip:hover{border-color:var(--navy);color:var(--navy);}
+.lscape-fo-chip .n{font-family:var(--f-mono);color:var(--muted);margin-left:5px;}
+/* Search: file-only result strip below the queryable products. */
+.hs-fo-head{font-size:var(--fs-1);font-weight:var(--w-emph);color:var(--muted);
+       text-transform:uppercase;letter-spacing:.6px;margin:12px 0 4px;}
+.hs-fo-item .hs-title .pwchip{margin-left:2px;}
 .bapi-section{background:#F7F9FC;border:1px solid var(--line);border-radius:9px;
        padding:16px 20px 14px;margin:0 0 26px;max-width:1020px;}
 .bapi-section h3{font-family:var(--f-display);font-size:var(--fs-4);
@@ -7278,6 +7340,230 @@ def build_kind_panel(kind, fams, review, work, probes, git=None, snapshot=None,
     return ('<div class="products-shell">' + sidebar
             + f'<div class="products-main">{body}</div></div>')
 
+def _fo_slug(name):
+    """CSS/id-safe slug for a file-only program group name."""
+    return re.sub(r"[^a-z0-9]+", "-", (name or "").lower()).strip("-") or "group"
+
+def _fo_mix(idxs, datasets):
+    """Plain-English pathway-mix summary for a program-group header, e.g.
+    'mostly BULK · some FTP' or 'all FTP'. Mechanical thresholds: 'all' =
+    every dataset, 'mostly' = >= 60%, 'some' = >= 15% (min 2)."""
+    c = {}
+    for i in idxs:
+        for pw in datasets[i]["pathways"]:
+            c[pw] = c.get(pw, 0) + 1
+    order = sorted(c.items(), key=lambda kv: (-kv[1], PATHWAYS.index(kv[0])))
+    n = len(idxs)
+    top, tn = order[0]
+    if tn == n and len(order) == 1:
+        return f"all {top}"
+    parts = [f"mostly {top}" if tn >= 0.6 * n else f"mixed: {top}"]
+    for name, cnt in order[1:3]:
+        if cnt >= max(2, 0.15 * n):
+            parts.append(f"some {name}")
+    return " &middot; ".join(parts)
+
+FO_GROUP_VISIBLE_CAP = 50   # rows shown per group before "show all N"
+
+def build_file_only_panel(file_cat):
+    """Products-tab panel for the file-only catalog layer (5th kind tab).
+    Design: one collapsed details.disc card per PROGRAM GROUP - never 4,400
+    individual cards. Group bodies are rendered lazily by client-side JS
+    from one shared JSON blob (window.__FO_DATA), so the full ~4,400-record
+    catalog adds roughly the JSON payload (~1 MB), not 4,400 cards of HTML.
+    The same blob feeds the Home search's file-only results. File-only
+    entries carry NO probe/sample/review affordances - they are not
+    queryable and stay out of product_review.json entirely."""
+    ds = file_cat["datasets"]
+    groups = file_cat["groups"]
+    meta = file_cat["meta"]
+    n = meta["file_only"]
+
+    # --- stub banner -------------------------------------------------------
+    banner = ""
+    if meta["stub"]:
+        banner = (
+            '<div class="fo-banner"><b>Stub preview</b> &mdash; these are '
+            f'{n} hand-picked representative datasets (real census.gov '
+            'URLs) so this panel and its plumbing are visible and testable. '
+            'Run <code>python tools/product_scope.py --pull-file-catalog</code> '
+            'from a networked machine to load the full ~4,400-dataset '
+            'catalog from data.gov.</div>')
+
+    # --- meta line ---------------------------------------------------------
+    fetched = (meta.get("fetched_at") or "")[:10]
+    src_note = ("hand-written stub" if meta["stub"] else
+                f'{meta["total_ckan"]:,} data.gov records, '
+                f'{meta["api_covered"]:,} deduped as already served by the '
+                f'Data API')
+    pwc = meta.get("pathway_counts") or {}
+    pw_summary = " &middot; ".join(
+        f'{pwc[p]:,} {p}' for p in PATHWAYS if pwc.get(p))
+    metaline = (
+        '<div class="fo-meta">'
+        f'<b>{n:,}</b> file-only datasets in <b>{len(groups)}</b> program '
+        f'groups &middot; source: {src_note}'
+        + (f' &middot; pulled {fetched}' if fetched else '') +
+        f'<br>Pathway distribution: {pw_summary}</div>')
+
+    # --- group cards (headers server-side; rows lazy via JS) ---------------
+    gsecs = []
+    for gname in sorted(groups, key=lambda g: (-len(groups[g]), g)):
+        idxs = groups[gname]
+        slug = _fo_slug(gname)
+        mix = _fo_mix(idxs, ds)
+        gsecs.append(
+            f'<details class="disc fo-group" id="fogrp-{slug}" '
+            f'data-fo-gslug="{slug}" data-persist-key="fo_{slug}">'
+            f'<summary><span class="fo-gname">{_esc(gname)}</span>'
+            f'<span class="fo-gcount">{len(idxs):,} file-only '
+            f'dataset{"s" if len(idxs) != 1 else ""}</span>'
+            f'<span class="disc-preview">{mix}</span></summary>'
+            f'<div class="fo-glist" data-fo-list="{slug}">'
+            '<div class="fo-loading">&hellip;</div></div>'
+            '</details>')
+
+    # --- shared JSON blob (search + panel both read window.__FO_DATA) ------
+    # Size-compressed for the full ~4,400-record catalog (the blob is the
+    # dominant HTML cost): group = index into gs/gnames arrays, pathways =
+    # one letter each (A/B/F/G/T/P), the standard data.gov landing prefix
+    # collapses to "@". Decompression lives in the tiny JS helpers below.
+    pw_code = {"API": "A", "BULK": "B", "FTP": "F", "TIGERWEB": "G",
+               "TOOL": "T", "PAGE": "P"}
+    _DG_PREFIX = "https://catalog.data.gov/dataset/"
+    gorder = list(groups)                       # stable: insertion = sorted ds
+    gindex = {g: i for i, g in enumerate(gorder)}
+    def _u(u):
+        return "@" + u[len(_DG_PREFIX):] if u.startswith(_DG_PREFIX) else u
+    blob = {
+        "gs":  [_fo_slug(g) for g in gorder],
+        "gn":  {_fo_slug(g): g for g in gorder},
+        "g":   {_fo_slug(g): idxs for g, idxs in groups.items()},
+        "ds": [{"t": d["title"], "d": d["desc"], "u": _u(d["url"]),
+                "w": "".join(pw_code[p] for p in d["pathways"]),
+                "g": gindex[d["program"]],
+                "x": "|".join(d["tags"])[:90]} for d in ds],
+    }
+    blob_json = json.dumps(blob, ensure_ascii=False, separators=(",", ":"))
+    pw_titles_json = json.dumps({p: PATHWAY_INFO[p][0] for p in PATHWAYS},
+                                ensure_ascii=False)
+
+    blurb = (
+        '<div class="blurb">Census datasets that exist ONLY as files, FTP '
+        'trees, services, or pages - no api.census.gov endpoint, so none of '
+        'the probe / sample / review machinery applies. This is the other '
+        'side of the &ldquo;Beyond the API&rdquo; bar on Home: browse by '
+        'program group, follow a title out to its census.gov or data.gov '
+        'page. Every entry is badged with its access pathway.</div>')
+
+    js = (
+        '<script>\n'
+        '(function(){\n'
+        f'  var FO = {blob_json};\n'
+        f'  var PW_TITLE = {pw_titles_json};\n'
+        '  /* Blob decompression helpers (see the Python-side comment on the\n'
+        '     size-compressed shape). Attached to FO so the Home search can\n'
+        '     reuse them without re-declaring. */\n'
+        '  var PW_NAME = {A:"API", B:"BULK", F:"FTP", G:"TIGERWEB", T:"TOOL", P:"PAGE"};\n'
+        '  FO.paths = function(d){\n'
+        '    return (d.w || "").split("").map(function(c){ return PW_NAME[c] || c; });\n'
+        '  };\n'
+        '  FO.slug = function(d){ return FO.gs[d.g] || ""; };\n'
+        '  FO.gname = function(d){ return FO.gn[FO.slug(d)] || ""; };\n'
+        '  FO.url = function(d){\n'
+        '    var u = d.u || "";\n'
+        '    return u.charAt(0) === "@" ? "https://catalog.data.gov/dataset/" + u.slice(1) : u;\n'
+        '  };\n'
+        '  window.__FO_DATA = FO;\n'
+        f'  var CAP = {FO_GROUP_VISIBLE_CAP};\n'
+        '  function esc(s){ return String(s || "")\n'
+        '    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")\n'
+        '    .replace(/"/g,"&quot;").replace(/\'/g,"&#39;"); }\n'
+        '  function rowHTML(i){\n'
+        '    var d = FO.ds[i];\n'
+        '    var chips = FO.paths(d).map(function(p){\n'
+        '      return \'<span class="pwchip pw-\' + p.toLowerCase() + \'" title="\' +\n'
+        '             esc(PW_TITLE[p] || p) + \'">\' + p + "</span>";\n'
+        '    }).join("");\n'
+        '    var url = FO.url(d);\n'
+        '    var t = url\n'
+        '      ? \'<a href="\' + esc(url) + \'" target="_blank" rel="noopener">\' + esc(d.t) + "</a>"\n'
+        '      : esc(d.t);\n'
+        '    return \'<div class="fo-row" id="fo-r\' + i + \'">\' +\n'
+        '      \'<span class="fo-t">\' + t + "</span>" + chips +\n'
+        '      (d.d ? \'<span class="fo-d">\' + esc(d.d) + "</span>" : "") +\n'
+        '      "</div>";\n'
+        '  }\n'
+        '  window.__foRenderGroup = function(slug, all){\n'
+        '    var host = document.querySelector(\'[data-fo-list="\' + slug + \'"]\');\n'
+        '    if (!host) return;\n'
+        '    var want = all ? "all" : "cap";\n'
+        '    if (host.dataset.done === "all" || host.dataset.done === want) return;\n'
+        '    var idxs = FO.g[slug] || [];\n'
+        '    var lim = all ? idxs.length : Math.min(CAP, idxs.length);\n'
+        '    var html = "";\n'
+        '    for (var i = 0; i < lim; i++) html += rowHTML(idxs[i]);\n'
+        '    if (!all && idxs.length > CAP)\n'
+        '      html += \'<button type="button" class="fo-showall" data-fo-showall="\' +\n'
+        '              slug + \'">Show all \' + idxs.length + " datasets</button>";\n'
+        '    host.innerHTML = html;\n'
+        '    host.dataset.done = want;\n'
+        '  };\n'
+        '  /* Lazy-render a group the first time its details opens. Capture\n'
+        '     phase because toggle does not bubble. */\n'
+        '  document.addEventListener("toggle", function(e){\n'
+        '    var det = e.target;\n'
+        '    if (det && det.matches && det.matches("details[data-fo-gslug]") && det.open)\n'
+        '      window.__foRenderGroup(det.getAttribute("data-fo-gslug"), false);\n'
+        '  }, true);\n'
+        '  /* Shared jump: search results / treemap chips / Beyond-the-API bar\n'
+        '     all land here. Switches to the file-only tab, opens the group,\n'
+        '     renders rows (expanding past the cap if the target row needs it),\n'
+        '     scrolls + pulse-highlights. */\n'
+        '  window.__jumpToFileOnly = function(slug, dsIdx){\n'
+        '    var tab = document.querySelector(\'.tab[data-k="fileonly"]\');\n'
+        '    if (!tab) return false;\n'
+        '    if (!tab.classList.contains("on")) tab.click();\n'
+        '    var det = slug ? document.getElementById("fogrp-" + slug) : null;\n'
+        '    if (det){ det.open = true; window.__foRenderGroup(slug, false); }\n'
+        '    var target = null;\n'
+        '    if (typeof dsIdx === "number" && dsIdx >= 0){\n'
+        '      target = document.getElementById("fo-r" + dsIdx);\n'
+        '      if (!target && det){\n'
+        '        window.__foRenderGroup(slug, true);\n'
+        '        target = document.getElementById("fo-r" + dsIdx);\n'
+        '      }\n'
+        '    }\n'
+        '    var el = target || det || document.getElementById("panel-fileonly");\n'
+        '    if (el) setTimeout(function(){\n'
+        '      var y = el.getBoundingClientRect().top + window.pageYOffset - 60;\n'
+        '      window.scrollTo({top: y, behavior: "smooth"});\n'
+        '      if (target){ target.classList.add("fo-hit");\n'
+        '        setTimeout(function(){ target.classList.remove("fo-hit"); }, 1800); }\n'
+        '    }, 60);\n'
+        '    return true;\n'
+        '  };\n'
+        '  document.addEventListener("click", function(e){\n'
+        '    var b = e.target.closest && e.target.closest("[data-fo-showall]");\n'
+        '    if (b){ window.__foRenderGroup(b.getAttribute("data-fo-showall"), true); return; }\n'
+        '    var j = e.target.closest && e.target.closest("[data-fo-jump]");\n'
+        '    if (j){ e.preventDefault();\n'
+        '      window.__jumpToFileOnly(j.getAttribute("data-fo-jump"),\n'
+        '        parseInt(j.getAttribute("data-fo-ds") || "-1", 10)); return; }\n'
+        '    var br = e.target.closest && e.target.closest("[data-fo-browse]");\n'
+        '    if (br){ e.preventDefault(); window.__jumpToFileOnly(null, -1); }\n'
+        '  });\n'
+        '})();\n'
+        '</script>')
+
+    return ('<div class="fo-panel">' + blurb + banner + metaline
+            + pathway_legend_html()
+            + "".join(gsecs)
+            + '<noscript><div class="fo-meta">Dataset rows render via '
+              'JavaScript; with JS off, use the group titles + the '
+              'data.gov/census.gov links in the report header.</div></noscript>'
+            + js + '</div>')
+
 def build_am_panel(fams, review, work, probes, git=None, snapshot=None,
                    data_cache=None, eda_diffs=None):
     """Phase A #2 - the combined "Actively managed" panel that replaces the
@@ -9142,7 +9428,8 @@ def build_sankey_pipeline(pc, embedded=False):
         '</div>'
     )
 
-def build_landscape_viz(fams, work, probes, data_cache, review=None):
+def build_landscape_viz(fams, work, probes, data_cache, review=None,
+                        file_cat=None):
     """Home-tab landscape: stacked full-width rows, one per dataset kind, each
     with its own squarified treemap of programs. Row height is proportional
     to product-count share (Aggregate biggest, Uncategorized slimmest). Every
@@ -9339,6 +9626,49 @@ def build_landscape_viz(fams, work, probes, data_cache, review=None):
                 + row_core +
                 f'</details>')
 
+    # File-only tier (file-only layer pass 2026-07-26): a fifth, visually
+    # distinct row BELOW the four API-kind rows. Hatched (same visual
+    # vocabulary as the "Beyond the API" bar) because these datasets sit
+    # outside the team's probe/sample/review pipeline entirely - the tier
+    # colors above cannot apply. Collapsed by default in the same
+    # details.disc grammar as the smaller kinds; inside, one hatched chip
+    # per program group that jumps to the matching group in the File-only
+    # panel (shared __jumpToFileOnly handler).
+    if file_cat and file_cat["meta"]["file_only"]:
+        fo_ds = file_cat["datasets"]
+        fo_groups = sorted(file_cat["groups"].items(),
+                           key=lambda kv: (-len(kv[1]), kv[0]))
+        n_fo = file_cat["meta"]["file_only"]
+        fo_chips = "".join(
+            f'<a class="lscape-fo-chip" href="#" '
+            f'data-fo-jump="{_fo_slug(gname)}" '
+            f'title="{_esc(gname)}: {len(idxs)} file-only dataset'
+            f'{"s" if len(idxs) != 1 else ""} - {_esc(_fo_mix(idxs, fo_ds))}">'
+            f'{_esc(gname)}<span class="n">{len(idxs):,}</span></a>'
+            for gname, idxs in fo_groups)
+        fo_top3 = " &middot; ".join(
+            f'{_esc(g)} ({len(i)})' for g, i in fo_groups[:3])
+        fo_stub_tag = (' <span class="lscape-fo-stubtag">stub preview</span>'
+                       if file_cat["meta"]["stub"] else "")
+        row_html_parts.append(
+            '<details class="lscape-kind-details lscape-fo-details disc" '
+            'data-persist-key="lscape_kind_fileonly">'
+            '<summary>'
+            f'<span class="lscape-kind-sum-name">File-only datasets'
+            f'{fo_stub_tag}</span>'
+            f'<span class="lscape-kind-sum-count">{n_fo:,}</span>'
+            f'<span class="disc-preview">top: {fo_top3}</span>'
+            '</summary>'
+            '<div class="lscape-fo-row">'
+            '<div class="lscape-fo-cap">Published only as files, FTP trees, '
+            'services, or pages - no API endpoint, so the pipeline colors '
+            'above cannot apply (hatched = outside the probe/sample/review '
+            'reach). <b>Click a program group to browse its datasets in the '
+            'File-only tab.</b></div>'
+            f'<div class="lscape-fo-chips">{fo_chips}</div>'
+            '</div>'
+            '</details>')
+
     # Legend + counts summary. Phase A #1 consolidation: pulls from the same
     # `_tier_counts()` helper the top-of-Home tier rail and Sankey use, so
     # all three counters render identical numbers. Labels also align to the
@@ -9415,10 +9745,20 @@ def build_landscape_viz(fams, work, probes, data_cache, review=None):
             # which other non-API products belong lives in the repo-root
             # README's "Open Questions for Mentors" list.
             '<div class="lscape-scope-note">'
-            '~570 product families from the Census Data API catalog &mdash; '
-            'not the Bureau&rsquo;s full output. See <b>&ldquo;Beyond the '
-            'API&rdquo;</b> below the treemap for what is not mapped here.'
-            '</div>'
+            + ((f'{len(fams)} product families from the Census Data API '
+                f'catalog <b>plus {file_cat["meta"]["file_only"]:,} '
+                f'file-only datasets</b>'
+                + (' (stub preview)' if file_cat["meta"]["stub"] else '')
+                + ' from the Bureau&rsquo;s data.gov listing &mdash; the '
+                  'hatched &ldquo;File-only&rdquo; tier at the bottom of '
+                  'the treemap. See <b>&ldquo;Beyond the API&rdquo;</b> '
+                  'below for the coverage split.')
+               if file_cat and file_cat["meta"]["file_only"] else
+               ('~570 product families from the Census Data API catalog '
+                '&mdash; not the Bureau&rsquo;s full output. See '
+                '<b>&ldquo;Beyond the API&rdquo;</b> below the treemap '
+                'for what is not mapped here.'))
+            + '</div>'
             # Default state (condense pass 2026-07-26): treemap EXPANDED -
             # it is the chapter's centerpiece visual. The compact text
             # summary below is the user-chosen collapsed state (persisted
@@ -9538,16 +9878,47 @@ BEYOND_API_CATEGORIES = [
      False),
 ]
 
-def build_beyond_api(fams):
+def build_beyond_api(fams, file_cat=None):
     """'Beyond the API' coverage element for The Landscape chapter (see the
     block comment above for numbers, units, and why it exists). Renders:
     proportional bar (API share filled, file-only remainder hatched) ->
-    details.disc category list -> mentor-question pointer line."""
+    details.disc category list -> mentor-question pointer line.
+
+    File-only layer pass 2026-07-26: when the file catalog cache is present
+    the hardcoded ~29/71 approximation upgrades to LIVE counts in a SINGLE
+    unit (data.gov records: API-covered vs file-only, from
+    split_api_covered), and the hatched side becomes a click target that
+    jumps into the File-only panel. With only the stub cache the numbers
+    stay approximate (clearly labeled) but the panel jump still works."""
     n_fams = len(fams)
-    unit_note = ("Counts use different units: 6,000+ counts every release "
-                 "file on census.gov; this tool groups the API's ~1,800 "
-                 "dataset-vintages into product families. The split shown "
-                 "(~29%) is a rough proportion, not a measured share.")
+    live = bool(file_cat and file_cat["meta"]["file_only"]
+                and not file_cat["meta"]["stub"])
+    stub = bool(file_cat and file_cat["meta"]["stub"])
+    if live:
+        m = file_cat["meta"]
+        covered, fonly = m["api_covered"], m["file_only"]
+        total = max(1, covered + fonly)
+        pct_api = max(4, min(96, round(100.0 * covered / total)))
+        unit_note = (f"Measured in one unit - data.gov catalog records: "
+                     f"{covered:,} of {total:,} census-gov records are "
+                     f"already served by the Data API this tool maps; "
+                     f"{fonly:,} are file-only.")
+        seg_api_label = (f'mapped here: {covered:,} data.gov records served '
+                         f'by the API &rarr; {n_fams} families')
+        seg_rest_label = (f'{fonly:,} file-only datasets &mdash; browse '
+                          f'them &rarr;')
+    else:
+        pct_api = 29
+        unit_note = ("Counts use different units: 6,000+ counts every release "
+                     "file on census.gov; this tool groups the API's ~1,800 "
+                     "dataset-vintages into product families. The split shown "
+                     "(~29%) is a rough proportion, not a measured share.")
+        seg_api_label = (f'mapped here: ~1,800 API dataset-vintages &rarr; '
+                         f'{n_fams} families')
+        seg_rest_label = ('not mapped: ~4,400 file-only datasets on '
+                          'census.gov'
+                          + (' &mdash; browse the stub preview &rarr;'
+                             if stub else ''))
     items = []
     for name, why, url, in_here in BEYOND_API_CATEGORIES:
         badge = ('<span class="bapi-inhere" title="Already hand-added to '
@@ -9557,37 +9928,66 @@ def build_beyond_api(fams):
             f'<li><b>{name}</b>{badge} &mdash; {why}. '
             f'<a href="{url}" target="_blank" rel="noopener">'
             f'where it lives &rarr;</a></li>')
+    if live:
+        m = file_cat["meta"]
+        sub = (
+            '<div class="bapi-sub">'
+            f'Everything above comes from the Census <b>Data API</b> '
+            f'catalog, grouped into the {n_fams} product families on this '
+            f'page. Measured against the Bureau&rsquo;s full data.gov '
+            f'listing ({m["total_ckan"]:,} records), '
+            f'<b>{m["api_covered"]:,}</b> are already served by the API and '
+            f'<b>{m["file_only"]:,} are file-only</b> (bulk downloads, FTP '
+            f'releases, services, pages) &mdash; those now live in the '
+            f'<b>File-only datasets</b> tab. Live counts, single unit.'
+            '</div>')
+        leg_rest = (f'<span class="bapi-leg-rest">File-only &mdash; '
+                    f'{m["file_only"]:,} datasets, browsable in the '
+                    f'File-only tab (click the hatched side)</span>')
+    else:
+        stub_line = (' A stub preview of the file-only panel is loaded '
+                     '&mdash; counts stay approximate until '
+                     '<code>--pull-file-catalog</code> runs from a '
+                     'networked machine.' if stub else '')
+        sub = (
+            '<div class="bapi-sub">'
+            f'Everything above comes from the Census <b>Data API</b> catalog: '
+            f'~1,800 dataset-vintages, grouped into the {n_fams} product '
+            f'families on this page. The Bureau&rsquo;s full file-level catalog '
+            f'on census.gov is much larger &mdash; <b>6,000+ datasets</b> '
+            f'counting every release file &mdash; so roughly '
+            f'<b>4,400 file-only datasets</b> (bulk downloads, FTP releases, '
+            f'historical files) are not represented here. '
+            f'One caveat: the two counts use different units, so the bar is a '
+            f'rough proportion &mdash; hover it for the note.'
+            f'{stub_line}'
+            '</div>')
+        leg_rest = ('<span class="bapi-leg-rest">Not in this tool &mdash; '
+                    'bulk downloads, FTP releases, historical files (rough '
+                    'share; units differ)</span>')
+    # Hatched side becomes a jump target whenever the File-only panel
+    # exists (real pull OR stub); plain hatched fill otherwise.
+    rest_attrs = (' data-fo-browse="1" role="button" tabindex="0" '
+                  'style="cursor:pointer"' if (live or stub) else '')
     return (
         '<div class="bapi-section" role="region" '
         'aria-label="Beyond the API: what this tool does not map">'
         '<h3>Beyond the API &mdash; what this tool does <u>not</u> map</h3>'
-        '<div class="bapi-sub">'
-        f'Everything above comes from the Census <b>Data API</b> catalog: '
-        f'~1,800 dataset-vintages, grouped into the {n_fams} product '
-        f'families on this page. The Bureau&rsquo;s full file-level catalog '
-        f'on census.gov is much larger &mdash; <b>6,000+ datasets</b> '
-        f'counting every release file &mdash; so roughly '
-        f'<b>4,400 file-only datasets</b> (bulk downloads, FTP releases, '
-        f'historical files) are not represented here. '
-        f'One caveat: the two counts use different units, so the bar is a '
-        f'rough proportion &mdash; hover it for the note.'
-        '</div>'
+        + sub +
         f'<div class="bapi-bar" role="img" title="{_esc(unit_note)}" '
-        f'aria-label="Rough proportion: about 29% of the Bureau&rsquo;s '
-        f'file-level catalog is reachable through the Data API this tool '
-        f'maps; about 71% is file-only. {_esc(unit_note)}">'
-        '<div class="bapi-seg bapi-seg-api" style="width:29%">'
-        f'<span>mapped here: ~1,800 API dataset-vintages &rarr; {n_fams} '
-        'families</span></div>'
-        '<div class="bapi-seg bapi-seg-rest" style="width:71%">'
-        '<span>not mapped: ~4,400 file-only datasets on census.gov</span>'
+        f'aria-label="{pct_api}% of the Bureau&rsquo;s '
+        f'catalog is reachable through the Data API this tool '
+        f'maps; {100 - pct_api}% is file-only. {_esc(unit_note)}">'
+        f'<div class="bapi-seg bapi-seg-api" style="width:{pct_api}%">'
+        f'<span>{seg_api_label}</span></div>'
+        f'<div class="bapi-seg bapi-seg-rest" style="width:{100 - pct_api}%"'
+        f'{rest_attrs}>'
+        f'<span>{seg_rest_label}</span>'
         '</div></div>'
         '<div class="bapi-legend">'
         '<span class="bapi-leg-api"><b>In this tool</b> &mdash; every '
         'dataset the Data API serves</span>'
-        '<span class="bapi-leg-rest">Not in this tool &mdash; bulk '
-        'downloads, FTP releases, historical files (rough share; units '
-        'differ)</span>'
+        + leg_rest +
         '</div>'
         '<details class="disc bapi-more" data-persist-key="bapi_more">'
         '<summary>What&rsquo;s NOT in here &mdash; six categories that '
@@ -9848,11 +10248,20 @@ def _search_index_entry(f, review, focus_paths):
         "st": stage,
     }
 
-def build_home_search(fams, review):
+def build_home_search(fams, review, file_cat=None):
     """Home-tab "Find a product" search. Ships a client-side text + topic +
     geography-level filter over the full 573-product catalog, ranked by
     match weight + team-touch signal. Directly closes the 4/10 goal-
     directed-lookup gap from the head-to-head audit against census.gov.
+
+    File-only layer pass 2026-07-26: when the file catalog is loaded, the
+    same query also runs over window.__FO_DATA (title + description + tags,
+    shared with the File-only panel - no second index shipped). Results
+    render in a separate strip below the queryable products, badged with
+    pathway chips, and the count line splits into "N queryable products ·
+    M file-only datasets". A file-only hit jumps to its program group in
+    the File-only tab (opened + scrolled) via __jumpToFileOnly - there is
+    no card to open because file-only entries carry no review workflow.
 
     Renders four things:
       1. Section header + one-line explainer.
@@ -9932,7 +10341,10 @@ def build_home_search(fams, review):
         '<h2><span class="hs-emoji" aria-hidden="true">\U0001F50D</span>'
         'Find a product</h2>',
         '<div class="hs-sub">Search the full ',
-        f'{len(idx):,}-product catalog by keyword, topic, or geography level. '
+        f'{len(idx):,}-product catalog'
+        + (f' plus {file_cat["meta"]["file_only"]:,} file-only datasets'
+           if file_cat and file_cat["meta"]["file_only"] else '')
+        + ' by keyword, topic, or geography level. '
         'Results jump straight to the card in the Products tab. '
         'Try <b>housing</b>, <b>income</b>, or <b>veterans</b>.',
         '</div>',
@@ -10080,6 +10492,27 @@ def build_home_search(fams, review):
         '        <span class="arrow" aria-hidden="true">→</span></a>\' + ',
         '    \'</li>\';',
         '  }',
+        # ---- One FILE-ONLY result row (pathway chips, jump-to-group link) ----
+        # Reads the shared window.__FO_DATA blob shipped by the File-only
+        # panel; only reachable when that blob exists.
+        '  function renderFoItem(h){',
+        '    var d = h.d;',
+        '    var FOD = window.__FO_DATA;',
+        '    var chips = FOD.paths(d).map(function(p){',
+        '      return \'<span class="pwchip pw-\' + p.toLowerCase() + \'">\' + p + "</span>";',
+        '    }).join("");',
+        '    return \'<li class="hs-item hs-fo-item">\' + ',
+        '      \'<div class="hs-emoji-col" aria-hidden="true">\\uD83D\\uDCC1</div>\' + ',
+        '      \'<div class="hs-body-col">\' + ',
+        '        \'<div class="hs-title">\' + esc(d.t) + " " + chips + \'</div>\' + ',
+        '        \'<div class="hs-desc">\' + esc(FOD.gname(d)) + ',
+        '          (d.d ? " — " + esc(d.d) : "") + \'</div>\' + ',
+        '      \'</div>\' + ',
+        '      \'<a class="hs-open" href="#" data-fo-jump="\' + esc(FOD.slug(d)) + ',
+        '        \'" data-fo-ds="\' + h.i + \'">Open group ',
+        '        <span class="arrow" aria-hidden="true">→</span></a>\' + ',
+        '    \'</li>\';',
+        '  }',
         # ---- Empty state helpers --------------------------------------------
         '  function emptyState(hasQuery){',
         '    if (!hasQuery){',
@@ -10128,11 +10561,42 @@ def build_home_search(fams, review):
         '      if (b.e.tc !== a.e.tc) return b.e.tc - a.e.tc;',
         '      return a.e.t.localeCompare(b.e.t);',
         '    });',
-        '    if (!hits.length){ out.innerHTML = emptyState(true); return; }',
+        # ---- File-only pass: same query over the shared __FO_DATA blob. ----
+        # Skipped when a geography-level filter is set (file-only records
+        # carry no parsed geography vocabulary - excluding them is honest).
+        # A topic filter applies against the record tags.
+        '    var FOD = window.__FO_DATA || null;',
+        '    var foHits = [];',
+        '    if (FOD && !geo){',
+        '      for (var fi = 0; fi < FOD.ds.length; fi++){',
+        '        var fd = FOD.ds[fi];',
+        '        var fe = {t: fd.t, d: fd.d || "", pg: FOD.gname(fd), s: "",',
+        '                  tp: fd.x ? fd.x.split("|") : [], fc: 0, tc: 0};',
+        '        if (topic && fe.tp.indexOf(topic) < 0) continue;',
+        '        var fsc = ts.length ? score(fe, ts) : 1;',
+        '        if (fsc <= 0) continue;',
+        '        foHits.push({i: fi, d: fd, s: fsc});',
+        '      }',
+        '      foHits.sort(function(a, b){',
+        '        return (b.s - a.s) || a.d.t.localeCompare(b.d.t);',
+        '      });',
+        '    }',
+        '    if (!hits.length && !foHits.length){ out.innerHTML = emptyState(true); return; }',
         '    var top = hits.slice(0, TOP_N);',
-        '    var summary = \'<div class="hs-summary">\' + hits.length + ',
-        '      " match" + (hits.length !== 1 ? "es" : "") + ',
-        '      " — showing top " + top.length + "</div>";',
+        # Count line: split by layer when the file-only blob is loaded, so
+        # "queryable product" (has a card, has the workflow) never blurs
+        # into "file-only dataset" (browse + link out only).
+        '    var summary;',
+        '    if (FOD){',
+        '      summary = \'<div class="hs-summary">\' + hits.length + ',
+        '        " queryable product" + (hits.length !== 1 ? "s" : "") + ',
+        '        " · " + foHits.length + ',
+        '        " file-only dataset" + (foHits.length !== 1 ? "s" : "") + "</div>";',
+        '    } else {',
+        '      summary = \'<div class="hs-summary">\' + hits.length + ',
+        '        " match" + (hits.length !== 1 ? "es" : "") + ',
+        '        " — showing top " + top.length + "</div>";',
+        '    }',
         '    var list = \'<ul class="hs-list">\' + ',
         '      top.map(function(h){ return renderItem(h.e, ts); }).join("") + ',
         '      "</ul>";',
@@ -10158,7 +10622,20 @@ def build_home_search(fams, review):
         '      showAll = \'<a class="hs-showall" href="#\' + params.toString() + ',
         '        \'">Show all \' + hits.length + \' matches →</a>\';',
         '    }',
-        '    out.innerHTML = summary + list + showAll;',
+        # ---- File-only result strip (top 3 + browse-all pointer) ------------
+        '    var foBlock = "";',
+        '    if (foHits.length){',
+        '      var ftop = foHits.slice(0, 3);',
+        '      foBlock = \'<div class="hs-fo-head">File-only datasets — not API-queryable</div>\' + ',
+        '        \'<ul class="hs-list hs-fo-list">\' + ',
+        '        ftop.map(renderFoItem).join("") + "</ul>";',
+        '      if (foHits.length > ftop.length){',
+        '        foBlock += \'<a class="hs-showall" href="#" data-fo-jump="\' + ',
+        '          esc(FOD.slug(ftop[0].d)) + \'">Browse all \' + foHits.length + ',
+        '          \' in the File-only tab →</a>\';',
+        '      }',
+        '    }',
+        '    out.innerHTML = summary + list + showAll + foBlock;',
         '  }',
         # ---- Debounce --------------------------------------------------------
         '  var _rt = null;',
@@ -10213,7 +10690,8 @@ def build_home_search(fams, review):
     return "".join(html)
 
 def build_home(fams, review, work, counts, worklog, notebooks, probes, git=None,
-               diff=None, eda_diffs=None, data_cache=None, repo=None):
+               diff=None, eda_diffs=None, data_cache=None, repo=None,
+               file_cat=None):
     """Home tab. Post-reframe structure: diff banner (session-scoped) -> Where
     the team is (coverage + recently touched) -> What we've learned (feed) ->
     Census landscape viz. The pre-Phase-A `Reviewer mode data` <details>
@@ -10282,7 +10760,7 @@ def build_home(fams, review, work, counts, worklog, notebooks, probes, git=None,
     ch1 = [
         '<div class="onboard-grid">'
         '<div class="onboard-col">'
-        + build_home_search(fams, review)
+        + build_home_search(fams, review, file_cat=file_cat)
         + '</div>'
         '<div class="onboard-col">'
         + build_curriculum_card(fams)
@@ -10302,11 +10780,12 @@ def build_home(fams, review, work, counts, worklog, notebooks, probes, git=None,
         build_where_team_is(fams, review, work, probes, data_cache or {},
                              git, repo),
         build_landscape_viz(fams, work, probes, data_cache or {},
-                             review=review),
+                             review=review, file_cat=file_cat),
         # "Beyond the API" (2026-07-26): what the treemap does NOT cover.
         # Directly after the treemap so the boundary lands while the shape
-        # of the API catalog is still on screen.
-        build_beyond_api(fams),
+        # of the API catalog is still on screen. Upgrades to live counts +
+        # a click-through when the file catalog cache is loaded.
+        build_beyond_api(fams, file_cat=file_cat),
     ]
     h.append(_chapter("landscape", "The landscape",
                       "pipeline &middot; treemap &middot; coverage", ch2))
@@ -10439,7 +10918,8 @@ def export_xlsx(rows, out_path):
 
 
 def render(fams, review, work, worklog, notebooks, probes, repo_name, catnote, out_path, git,
-           snapshot=None, diff=None, data_cache=None, eda_diffs=None):
+           snapshot=None, diff=None, data_cache=None, eda_diffs=None,
+           file_cat=None):
     eda_diffs = eda_diffs or {}
     # Beginner-UX pass commit #2: reset the glossary first-occurrence tracker
     # so every regen decorates the same first appearance of each term.
@@ -10466,7 +10946,8 @@ def render(fams, review, work, worklog, notebooks, probes, repo_name, catnote, o
     # first mention in a card description.
     panels = ['<div class="panel on" id="panel-home">'
               + build_home(fams, review, work, counts, worklog, notebooks, probes, git, diff, eda_diffs,
-                           data_cache=data_cache, repo=_repo_for_home) + '</div>']
+                           data_cache=data_cache, repo=_repo_for_home,
+                           file_cat=file_cat) + '</div>']
 
     # Phase A #2 - "Actively managed" tab + panel replaces the 4 kind tabs in
     # the default view (see the body:not(.am-showall) CSS above). Only emitted
@@ -10497,6 +10978,18 @@ def render(fams, review, work, worklog, notebooks, probes, repo_name, catnote, o
                           build_kind_panel(k, fams, review, work, probes, git, snapshot,
                                             data_cache, eda_diffs))
                       + '</div>')
+    # File-only layer (2026-07-26): 5th Products tab, only when the cache
+    # exists. Class tab-kind/panel-kind so the reviewer-mode CSS treats it
+    # like the other browse tabs (hidden in reviewer mode - correct, since
+    # file-only entries have no review workflow). NOT passed through
+    # _gloss_body: the panel is mostly a JSON blob + catalog text, and the
+    # glossary terms all appear earlier on Home anyway.
+    if file_cat and file_cat["meta"]["file_only"]:
+        n_fo = file_cat["meta"]["file_only"]
+        tabs.append(f'<button class="tab tab-kind tab-fileonly" data-k="fileonly">'
+                    f'File-only datasets<span class="n">{n_fo:,}</span></button>')
+        panels.append('<div class="panel panel-kind panel-fileonly" id="panel-fileonly">'
+                      + build_file_only_panel(file_cat) + '</div>')
 
     gen_iso = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     head_short = (git.get("head_sha") or "")[:7] or "no-git"
@@ -10706,6 +11199,20 @@ def _run_report_pipeline(repo, args, out):
         run_probe_queue(repo, fams, uniq, datetime.date.today().isoformat())
         probes = load_probes(repo)
 
+    # File-only second layer: read whatever cache --pull-file-catalog left
+    # (real, stub, or none). Loaded AFTER fams so the dedup can match
+    # against API family titles. File-only entries never enter `fams` and
+    # never touch product_review.json.
+    file_cat = load_file_catalog(repo, fams)
+    if file_cat:
+        m = file_cat["meta"]
+        print(f"  [file-catalog] {m['file_only']} file-only datasets in "
+              f"{len(file_cat['groups'])} program groups "
+              f"({m['api_covered']} of {m['total_ckan']} data.gov records "
+              f"deduped as API-covered)"
+              + (" - STUB preview; run --pull-file-catalog from a networked "
+                 "machine" if m["stub"] else ""))
+
     review, rpath, first, added = load_review(repo, fams)
     if first:
         print(f"  review file: {rpath.name} created with {added} products, all 'cataloged'")
@@ -10798,7 +11305,8 @@ def _run_report_pipeline(repo, args, out):
         print(f"  [notes] ingested {len(_ingested)} note(s) from notes/ "
               f"({preview}{more})")
     counts = render(fams, review, work, worklog, notebooks, probes, repo.name, catnote, out, git,
-                    snapshot_prev, diff, data_cache, eda_diffs)
+                    snapshot_prev, diff, data_cache, eda_diffs,
+                    file_cat=file_cat)
     print("  funnel: " + " -> ".join(f"{STAGE_LABELS[s]} {counts.get(s, 0)}" for s in STAGES))
     print(f"Report written to {out}")
 
