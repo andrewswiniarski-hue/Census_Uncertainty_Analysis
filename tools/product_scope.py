@@ -742,23 +742,38 @@ def fetch_catalog(cache_path: Path, online: bool):
     return fams
 
 # ============================================================================
-# FILE-ONLY CATALOG (second layer) - data.gov CKAN ingestion + dedup
+# FILE-ONLY CATALOG (second layer) - curated registry (+ retired auto-ingest)
 # ============================================================================
 # The Data API catalog above covers ~1,800 dataset-vintages -> ~573 families.
-# The Bureau's FULL universe on data.gov is ~6,000 records; the remainder is
-# published only as files (bulk CSV/ZIP, FTP trees, geodatabases) or pages.
-# This layer ingests that universe once (--pull-file-catalog), dedups away
-# everything the API already serves, and feeds the "File-only datasets"
-# panel + the live "Beyond the API" numbers. File-only entries NEVER enter
+# The Bureau's file-only remainder (~4,400 datasets, by census.gov's own
+# Datasets-page count of ~6,158 total) has NO machine-readable index.
+# Established empirically 2026-07-26 (Garrett's live runs):
+#   * catalog.data.gov's CKAN API is retired - every path variant 404s;
+#     browser-confirmed: /api/3/action/package_search?q=census&rows=1
+#     returns {"detail":{},"message":"Not Found"}.
+#   * www.census.gov/data.json is NOT an agency-wide DCAT catalog - it is
+#     the SAME ~1,790-record Data API catalog served at a second URL
+#     (Garrett's 5 MB pull deduped 100% as API-covered).
+#   * The ~6,158 figure on census.gov's Datasets page comes from the
+#     website CMS's internal search index, which is not exposed as data.
+# So this layer is now a HAND-CURATED REGISTRY (CURATED_FILE_REGISTRY
+# below): the file-only datasets that matter for uncertainty analysis,
+# each annotated with WHY it matters - an annotation auto-ingest could
+# never have carried. The source fallback chain is retained (it costs
+# nothing and data.gov may resurrect); if a source ever returns a real
+# universe (>2,000 records), the pull merges the auto-ingested records
+# with the curated annotations on top. File-only entries NEVER enter
 # `fams` and never touch product_review.json - the probe/sample/review
 # workflow stays API-side only.
 
 FILE_CATALOG_CACHE = "file_catalog_cache.json"
 
-# SOURCE FALLBACK CHAIN (2026-07-26: catalog.data.gov started 404ing the
-# /api/3/ path during data.gov's catalog-infrastructure reshuffle, which
-# broke Garrett's real pull). --pull-file-catalog now tries each source in
-# order until one yields records:
+# SOURCE FALLBACK CHAIN - retained after the 2026-07-26 curated-registry
+# pivot even though every source is currently known-dead-or-wrong (CKAN
+# variants 404; the DCAT source returns the API catalog, which regen now
+# detects and discards - see load_file_catalog). Kept because it costs
+# nothing and data.gov may resurrect. --pull-file-catalog tries each
+# source in order until one yields records:
 #   1. CKAN v3 path         catalog.data.gov/api/3/action/package_search?fq=
 #   2. CKAN unversioned     catalog.data.gov/api/action/package_search?fq=
 #      (CKAN has historically served both the versioned and bare path)
@@ -874,30 +889,64 @@ def split_api_covered(packages, fams):
             file_only.append(pkg)
     return file_only, covered
 
-# ~20 hand-written representative records covering the six known file-only
-# categories (variance replicates, PUMS bulk, TIGER products, DAS demo
-# files, historical archives, experimental products) plus the tool-only and
-# page-only shapes. Every URL is a real census.gov location. Written to the
-# cache with "stub": true ONLY when --pull-file-catalog cannot reach
-# data.gov (e.g. from a sandboxed machine), so every render path downstream
-# is exercised and visibly labeled a stub until the real pull runs.
-STUB_FILE_CATALOG = [
-    {"name": "stub-acs-variance-replicate-2023",
+# THE CURATED REGISTRY - the file-only layer's data source (pivot
+# 2026-07-26). Not a stub, not a placeholder: since the Bureau publishes no
+# machine-readable index of its file-only universe (see the block comment
+# above), a hand-curated registry of the uncertainty-relevant datasets IS
+# the feature. Each record carries a "why" annotation - 1-2 lines on why it
+# matters for THIS capstone's uncertainty analysis - which is the value-add
+# no auto-ingest could have produced. Organized by relevance category.
+# URL policy (never fabricate): entries either reuse URLs verified in the
+# prior pass, use long-established census.gov paths, or carry an explicit
+#   # URL unverified - check on Windows
+# comment. Suggest additions via a team note (--review ... --insight) or a
+# PR editing this list.
+CURATED_FILE_REGISTRY = [
+    # --- Variance measurement (directly uncertainty-relevant) --------------
+    # Grounding for the "why" lines: ACS Variance Replicate Tables
+    # documentation + "Understanding and Using ACS Data" handbook (the
+    # sqrt-sum-of-squares MOE approximation and its failure modes), and the
+    # PUMS Accuracy statements (replicate-weight SE formula, design factors).
+    {"name": "reg-acs-variance-replicate-5yr-2023",
      "title": "ACS 5-Year Variance Replicate Estimate Tables (2019-2023)",
+     "why": "The only way to compute EXACT standard errors for sums of ACS "
+            "estimates - the handbook's sqrt-sum-of-squares MOE approximation "
+            "breaks down for aggregated geographies. Core input if the "
+            "composite score covers custom regions.",
      "notes": "Bulk tables of 80 replicate estimates per published table, for computing "
               "exact variances of aggregated ACS estimates. Not available through the API.",
      "tags": ["american community survey", "variance", "replicate estimates"],
      "resources": [{"url": "https://www2.census.gov/programs-surveys/acs/replicate_estimates/2023/data/5-year/", "format": ""},
                    {"url": "https://www.census.gov/programs-surveys/acs/data/variance-tables.html", "format": "HTML"}],
      "landing": "https://www.census.gov/programs-surveys/acs/data/variance-tables.html"},
-    {"name": "stub-acs-variance-replicate-2018",
+    {"name": "reg-acs-variance-replicate-5yr-2018",
      "title": "ACS 5-Year Variance Replicate Estimate Tables (2014-2018)",
+     "why": "Earlier vintage of the exact-variance tables - needed if we "
+            "measure how estimate reliability changed across ACS periods.",
      "notes": "Earlier vintage of the variance replicate tables; FTP tree of per-table CSVs.",
      "tags": ["american community survey", "variance", "replicate estimates"],
      "resources": [{"url": "https://www2.census.gov/programs-surveys/acs/replicate_estimates/2018/data/5-year/", "format": ""}],
      "landing": "https://www.census.gov/programs-surveys/acs/data/variance-tables.html"},
-    {"name": "stub-acs-pums-5yr-2023",
+    {"name": "reg-acs-variance-replicate-1yr",
+     "title": "ACS 1-Year Variance Replicate Estimates",
+     "why": "1-year counterpart for exact variances on large geographies; "
+            "lets a composite compare 1-yr vs 5-yr reliability on the same "
+            "footing. Availability needs confirming - the VRT program may "
+            "publish 5-year only.",
+     "notes": "One-year replicate estimates on the ACS replicate_estimates FTP tree, "
+              "if published for the vintage; the variance-tables landing page lists "
+              "what exists.",
+     "tags": ["american community survey", "variance", "replicate estimates"],
+     # URL unverified - check on Windows (VRTs may be 5-year only; the
+     # /1-year/ node may not exist for this vintage)
+     "resources": [{"url": "https://www2.census.gov/programs-surveys/acs/replicate_estimates/2023/data/1-year/", "format": ""}],
+     "landing": "https://www.census.gov/programs-surveys/acs/data/variance-tables.html"},
+    {"name": "reg-acs-pums-5yr-2023",
      "title": "ACS 5-Year Public Use Microdata Sample, full files (2019-2023)",
+     "why": "The 80 replicate weights in the full files support "
+            "direct SE computation for ANY custom tabulation - and the "
+            "allocation flags behind our EDA 05 imputation findings live "
+            "here at person/household level.",
      "notes": "Person and household record files with 80 replicate weights. The API serves "
               "a slice; the complete state files ship as bulk ZIPs on the FTP tree.",
      "tags": ["american community survey", "pums", "microdata", "replicate weights"],
@@ -905,127 +954,388 @@ STUB_FILE_CATALOG = [
                    {"url": "https://www2.census.gov/programs-surveys/acs/data/pums/2023/5-Year/csv_hus.zip", "format": "ZIP"},
                    {"url": "https://data.census.gov/mdat/", "format": "HTML"}],
      "landing": "https://www.census.gov/programs-surveys/acs/microdata/access.html"},
-    {"name": "stub-acs-pums-1yr-2023",
+    {"name": "reg-acs-pums-1yr-2023",
      "title": "ACS 1-Year Public Use Microdata Sample, full files (2023)",
+     "why": "Same replicate-weight machinery on the timelier 1-year sample - "
+            "the precision/currency tradeoff a fitness-for-use guide must "
+            "explain.",
      "notes": "One-year PUMS person/household bulk files with replicate weights.",
      "tags": ["american community survey", "pums", "microdata"],
      "resources": [{"url": "https://www2.census.gov/programs-surveys/acs/data/pums/2023/1-Year/", "format": ""},
                    {"url": "https://www2.census.gov/programs-surveys/acs/data/pums/2023/1-Year/csv_pus.zip", "format": "ZIP"}],
      "landing": "https://www.census.gov/programs-surveys/acs/microdata/access.html"},
-    {"name": "stub-tiger-line-2024",
-     "title": "TIGER/Line Shapefiles, 2024",
-     "notes": "Full-detail geographic boundary shapefiles for every legal and statistical "
-              "geography, organized as an FTP directory tree by layer and state.",
-     "tags": ["tiger", "shapefile", "boundaries", "geography"],
-     "resources": [{"url": "https://www2.census.gov/geo/tiger/TIGER2024/", "format": ""}],
-     "landing": "https://www.census.gov/geographies/mapping-files/time-series/geo/tiger-line-file.html"},
-    {"name": "stub-cartographic-boundary-2023",
-     "title": "Cartographic Boundary Files, 2023 (500k county shapefile)",
-     "notes": "Generalized boundary files optimized for thematic mapping; direct ZIP downloads.",
-     "tags": ["cartographic boundary", "shapefile", "geography"],
-     "resources": [{"url": "https://www2.census.gov/geo/tiger/GENZ2023/shp/cb_2023_us_county_500k.zip", "format": "ZIP"}],
-     "landing": "https://www.census.gov/geographies/mapping-files/time-series/geo/cartographic-boundary.html"},
-    {"name": "stub-tigerweb-rest",
-     "title": "TIGERweb REST Services",
-     "notes": "Live REST map services exposing TIGER geography layers for GIS clients; "
-              "no file download - the service IS the product.",
-     "tags": ["tigerweb", "rest", "geography", "gis"],
-     "resources": [{"url": "https://tigerweb.geo.census.gov/arcgis/rest/services", "format": "ArcGIS GeoServices REST API"}],
-     "landing": "https://tigerweb.geo.census.gov/tigerwebmain/TIGERweb_main.html"},
-    {"name": "stub-tiger-geodatabase-2024",
-     "title": "TIGER Geodatabases, 2024",
-     "notes": "Nationwide Esri file geodatabases of TIGER layers (blocks, tracts, roads).",
-     "tags": ["tiger", "geodatabase", "geography"],
-     "resources": [{"url": "https://www2.census.gov/geo/tiger/TGRGDB24/", "format": ""},
-                   {"url": "https://www2.census.gov/geo/tiger/TGRGDB24/tlgdb_2024_a_us_block.gdb.zip", "format": "ZIP"}],
-     "landing": "https://www.census.gov/geographies/mapping-files/time-series/geo/tiger-geodatabase-file.html"},
-    {"name": "stub-gazetteer-2024",
-     "title": "U.S. Gazetteer Files, 2024",
-     "notes": "Name, GEOID, and centroid coordinates for every geographic area; plain-text files.",
-     "tags": ["gazetteer", "geography"],
-     "resources": [{"url": "https://www2.census.gov/geo/docs/maps-data/data/gazetteer/2024_Gazetteers/", "format": ""}],
-     "landing": "https://www.census.gov/geographies/reference-files/time-series/geo/gazetteer-files.html"},
-    {"name": "stub-das-2010-demonstration",
+    {"name": "reg-acs-pums-design-factors",
+     "title": "ACS PUMS Accuracy documentation + design factors",
+     "why": "The Bureau's own generalized-variance design factors - the "
+            "approximate-SE path when replicate weights aren't used. The "
+            "published methodology our CV/MOE formulas should cite.",
+     "notes": "Accuracy of the PUMS statements and design-factor files on the ACS "
+              "technical-documentation FTP tree.",
+     "tags": ["american community survey", "pums", "design factors", "accuracy"],
+     # URL unverified - check on Windows (the tech_docs/pums tree is long-
+     # established; the exact per-vintage accuracy subfolder layout varies)
+     "resources": [{"url": "https://www2.census.gov/programs-surveys/acs/tech_docs/pums/accuracy/", "format": ""},
+                   {"url": "https://www2.census.gov/programs-surveys/acs/tech_docs/pums/", "format": ""}],
+     "landing": "https://www.census.gov/programs-surveys/acs/microdata/documentation.html"},
+    {"name": "reg-acs-accuracy-statements",
+     "title": "ACS Accuracy of the Data statements (per release)",
+     "why": "The canonical source for every ACS MOE/SE/CV formula and the "
+            "90% confidence convention - the citations behind our "
+            "reliability thresholds.",
+     "notes": "Per-release PDF/doc statements of the ACS sample design, error model, "
+              "and the published-MOE methodology.",
+     "tags": ["american community survey", "accuracy", "methodology", "margin of error"],
+     # URL unverified - check on Windows (accuracy statements historically
+     # ship under tech_docs; confirm the exact folder name)
+     "resources": [{"url": "https://www2.census.gov/programs-surveys/acs/tech_docs/accuracy/", "format": ""}],
+     "landing": "https://www.census.gov/programs-surveys/acs/technical-documentation.html"},
+
+    # --- Privacy noise (differential privacy / disclosure avoidance) ------
+    # Grounding: 2020 DAS development page + the demonstration-data FTP tree
+    # this team already pulled for EDA 04; NMF release notes on the 2020
+    # data-products page; README open question on epsilon allocations.
+    {"name": "reg-das-2010-demonstration",
      "title": "2010 Demonstration Data Products (Disclosure Avoidance System)",
+     "why": "The before/after pairs that let us MEASURE privacy noise "
+            "empirically - the files behind our EDA 04 finding that block-"
+            "group noise runs ~9x tract noise.",
      "notes": "Successive DAS test runs applied to 2010 Census data so researchers can "
               "measure privacy-noise impact - the files behind our EDA 04 findings.",
      "tags": ["decennial", "disclosure avoidance", "differential privacy", "demonstration"],
      "resources": [{"url": "https://www2.census.gov/programs-surveys/decennial/2020/program-management/data-product-planning/2010-demonstration-data-products/", "format": ""}],
      "landing": "https://www.census.gov/programs-surveys/decennial-census/decade/2020/planning-management/process/disclosure-avoidance/2020-das-development.html"},
-    {"name": "stub-2020-noisy-measurement",
-     "title": "2020 Census Noisy Measurement Files",
+    {"name": "reg-das-2020-dhc-ppmf",
+     "title": "2020 DHC demonstration Privacy-Protected Microdata Files (PPMF)",
+     "why": "Production-settings DAS microdata (the 2023-04-03 suite is "
+            "microdata-only, per our provisional-vintage mentor question) - "
+            "the closest public stand-in for the noise actually in 2020 DHC.",
+     "notes": "Privacy-protected microdata releases from the DAS demonstration program, "
+              "on the same demonstration-data-products FTP tree as the tabulated runs.",
+     "tags": ["decennial", "disclosure avoidance", "ppmf", "microdata"],
+     "resources": [{"url": "https://www2.census.gov/programs-surveys/decennial/2020/program-management/data-product-planning/2010-demonstration-data-products/", "format": ""}],
+     "landing": "https://www.census.gov/programs-surveys/decennial-census/decade/2020/planning-management/process/disclosure-avoidance/2020-das-development.html"},
+    {"name": "reg-2020-noisy-measurement",
+     "title": "2020 Census Noisy Measurement Files (NMF)",
+     "why": "The raw DAS output BEFORE post-processing - the only release "
+            "that shows the injected noise distribution itself rather than "
+            "its downstream effects.",
      "notes": "The unrounded, unprocessed statistical output of the 2020 DAS before "
               "post-processing - released for research into the privacy noise itself.",
      "tags": ["decennial", "disclosure avoidance", "noisy measurement"],
-     "resources": [{"url": "https://www.census.gov/programs-surveys/decennial-census/decade/2020/planning-management/process/disclosure-avoidance/2020-census-data-products.html", "format": "HTML"}],
+     # URL unverified - check on Windows (the NMF releases are announced on
+     # the landing page below; the bulk hosting location has moved between
+     # census.gov FTP and mirrored archives)
+     "resources": [{"url": "https://www2.census.gov/programs-surveys/decennial/2020/data/", "format": ""},
+                   {"url": "https://www.census.gov/programs-surveys/decennial-census/decade/2020/planning-management/process/disclosure-avoidance/2020-census-data-products.html", "format": "HTML"}],
      "landing": "https://www.census.gov/programs-surveys/decennial-census/decade/2020/planning-management/process/disclosure-avoidance/2020-census-data-products.html"},
-    {"name": "stub-census-1990-stf",
+    {"name": "reg-das-production-settings",
+     "title": "DAS production settings + privacy-loss budget allocation files",
+     "why": "The published epsilon allocations per geography level and query - "
+            "the policy-side answer to our standing mentor question: use "
+            "published budgets or EDA 04's empirically measured noise?",
+     "notes": "Settings and allocation documents accompanying the demonstration and "
+              "production DAS releases, on the demonstration-data-products tree.",
+     "tags": ["decennial", "disclosure avoidance", "privacy-loss budget", "epsilon"],
+     "resources": [{"url": "https://www2.census.gov/programs-surveys/decennial/2020/program-management/data-product-planning/2010-demonstration-data-products/", "format": ""}],
+     "landing": "https://www.census.gov/programs-surveys/decennial-census/decade/2020/planning-management/process/disclosure-avoidance.html"},
+
+    # --- Geography (joins, boundaries, crosswalks) -------------------------
+    {"name": "reg-tiger-line-2024",
+     "title": "TIGER/Line Shapefiles, 2024",
+     "why": "The boundary files every map in this project draws - and the "
+            "geographic frame any dashboard choropleth of the composite "
+            "score will sit on.",
+     "notes": "Full-detail geographic boundary shapefiles for every legal and statistical "
+              "geography, organized as an FTP directory tree by layer and state.",
+     "tags": ["tiger", "shapefile", "boundaries", "geography"],
+     "resources": [{"url": "https://www2.census.gov/geo/tiger/TIGER2024/", "format": ""}],
+     "landing": "https://www.census.gov/geographies/mapping-files/time-series/geo/tiger-line-file.html"},
+    {"name": "reg-cartographic-boundary-2023",
+     "title": "Cartographic Boundary Files, 2023 (500k county shapefile)",
+     "why": "Generalized boundaries sized for a web dashboard - the "
+            "county-planner-facing map layer, vs TIGER/Line's full detail.",
+     "notes": "Generalized boundary files optimized for thematic mapping; direct ZIP downloads.",
+     "tags": ["cartographic boundary", "shapefile", "geography"],
+     "resources": [{"url": "https://www2.census.gov/geo/tiger/GENZ2023/shp/cb_2023_us_county_500k.zip", "format": "ZIP"}],
+     "landing": "https://www.census.gov/geographies/mapping-files/time-series/geo/cartographic-boundary.html"},
+    {"name": "reg-tigerweb-rest",
+     "title": "TIGERweb REST Services",
+     "why": "Boundaries without downloads - the no-file pathway a hosted "
+            "dashboard can query live instead of shipping shapefiles.",
+     "notes": "Live REST map services exposing TIGER geography layers for GIS clients; "
+              "no file download - the service IS the product.",
+     "tags": ["tigerweb", "rest", "geography", "gis"],
+     "resources": [{"url": "https://tigerweb.geo.census.gov/arcgis/rest/services", "format": "ArcGIS GeoServices REST API"}],
+     "landing": "https://tigerweb.geo.census.gov/tigerwebmain/TIGERweb_main.html"},
+    {"name": "reg-tiger-geodatabase-2024",
+     "title": "TIGER Geodatabases, 2024",
+     "why": "Nationwide single-file layers (all blocks, all tracts) - "
+            "the practical format when an analysis needs every geography "
+            "at once rather than state-by-state shapefiles.",
+     "notes": "Nationwide Esri file geodatabases of TIGER layers (blocks, tracts, roads).",
+     "tags": ["tiger", "geodatabase", "geography"],
+     "resources": [{"url": "https://www2.census.gov/geo/tiger/TGRGDB24/", "format": ""},
+                   {"url": "https://www2.census.gov/geo/tiger/TGRGDB24/tlgdb_2024_a_us_block.gdb.zip", "format": "ZIP"}],
+     "landing": "https://www.census.gov/geographies/mapping-files/time-series/geo/tiger-geodatabase-file.html"},
+    {"name": "reg-gazetteer-2024",
+     "title": "U.S. Gazetteer Files, 2024",
+     "why": "GEOID + name + centroid for every area in plain text - the "
+            "lightweight join spine between estimate tables and maps.",
+     "notes": "Name, GEOID, and centroid coordinates for every geographic area; plain-text files.",
+     "tags": ["gazetteer", "geography"],
+     "resources": [{"url": "https://www2.census.gov/geo/docs/maps-data/data/gazetteer/2024_Gazetteers/", "format": ""}],
+     "landing": "https://www.census.gov/geographies/reference-files/time-series/geo/gazetteer-files.html"},
+    {"name": "reg-relationship-files-2020",
+     "title": "2010-2020 Geography Relationship Files (block-to-block crosswalks)",
+     "why": "The vintage crosswalk that makes 2010-geography products (DAS "
+            "demo files) comparable to 2020-geography products - without it, "
+            "cross-decade noise comparisons silently mix boundaries.",
+     "notes": "Block, tract, and other level crosswalks relating 2010 geography to 2020 "
+              "geography; text files on the geo docs FTP tree.",
+     "tags": ["geography", "relationship file", "crosswalk", "2020"],
+     # URL unverified - check on Windows (rel2020 is the documented tree
+     # name; confirm the exact subfolder for the block-level crosswalk)
+     "resources": [{"url": "https://www2.census.gov/geo/docs/maps-data/data/rel2020/", "format": ""}],
+     "landing": "https://www.census.gov/geographies/reference-files/time-series/geo/relationship-files.html"},
+    {"name": "reg-block-assignment-2020",
+     "title": "2020 Block Assignment Files (BAF)",
+     "why": "Block-to-geography assignments for building custom areas - "
+            "needed the moment a planner asks for the composite score on a "
+            "service area that isn't a published geography.",
+     "notes": "Text files assigning each 2020 tabulation block to higher-level "
+              "geographies (county, tract, place, districts).",
+     "tags": ["geography", "block assignment", "2020"],
+     # URL unverified - check on Windows (baf2020 tree name follows the
+     # rel2020 convention; confirm)
+     "resources": [{"url": "https://www2.census.gov/geo/docs/maps-data/data/baf2020/", "format": ""}],
+     "landing": "https://www.census.gov/geographies/reference-files/time-series/geo/block-assignment-files.html"},
+
+    # --- Historical baselines (pre-DP / pre-ACS decennial) -----------------
+    {"name": "reg-census-2010-sf1",
+     "title": "2010 Census Summary File 1 (FTP release)",
+     "why": "The swapping-era baseline the DAS demonstration files are "
+            "diffed against - EDA 04's 'truth' side comes from this "
+            "release's tabulations.",
+     "notes": "Complete-count 2010 tabulations as state-by-state FTP archives.",
+     "tags": ["decennial", "2010", "summary file 1", "historical"],
+     # URL unverified - check on Windows (census_2010 tree is established;
+     # confirm the numbered Summary_File_1 subfolder name)
+     "resources": [{"url": "https://www2.census.gov/census_2010/04-Summary_File_1/", "format": ""},
+                   {"url": "https://www2.census.gov/census_2010/", "format": ""}],
+     "landing": "https://www.census.gov/data/datasets/2010/dec/summary-file-1.html"},
+    {"name": "reg-census-2010-sf2",
+     "title": "2010 Census Summary File 2 (FTP release)",
+     "why": "Detailed race/ethnicity/tenure baseline from 2010 - the "
+            "pre-DP comparison point for the 2020 Detailed DHC's noisier "
+            "small-population counts.",
+     "notes": "Detailed-population 2010 tabulations (race, ethnicity, tenure iterations) "
+              "as FTP archives.",
+     "tags": ["decennial", "2010", "summary file 2", "historical"],
+     # URL unverified - check on Windows (confirm the numbered subfolder)
+     "resources": [{"url": "https://www2.census.gov/census_2010/05-Summary_File_2/", "format": ""}],
+     "landing": "https://www.census.gov/data/datasets/2010/dec/summary-file-2.html"},
+    {"name": "reg-census-2000-sf1",
+     "title": "Census 2000 Summary File 1 (archive datasets)",
+     "why": "Extends the complete-count baseline a second decade back - "
+            "distinguishes secular demographic drift from method-change "
+            "artifacts in any trend the report draws.",
+     "notes": "Complete-count Census 2000 tabulations; FTP tree of state archives.",
+     "tags": ["decennial", "2000", "summary file 1", "historical"],
+     # URL unverified - check on Windows (sibling of the verified
+     # Summary_File_3 tree below)
+     "resources": [{"url": "https://www2.census.gov/census_2000/datasets/Summary_File_1/", "format": ""}],
+     "landing": "https://www.census.gov/data/datasets/2000/dec/summary-file-1.html"},
+    {"name": "reg-census-2000-sf3",
+     "title": "Census 2000 Summary File 3 (archive datasets)",
+     "why": "The long-form SAMPLE estimates ACS replaced - the natural "
+            "'before' picture for any story about how sampling error "
+            "entered small-area data.",
+     "notes": "Long-form sample estimates from Census 2000; FTP tree of state archives.",
+     "tags": ["decennial", "2000", "summary file 3", "historical"],
+     "resources": [{"url": "https://www2.census.gov/census_2000/datasets/Summary_File_3/", "format": ""}],
+     "landing": "https://www.census.gov/data/datasets/2000/dec/summary-file-3.html"},
+    {"name": "reg-census-1990-stf",
      "title": "1990 Census of Population and Housing, Summary Tape Files (archive)",
+     "why": "Pre-2000 baseline, never API-ified - the deep end of the "
+            "historical trend line, adjacent decades sit on the same "
+            "www2 archive tree.",
      "notes": "Pre-2000 decennial summary files; never API-ified, they live on the "
               "Bureau's FTP archive tree.",
      "tags": ["decennial", "1990", "historical", "archive"],
      "resources": [{"url": "https://www2.census.gov/census_1990/", "format": ""}],
      "landing": "https://www.census.gov/data/datasets/1990/dec/summary-tape-file-1.html"},
-    {"name": "stub-census-2000-sf3",
-     "title": "Census 2000 Summary File 3 (archive datasets)",
-     "notes": "Long-form sample estimates from Census 2000; FTP tree of state archives.",
-     "tags": ["decennial", "2000", "summary file 3", "historical"],
-     "resources": [{"url": "https://www2.census.gov/census_2000/datasets/Summary_File_3/", "format": ""}],
-     "landing": "https://www.census.gov/data/datasets/2000/dec/summary-file-3.html"},
-    {"name": "stub-cbp-complete-2022",
-     "title": "County Business Patterns: Complete County File, 2022",
-     "notes": "Full establishment/employment/payroll file as a direct ZIP download.",
-     "tags": ["county business patterns", "business", "economy"],
-     "resources": [{"url": "https://www2.census.gov/programs-surveys/cbp/datasets/2022/cbp22co.zip", "format": "ZIP"}],
-     "landing": "https://www.census.gov/programs-surveys/cbp/data/datasets.html"},
-    {"name": "stub-popest-county-2024",
+
+    # --- Bulk-only statistical products ------------------------------------
+    # Grounding: SAIPE publishes 90% confidence intervals with its model-
+    # based estimates (SAIPE methodology pages); CBP protects cells with
+    # noise infusion (its disclosure-avoidance documentation); LEHD/LODES
+    # uses noise infusion + synthetic elements (LEHD tech docs).
+    {"name": "reg-saipe-estimates",
+     "title": "SAIPE model-based income & poverty estimates (bulk files)",
+     "why": "The Bureau's existing precedent for SHIPPING uncertainty: "
+            "model-based estimates published WITH 90% confidence intervals. "
+            "A template for how a composite score could be communicated.",
+     "notes": "State, county, and school-district poverty/income estimates with "
+              "confidence bounds, as downloadable files.",
+     "tags": ["saipe", "small area estimates", "poverty", "model-based"],
+     "resources": [{"url": "https://www2.census.gov/programs-surveys/saipe/datasets/", "format": ""}],
+     "landing": "https://www.census.gov/programs-surveys/saipe/data/datasets.html"},
+    {"name": "reg-popest-county-2024",
      "title": "County Population Totals and Components of Change: 2020-2024 (CSV)",
+     "why": "Estimates with NO published uncertainty at all - the other end "
+            "of the spectrum from SAIPE, and the denominators/controls many "
+            "ACS figures lean on.",
      "notes": "Vintage 2024 county estimates as one direct CSV download.",
      "tags": ["population estimates", "counties"],
      "resources": [{"url": "https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/counties/totals/co-est2024-alldata.csv", "format": "CSV"}],
      "landing": "https://www.census.gov/programs-surveys/popest/data/data-sets.html"},
-    {"name": "stub-hps-puf",
+    {"name": "reg-popest-asrh-detail",
+     "title": "Population Estimates: age/sex/race/Hispanic detail files (FTP)",
+     "why": "The demographic-detail estimates behind ACS population "
+            "controls - subgroup denominators whose (unpublished) error "
+            "propagates into controlled ACS estimates.",
+     "notes": "Vintage detail files by age, sex, race, and Hispanic origin on the "
+              "popest FTP tree.",
+     "tags": ["population estimates", "asrh", "demographics"],
+     # URL unverified - check on Windows (sibling of the verified
+     # counties/totals path; confirm the asrh subfolder for this vintage)
+     "resources": [{"url": "https://www2.census.gov/programs-surveys/popest/datasets/2020-2024/counties/asrh/", "format": ""}],
+     "landing": "https://www.census.gov/programs-surveys/popest/data/data-sets.html"},
+    {"name": "reg-cbp-complete-2022",
+     "title": "County Business Patterns: Complete County File, 2022",
+     "why": "Cells protected by NOISE INFUSION - a pre-DP noise mechanism "
+            "the Bureau has run for years. A second noise regime to "
+            "contrast with the 2020 Census DAS.",
+     "notes": "Full establishment/employment/payroll file as a direct ZIP download.",
+     "tags": ["county business patterns", "business", "economy"],
+     "resources": [{"url": "https://www2.census.gov/programs-surveys/cbp/datasets/2022/cbp22co.zip", "format": "ZIP"}],
+     "landing": "https://www.census.gov/programs-surveys/cbp/data/datasets.html"},
+    {"name": "reg-lehd-lodes",
+     "title": "LEHD Origin-Destination Employment Statistics (LODES)",
+     "why": "Block-level jobs data protected with noise infusion plus "
+            "synthetic elements - a third protection regime, and the "
+            "workforce lens county planners ask for.",
+     "notes": "State-by-state origin-destination, residence-area, and workplace-area "
+              "employment files on the LEHD download server.",
+     "tags": ["lehd", "lodes", "employment", "origin-destination"],
+     "resources": [{"url": "https://lehd.ces.census.gov/data/", "format": ""},
+                   # URL unverified - check on Windows (LODES8 is the
+                   # current documented version tag; confirm)
+                   {"url": "https://lehd.ces.census.gov/data/lodes/LODES8/", "format": ""}],
+     "landing": "https://lehd.ces.census.gov/data/"},
+
+    # --- Experimental data products ----------------------------------------
+    {"name": "reg-hps-puf",
      "title": "Household Pulse Survey Public Use Files",
+     "why": "The Bureau's speed-vs-precision experiment: rapid-cycle "
+            "estimates with replicate weights and unusually wide SEs - a "
+            "live case study in communicating lower-reliability data.",
      "notes": "Experimental rapid-response survey microdata; bulk PUF downloads plus the "
               "MDAT tool for browser-side tabulation.",
      "tags": ["household pulse survey", "experimental", "microdata"],
      "resources": [{"url": "https://www2.census.gov/programs-surveys/demo/datasets/hhp/", "format": ""},
                    {"url": "https://data.census.gov/mdat/", "format": "HTML"}],
      "landing": "https://www.census.gov/programs-surveys/household-pulse-survey/datasets.html"},
-    {"name": "stub-sbps",
+    {"name": "reg-sbps",
      "title": "Small Business Pulse Survey (experimental data product)",
+     "why": "File-first experimental release - shows the publication "
+            "pattern where data ships as tables before (or instead of) "
+            "any API endpoint.",
      "notes": "Weekly small-business condition estimates published as downloadable tables "
               "before (or instead of) any API endpoint.",
      "tags": ["experimental", "business", "pulse"],
      "resources": [{"url": "https://www.census.gov/data/experimental-data-products/small-business-pulse-survey.html", "format": "HTML"}],
      "landing": "https://www.census.gov/data/experimental-data-products/small-business-pulse-survey.html"},
-    {"name": "stub-cre-equity",
-     "title": "Community Resilience Estimates: Equity Supplement (experimental)",
-     "notes": "Experimental supplement released as downloadable files on the demo FTP tree.",
+    {"name": "reg-cre-bulk",
+     "title": "Community Resilience Estimates bulk files (incl. Equity Supplement)",
+     "why": "Small-area model-based scores shipped as bulk files - the "
+            "closest existing Bureau product to what our composite score "
+            "wants to be, uncertainty flags included.",
+     "notes": "Experimental resilience estimates and supplements released as downloadable "
+              "files on the demo FTP tree.",
      "tags": ["community resilience", "experimental", "equity"],
      "resources": [{"url": "https://www2.census.gov/programs-surveys/demo/datasets/community-resilience/", "format": ""}],
      "landing": "https://www.census.gov/programs-surveys/community-resilience-estimates.html"},
-    {"name": "stub-surnames-2010",
+    {"name": "reg-experimental-products-index",
+     "title": "Experimental Data Products (index page)",
+     "why": "The Bureau's own front door for pre-production releases - the "
+            "watch list for new uncertainty-relevant products entering the "
+            "file-only universe.",
+     "notes": "Index of all current experimental data products; most entries publish "
+              "as downloadable tables.",
+     "tags": ["experimental", "index"],
+     "resources": [{"url": "https://www.census.gov/data/experimental-data-products.html", "format": "HTML"}],
+     "landing": "https://www.census.gov/data/experimental-data-products.html"},
+
+    # --- Registry shape-tests (kept from the original pass) ----------------
+    # These three keep every pathway shape exercised in the render paths:
+    # a one-file BULK ZIP, a TOOL-only product, and the PAGE-only floor.
+    {"name": "reg-surnames-2010",
      "title": "Frequently Occurring Surnames from the 2010 Census (file release)",
+     "why": "Registry shape-test: a single-ZIP file release with no API "
+            "counterpart (also a disclosure-thresholded product - names "
+            "under 100 occurrences are suppressed).",
      "notes": "Surname frequency tables as a direct ZIP download.",
      "tags": ["genealogy", "surnames"],
      "resources": [{"url": "https://www2.census.gov/topics/genealogy/2010surnames/names.zip", "format": "ZIP"}],
      "landing": "https://www.census.gov/topics/population/genealogy/data/2010_surnames.html"},
-    {"name": "stub-dhc-tables-dcgov",
+    {"name": "reg-dhc-tables-dcgov",
      "title": "2020 Census Detailed DHC-A tables on data.census.gov",
+     "why": "Tool-only pathway: adaptive-design tables (detail level varies "
+            "with population size for privacy) reachable only through the "
+            "table viewer - relevant to how DP reshapes what gets published.",
      "notes": "Detailed race/ethnicity population tables reachable through the "
               "data.census.gov table viewer rather than a bulk endpoint.",
      "tags": ["decennial", "detailed dhc", "race", "ethnicity"],
      "resources": [{"url": "https://data.census.gov/table?q=DHC-A", "format": "HTML"}],
      "landing": "https://www.census.gov/data/tables/2023/dec/2020-census-detailed-dhc-a.html"},
-    {"name": "stub-idb-page",
+    {"name": "reg-idb-page",
      "title": "International Data Base (IDB) release notes",
+     "why": "Registry shape-test: the PAGE-only floor - a product whose "
+            "record carries no direct data resource at all.",
      "notes": "Landing-page record with no direct data resource - the honest floor: "
               "there is a page for it.",
      "tags": ["international", "demographic"],
      "resources": [],
      "landing": "https://www.census.gov/programs-surveys/international-programs/about/idb.html"},
 ]
+
+# A pull that returns fewer records than this is NOT the file-only
+# universe - it's the ~1,790-record Data API catalog wearing a second URL
+# (the data.json finding, 2026-07-26). Only above this line does the pull
+# treat the result as a real universe and merge curated annotations in.
+REAL_UNIVERSE_MIN = 2000
+
+def _write_curated_cache(cache_path):
+    """Write CURATED_FILE_REGISTRY as the file-catalog cache. This is the
+    normal, non-error path since the 2026-07-26 pivot: no machine-readable
+    index of the Bureau's file-only universe exists, so the team's curated
+    registry IS the layer's data source. Returns the cache dict."""
+    cache = {"fetched_at": _now_iso_z(),
+             "source": "team-curated registry (CURATED_FILE_REGISTRY in "
+                       "tools/product_scope.py)",
+             "via": "curated", "curated": True,
+             "packages": CURATED_FILE_REGISTRY}
+    cache_path.write_text(json.dumps(cache, indent=1), encoding="utf-8")
+    return cache
+
+def _merge_curated(packages):
+    """Merge the curated registry into a real auto-ingested universe:
+    (a) records whose normalized title matches a curated entry inherit its
+    "why" annotation; (b) curated entries with no title match are appended,
+    so the hand-picked uncertainty-relevant datasets can never fall out of
+    the layer. Returns (merged_packages, n_annotated, n_appended)."""
+    by_title = {_norm_title(c["title"]): c for c in CURATED_FILE_REGISTRY}
+    seen, annotated = set(), 0
+    for pkg in packages:
+        cur = by_title.get(_norm_title(pkg.get("title", "")))
+        if cur is not None:
+            pkg["why"] = cur["why"]
+            seen.add(_norm_title(cur["title"]))
+            annotated += 1
+    extras = [c for c in CURATED_FILE_REGISTRY
+              if _norm_title(c["title"]) not in seen]
+    return packages + extras, annotated, len(extras)
 
 def _source_err(ex):
     """One-line human string for a failed catalog source. HTTP errors get
@@ -1124,29 +1434,32 @@ def _pull_dcat(url):
             pass
 
 def pull_file_catalog(repo: Path):
-    """--pull-file-catalog: crawl the Census Bureau's full dataset universe
-    (~6,000 records expected) and cache the slimmed records to
-    file_catalog_cache.json at the repo root (gitignored, same pattern as
-    scope_field_cache.json). Tries each entry in FILE_CATALOG_SOURCES in
-    order - three CKAN variants on catalog.data.gov, then the Bureau's own
-    DCAT file - moving on after any HTTP/parse failure or empty result, so
-    data.gov's 2026 catalog reshuffle can't kill the pull outright.
+    """--pull-file-catalog: TRY to crawl a machine-readable index of the
+    Bureau's dataset universe into file_catalog_cache.json (gitignored,
+    same pattern as scope_field_cache.json). As of 2026-07-26 every known
+    source is dead or wrong (data.gov's CKAN API retired; census.gov/
+    data.json is the API catalog only - see the layer block comment), so
+    the expected outcome is the curated-registry cache. The chain is kept
+    because it costs nothing and data.gov may resurrect.
 
-    Needs: internet access to catalog.data.gov and/or www.census.gov.
-    Produces: the cache file (with a "via" field naming the source that
-    delivered); regen then picks it up automatically (a plain regen NEVER
-    pulls - this flag is the only network path). Only when ALL sources fail
-    AND no cache exists is the STUB_FILE_CATALOG written, marked "stub":
-    true, so the report's file-only surfaces render (clearly labeled) until
-    a networked machine runs the real pull. Returns True if a real
-    (non-stub) pull landed."""
+    Outcomes:
+      * all sources fail -> writes CURATED_FILE_REGISTRY as the cache (the
+        layer's normal data source, not an error state) unless a real
+        >REAL_UNIVERSE_MIN-record cache is already present.
+      * a source returns <= REAL_UNIVERSE_MIN records -> that's the known
+        ~1,790-record API catalog at a second URL, not the file-only
+        universe; cached as-is with a warning - regen detects it (all
+        records dedupe API-covered) and falls back to the registry.
+      * a source returns > REAL_UNIVERSE_MIN records (a real universe) ->
+        cached with the curated annotations merged on top (_merge_curated).
+    Returns True only when a real universe landed."""
     cache_path = repo / FILE_CATALOG_CACHE
     packages, via, n_src = None, None, len(FILE_CATALOG_SOURCES)
     for i, (label, kind, url) in enumerate(FILE_CATALOG_SOURCES, 1):
         try:
             if kind == "dcat":
                 print(f"  [file-catalog] source {i} ({label}): downloading "
-                      f"{url} - one ~100+ MB document, a dot per ~10 MB...")
+                      f"{url} - one large JSON document, a dot per ~10 MB...")
                 got = _pull_dcat(url)
             else:
                 got = _pull_ckan_pages(url, filter_org=(kind == "ckan_q"))
@@ -1159,26 +1472,47 @@ def pull_file_catalog(repo: Path):
             print(f"  [file-catalog] source {i} ({label}) failed: "
                   f"{_source_err(ex)}{more}")
     if packages is None:
-        print(f"  [file-catalog] all {n_src} sources failed - run "
-              f"`python tools/product_scope.py --pull-file-catalog` from a "
-              f"machine with internet access; the report renders without "
-              f"the file-only layer until then")
-        if not cache_path.exists():
-            stub = {"fetched_at": _now_iso_z(), "source": "stub (hand-written)",
-                    "via": "stub", "stub": True, "packages": STUB_FILE_CATALOG}
-            cache_path.write_text(json.dumps(stub, indent=1), encoding="utf-8")
-            print(f"  [file-catalog] wrote {len(STUB_FILE_CATALOG)}-record STUB cache "
-                  f"so the file-only render paths stay visible (clearly labeled)")
+        # The expected path since 2026-07-26: no machine-readable catalog
+        # of the file-only universe exists, so the curated registry is the
+        # layer's data source. Never clobber a real universe cache.
+        keep_real = False
+        if cache_path.exists():
+            try:
+                old = json.loads(cache_path.read_text(encoding="utf-8"))
+                keep_real = len(old.get("packages") or []) > REAL_UNIVERSE_MIN
+            except Exception:
+                keep_real = False
+        print(f"  [file-catalog] no machine-readable catalog exists for the "
+              f"Bureau's file-only universe (data.gov API retired; "
+              f"census.gov/data.json is the API catalog only). Using the "
+              f"team's curated registry: {len(CURATED_FILE_REGISTRY)} "
+              f"uncertainty-relevant datasets.")
+        if not keep_real:
+            _write_curated_cache(cache_path)
+        else:
+            print(f"  [file-catalog] existing real-universe cache kept "
+                  f"({cache_path.name})")
         return False
     print(f"  [file-catalog] pulled {len(packages):,} records via {via}")
+    if len(packages) <= REAL_UNIVERSE_MIN:
+        print(f"  [file-catalog] WARNING: {len(packages):,} records is the "
+              f"size of the Data API catalog, not the ~6,000-record "
+              f"universe - this source is likely serving the API catalog "
+              f"at a second URL (the 2026-07-26 data.json finding). "
+              f"Caching it anyway; regen will discard it and fall back to "
+              f"the curated registry if nothing survives dedup.")
+    else:
+        packages, n_ann, n_add = _merge_curated(packages)
+        print(f"  [file-catalog] real universe: merged curated annotations "
+              f"({n_ann} records annotated, {n_add} curated entries added)")
     cache = {"fetched_at": _now_iso_z(),
              "source": ("ckan:catalog.data.gov (package_search "
                         "organization:census-gov)" if "CKAN" in via
                         else "dcat:www.census.gov/data.json"),
-             "via": via, "stub": False, "packages": packages}
+             "via": via, "curated": False, "packages": packages}
     cache_path.write_text(json.dumps(cache, separators=(",", ":")), encoding="utf-8")
     print(f"  [file-catalog] cached {len(packages):,} records -> {cache_path.name}")
-    return True
+    return len(packages) > REAL_UNIVERSE_MIN
 
 # ============================================================================
 # ACCESS-PATHWAY CLASSIFICATION (both catalog layers)
@@ -1400,26 +1734,58 @@ def file_program_of(title, tags):
     return FILE_PROGRAM_FALLBACK
 
 def load_file_catalog(repo: Path, fams):
-    """Read file_catalog_cache.json (if present), dedup against the API
-    catalog (split_api_covered), classify each remaining record's access
-    pathways, and group by program. Returns None when no cache exists -
-    every caller then renders without the file-only layer. Shape:
-      {"datasets": [{title, desc, tags, url, pathways, program}, ...]
+    """Load the file-only layer: read file_catalog_cache.json, dedup
+    against the API catalog (split_api_covered), classify each remaining
+    record's access pathways, and group by program.
+
+    Curated-registry pivot (2026-07-26) - the layer ALWAYS renders, no
+    flag or network needed. Behavior matrix:
+      * no cache            -> auto-write CURATED_FILE_REGISTRY as the
+                               cache (no network) and load it.
+      * curated cache       -> refresh it from the in-code registry (the
+        (via 'curated', or     code is the source of truth, so registry
+        legacy 'stub')         edits show up on plain regen) and load it.
+      * real cache, but 0    -> it's the API catalog wearing a second URL
+        records survive        (Garrett's 1,790-record data.json pull);
+        dedup                  discard with a one-line note, fall back to
+                               the curated registry.
+      * real cache with     -> load it as-is (a genuine universe; curated
+        survivors              annotations were merged at pull time).
+
+    Shape:
+      {"datasets": [{title, desc, why, tags, url, pathways, program}, ...]
                     sorted by (program, title),
        "groups":   {program name: [dataset indices]},
-       "meta":     {stub, fetched_at, total_ckan, api_covered, file_only,
-                    pathway_counts}}"""
+       "meta":     {curated, fetched_at, total_ckan, api_covered,
+                    file_only, pathway_counts}}"""
     p = repo / FILE_CATALOG_CACHE
-    if not p.exists():
-        return None
-    try:
-        cache = json.loads(p.read_text(encoding="utf-8"))
-    except Exception as ex:
-        print(f"  [file-catalog] cache unreadable ({ex}); re-run "
-              f"--pull-file-catalog", file=sys.stderr)
-        return None
+    cache = None
+    if p.exists():
+        try:
+            cache = json.loads(p.read_text(encoding="utf-8"))
+        except Exception as ex:
+            print(f"  [file-catalog] cache unreadable ({ex}); rewriting "
+                  f"from the curated registry", file=sys.stderr)
+    if cache is None:
+        cache = _write_curated_cache(p)
+    elif cache.get("curated") or cache.get("stub"):
+        # Curated (or pre-pivot stub) cache: the in-code registry is the
+        # source of truth - refresh so registry edits land on plain regen.
+        if cache.get("packages") != CURATED_FILE_REGISTRY:
+            cache = _write_curated_cache(p)
     packages = cache.get("packages") or []
     file_only_pkgs, api_covered = split_api_covered(packages, fams)
+    if not file_only_pkgs and not (cache.get("curated") or cache.get("stub")):
+        # Wrong-thing cache: every record deduped as API-covered, so this
+        # "universe" is just the Data API catalog served at a second URL
+        # (the 2026-07-26 data.json finding). Discard it.
+        print(f"  [file-catalog] cache holds {len(packages):,} records but "
+              f"ALL dedupe as API-covered - that's the API catalog, not "
+              f"the file-only universe; using the curated registry instead "
+              f"({len(CURATED_FILE_REGISTRY)} uncertainty-relevant datasets)")
+        cache = _write_curated_cache(p)
+        packages = cache["packages"]
+        file_only_pkgs, api_covered = split_api_covered(packages, fams)
     datasets = []
     for pkg in file_only_pkgs:
         title = pkg.get("title") or pkg.get("name") or "(untitled)"
@@ -1434,6 +1800,10 @@ def load_file_catalog(repo: Path, fams):
         datasets.append({
             "title": title,
             "desc": desc,
+            # The curated registry's value-add: 1-2 lines on why this
+            # dataset matters for uncertainty analysis. Empty on plain
+            # auto-ingested records (only registry entries carry it).
+            "why": (pkg.get("why") or "").strip(),
             "tags": tags,
             "url": pkg.get("landing") or "",
             "pathways": classify_pathways(pkg.get("resources")),
@@ -1445,7 +1815,7 @@ def load_file_catalog(repo: Path, fams):
         groups.setdefault(d["program"], []).append(i)
         for pw in d["pathways"]:
             pw_counts[pw] = pw_counts.get(pw, 0) + 1
-    meta = {"stub": bool(cache.get("stub")),
+    meta = {"curated": bool(cache.get("curated") or cache.get("stub")),
             "fetched_at": cache.get("fetched_at", ""),
             "total_ckan": len(packages),
             "api_covered": api_covered,
@@ -3901,6 +4271,13 @@ details.lscape-kind-details[open]{padding-left:0;}
        padding:10px 14px;margin:0 0 12px;font-size:var(--fs-2);line-height:1.55;}
 .fo-banner code{font-family:var(--f-mono);font-size:var(--fs-1);
        background:#fff;border:1px solid var(--line);border-radius:4px;padding:1px 5px;}
+/* Curated-registry banner: informational (ice/navy), NOT warning-toned -
+   since the 2026-07-26 pivot the registry is the feature, not a stub. */
+.fo-banner-info{background:var(--ice,#EAF1FB);border-color:var(--line);}
+.fo-banner-info b{color:var(--navy);}
+/* Why-it-matters annotation line - the registry's value-add. */
+.fo-why{display:block;color:#B5482F;font-size:var(--fs-1);line-height:1.5;
+       margin-top:1px;}
 .fo-meta{font-size:var(--fs-2);color:var(--muted);line-height:1.6;margin:0 0 12px;}
 .fo-meta b{color:var(--navy);font-family:var(--f-mono);}
 .fo-group{background:#fff;border:1px solid var(--line);border-radius:8px;
@@ -3929,8 +4306,8 @@ details.lscape-kind-details[open]{padding-left:0;}
    "hatched = outside the API pipeline" reads the same in both places. */
 .lscape-fo-details > summary{background:repeating-linear-gradient(135deg,
        #E4E9F2 0,#E4E9F2 6px,#F1F4F9 6px,#F1F4F9 12px);border-radius:7px;}
-.lscape-fo-stubtag{font-family:var(--f-mono);font-size:10px;color:#8A6D1F;
-       background:#FBF6E7;border:1px solid var(--gold);border-radius:4px;
+.lscape-fo-curtag{font-family:var(--f-mono);font-size:10px;color:var(--navy);
+       background:var(--ice,#EAF1FB);border:1px solid var(--line);border-radius:4px;
        padding:1px 5px;margin-left:8px;vertical-align:middle;}
 .lscape-fo-row{padding:4px 2px 8px;}
 .lscape-fo-cap{font-size:var(--fs-2);color:var(--muted);line-height:1.55;
@@ -5574,7 +5951,8 @@ document.querySelectorAll('.filter input').forEach(function(inp){
           + "is proportional to product count. Click any box to drill into "
           + "that program's cards. Below the treemap, 'Beyond the API' shows "
           + "what this tool does NOT cover - the Bureau publishes thousands "
-          + "more file-only datasets."},
+          + "more file-only datasets (no machine-readable index exists, so "
+          + "the team curates the uncertainty-relevant ones)."},
     {sel: '.wwl-section',
      title: "What we've learned",
      body:  "One feed for every insight the team has recorded: curated head-"
@@ -7609,20 +7987,22 @@ def build_file_only_panel(file_cat):
     meta = file_cat["meta"]
     n = meta["file_only"]
 
-    # --- stub banner -------------------------------------------------------
+    # --- curated-registry banner (informational, not a warning) ------------
     banner = ""
-    if meta["stub"]:
+    if meta["curated"]:
         banner = (
-            '<div class="fo-banner"><b>Stub preview</b> &mdash; these are '
-            f'{n} hand-picked representative datasets (real census.gov '
-            'URLs) so this panel and its plumbing are visible and testable. '
-            'Run <code>python tools/product_scope.py --pull-file-catalog</code> '
-            'from a networked machine to load the full ~4,400-dataset '
-            'catalog from data.gov.</div>')
+            '<div class="fo-banner fo-banner-info"><b>Curated registry</b> '
+            '&mdash; the Bureau publishes no machine-readable index of its '
+            '~4,400 file-only datasets (data.gov&rsquo;s harvest API is '
+            'retired; census.gov/data.json covers only the Data API), so '
+            'this is the team&rsquo;s curated registry of the ones relevant '
+            'to uncertainty analysis, each annotated with why it matters. '
+            'Suggest additions via a team note.</div>')
 
     # --- meta line ---------------------------------------------------------
     fetched = (meta.get("fetched_at") or "")[:10]
-    src_note = ("hand-written stub" if meta["stub"] else
+    src_note = ("team-curated registry (hand-maintained in "
+                "tools/product_scope.py)" if meta["curated"] else
                 f'{meta["total_ckan"]:,} data.gov records, '
                 f'{meta["api_covered"]:,} deduped as already served by the '
                 f'Data API')
@@ -7670,6 +8050,7 @@ def build_file_only_panel(file_cat):
         "gn":  {_fo_slug(g): g for g in gorder},
         "g":   {_fo_slug(g): idxs for g, idxs in groups.items()},
         "ds": [{"t": d["title"], "d": d["desc"], "u": _u(d["url"]),
+                "y": d.get("why") or "",
                 "w": "".join(pw_code[p] for p in d["pathways"]),
                 "g": gindex[d["program"]],
                 "x": "|".join(d["tags"])[:90]} for d in ds],
@@ -7683,8 +8064,9 @@ def build_file_only_panel(file_cat):
         'trees, services, or pages - no api.census.gov endpoint, so none of '
         'the probe / sample / review machinery applies. This is the other '
         'side of the &ldquo;Beyond the API&rdquo; bar on Home: browse by '
-        'program group, follow a title out to its census.gov or data.gov '
-        'page. Every entry is badged with its access pathway.</div>')
+        'program group, follow a title out to its census.gov page. Every '
+        'entry is badged with its access pathway, and the coral line under '
+        'each title says why it matters for uncertainty analysis.</div>')
 
     js = (
         '<script>\n'
@@ -7721,6 +8103,9 @@ def build_file_only_panel(file_cat):
         '      : esc(d.t);\n'
         '    return \'<div class="fo-row" id="fo-r\' + i + \'">\' +\n'
         '      \'<span class="fo-t">\' + t + "</span>" + chips +\n'
+        '      /* the curated registry\'s value-add: why this matters for\n'
+        '         uncertainty analysis (empty on plain auto-ingested rows) */\n'
+        '      (d.y ? \'<span class="fo-why">\' + esc(d.y) + "</span>" : "") +\n'
         '      (d.d ? \'<span class="fo-d">\' + esc(d.d) + "</span>" : "") +\n'
         '      "</div>";\n'
         '  }\n'
@@ -9878,14 +10263,14 @@ def build_landscape_viz(fams, work, probes, data_cache, review=None,
             for gname, idxs in fo_groups)
         fo_top3 = " &middot; ".join(
             f'{_esc(g)} ({len(i)})' for g, i in fo_groups[:3])
-        fo_stub_tag = (' <span class="lscape-fo-stubtag">stub preview</span>'
-                       if file_cat["meta"]["stub"] else "")
+        fo_cur_tag = (' <span class="lscape-fo-curtag">curated</span>'
+                      if file_cat["meta"]["curated"] else "")
         row_html_parts.append(
             '<details class="lscape-kind-details lscape-fo-details disc" '
             'data-persist-key="lscape_kind_fileonly">'
             '<summary>'
             f'<span class="lscape-kind-sum-name">File-only datasets'
-            f'{fo_stub_tag}</span>'
+            f'{fo_cur_tag}</span>'
             f'<span class="lscape-kind-sum-count">{n_fo:,}</span>'
             f'<span class="disc-preview">top: {fo_top3}</span>'
             '</summary>'
@@ -9978,8 +10363,11 @@ def build_landscape_viz(fams, work, probes, data_cache, review=None,
             + ((f'{len(fams)} product families from the Census Data API '
                 f'catalog <b>plus {file_cat["meta"]["file_only"]:,} '
                 f'file-only datasets</b>'
-                + (' (stub preview)' if file_cat["meta"]["stub"] else '')
-                + ' from the Bureau&rsquo;s data.gov listing &mdash; the '
+                + (' the team curated for uncertainty relevance (the Bureau '
+                   'publishes no machine-readable index of its file-only '
+                   'universe)' if file_cat["meta"]["curated"] else
+                   ' from the Bureau&rsquo;s data.gov listing')
+                + ' &mdash; the '
                   'hatched &ldquo;File-only&rdquo; tier at the bottom of '
                   'the treemap. See <b>&ldquo;Beyond the API&rdquo;</b> '
                   'below for the coverage split.')
@@ -10114,16 +10502,17 @@ def build_beyond_api(fams, file_cat=None):
     proportional bar (API share filled, file-only remainder hatched) ->
     details.disc category list -> mentor-question pointer line.
 
-    File-only layer pass 2026-07-26: when the file catalog cache is present
-    the hardcoded ~29/71 approximation upgrades to LIVE counts in a SINGLE
-    unit (data.gov records: API-covered vs file-only, from
-    split_api_covered), and the hatched side becomes a click target that
-    jumps into the File-only panel. With only the stub cache the numbers
-    stay approximate (clearly labeled) but the panel jump still works."""
+    Curated-registry pivot 2026-07-26: the normal state is now the curated
+    registry (no machine-readable index of the file-only universe exists -
+    data.gov's harvest API is retired and census.gov/data.json covers only
+    the Data API), so the hatched side names that finding and links into
+    the curated panel. If a real auto-ingested universe ever lands, the
+    bar upgrades to LIVE counts in a SINGLE unit (catalog records:
+    API-covered vs file-only, from split_api_covered)."""
     n_fams = len(fams)
     live = bool(file_cat and file_cat["meta"]["file_only"]
-                and not file_cat["meta"]["stub"])
-    stub = bool(file_cat and file_cat["meta"]["stub"])
+                and not file_cat["meta"]["curated"])
+    curated = bool(file_cat and file_cat["meta"]["curated"])
     if live:
         m = file_cat["meta"]
         covered, fonly = m["api_covered"], m["file_only"]
@@ -10139,16 +10528,18 @@ def build_beyond_api(fams, file_cat=None):
                           f'them &rarr;')
     else:
         pct_api = 29
-        unit_note = ("Counts use different units: 6,000+ counts every release "
-                     "file on census.gov; this tool groups the API's ~1,800 "
+        unit_note = ("Counts use different units: ~6,158 counts every release "
+                     "file on census.gov's Datasets page (a website-CMS "
+                     "search-index number - no machine-readable version "
+                     "exists); this tool groups the API's ~1,800 "
                      "dataset-vintages into product families. The split shown "
                      "(~29%) is a rough proportion, not a measured share.")
         seg_api_label = (f'mapped here: ~1,800 API dataset-vintages &rarr; '
                          f'{n_fams} families')
-        seg_rest_label = ('not mapped: ~4,400 file-only datasets on '
-                          'census.gov'
-                          + (' &mdash; browse the stub preview &rarr;'
-                             if stub else ''))
+        seg_rest_label = ('~4,400 file-only datasets (no machine-readable '
+                          'index exists'
+                          + (' &mdash; we curate the relevant ones &rarr;)'
+                             if curated else ')'))
     items = []
     for name, why, url, in_here in BEYOND_API_CATEGORIES:
         badge = ('<span class="bapi-inhere" title="Already hand-added to '
@@ -10175,10 +10566,14 @@ def build_beyond_api(fams, file_cat=None):
                     f'{m["file_only"]:,} datasets, browsable in the '
                     f'File-only tab (click the hatched side)</span>')
     else:
-        stub_line = (' A stub preview of the file-only panel is loaded '
-                     '&mdash; counts stay approximate until '
-                     '<code>--pull-file-catalog</code> runs from a '
-                     'networked machine.' if stub else '')
+        curated_line = ((' No machine-readable index of that file-only '
+                         'universe exists (data.gov&rsquo;s harvest API is '
+                         'retired; census.gov/data.json turned out to be the '
+                         'API catalog at a second URL), so the team '
+                         '<b>curates the uncertainty-relevant ones</b> '
+                         f'&mdash; {file_cat["meta"]["file_only"]} datasets, '
+                         'each annotated with why it matters, in the '
+                         '<b>File-only datasets</b> tab.') if curated else '')
         sub = (
             '<div class="bapi-sub">'
             f'Everything above comes from the Census <b>Data API</b> catalog: '
@@ -10190,15 +10585,20 @@ def build_beyond_api(fams, file_cat=None):
             f'historical files) are not represented here. '
             f'One caveat: the two counts use different units, so the bar is a '
             f'rough proportion &mdash; hover it for the note.'
-            f'{stub_line}'
+            f'{curated_line}'
             '</div>')
-        leg_rest = ('<span class="bapi-leg-rest">Not in this tool &mdash; '
+        leg_rest = (('<span class="bapi-leg-rest">File-only &mdash; no '
+                     'public index; the '
+                     f'{file_cat["meta"]["file_only"]} uncertainty-relevant '
+                     'ones are curated in the File-only tab (click the '
+                     'hatched side)</span>') if curated else
+                    '<span class="bapi-leg-rest">Not in this tool &mdash; '
                     'bulk downloads, FTP releases, historical files (rough '
                     'share; units differ)</span>')
     # Hatched side becomes a jump target whenever the File-only panel
-    # exists (real pull OR stub); plain hatched fill otherwise.
+    # exists (real pull OR curated registry); plain hatched fill otherwise.
     rest_attrs = (' data-fo-browse="1" role="button" tabindex="0" '
-                  'style="cursor:pointer"' if (live or stub) else '')
+                  'style="cursor:pointer"' if (live or curated) else '')
     return (
         '<div class="bapi-section" role="region" '
         'aria-label="Beyond the API: what this tool does not map">'
@@ -10572,7 +10972,9 @@ def build_home_search(fams, review, file_cat=None):
         'Find a product</h2>',
         '<div class="hs-sub">Search the full ',
         f'{len(idx):,}-product catalog'
-        + (f' plus {file_cat["meta"]["file_only"]:,} file-only datasets'
+        + ((f' plus {file_cat["meta"]["file_only"]:,} curated file-only '
+            f'datasets' if file_cat["meta"]["curated"] else
+            f' plus {file_cat["meta"]["file_only"]:,} file-only datasets')
            if file_cat and file_cat["meta"]["file_only"] else '')
         + ' by keyword, topic, or geography level. '
         'Results jump straight to the card in the Products tab. '
@@ -11216,8 +11618,12 @@ def render(fams, review, work, worklog, notebooks, probes, repo_name, catnote, o
     # glossary terms all appear earlier on Home anyway.
     if file_cat and file_cat["meta"]["file_only"]:
         n_fo = file_cat["meta"]["file_only"]
+        # Curated registry (the normal state since the 2026-07-26 pivot):
+        # the tab says so - the count is the registry size, not a crawl.
+        fo_label = ("File-only datasets &middot; curated"
+                    if file_cat["meta"]["curated"] else "File-only datasets")
         tabs.append(f'<button class="tab tab-kind tab-fileonly" data-k="fileonly">'
-                    f'File-only datasets<span class="n">{n_fo:,}</span></button>')
+                    f'{fo_label}<span class="n">{n_fo:,}</span></button>')
         panels.append('<div class="panel panel-kind panel-fileonly" id="panel-fileonly">'
                       + build_file_only_panel(file_cat) + '</div>')
 
@@ -11248,12 +11654,14 @@ def main():
     ap.add_argument("--online", action="store_true")
     ap.add_argument("--pull-file-catalog", dest="pull_file_catalog",
                     action="store_true",
-                    help="one-time fetch of the Bureau's FULL dataset universe "
-                         "(~6,000 records) from data.gov's CKAN API into "
-                         f"{FILE_CATALOG_CACHE} - the file-only second catalog "
-                         "layer. Heavy network call, so a plain regen never "
-                         "does it; without the cache the report simply renders "
-                         "without the file-only layer.")
+                    help="try the (currently dead) machine-readable catalog "
+                         "sources for the Bureau's file-only universe; on "
+                         "all-fail (the expected outcome - no such catalog "
+                         f"exists) writes the curated registry to "
+                         f"{FILE_CATALOG_CACHE}. A plain regen never pulls "
+                         "and auto-writes the curated registry when no cache "
+                         "is present, so this flag is only worth running to "
+                         "re-test whether data.gov has resurrected.")
     ap.add_argument("--probe", metavar="PATH", action="append",
                     help="probe a single catalog path, e.g. --probe acs/acs5 (repeatable)")
     ap.add_argument("--export", choices=("csv", "xlsx"), default=None,
@@ -11324,10 +11732,11 @@ def main():
     else:
         out = Path(args.out).resolve() if args.out else repo / "product_report.html"
 
-    # File-only second layer: --pull-file-catalog fetches (or stubs) the
-    # data.gov universe into file_catalog_cache.json, then falls through to
-    # the normal regen/no-regen flow so the report reflects the fresh cache.
-    # Every plain regen just reads whatever cache is present - never pulls.
+    # File-only second layer: --pull-file-catalog re-tests the (currently
+    # dead) catalog sources and falls back to the curated registry, then
+    # falls through to the normal regen/no-regen flow. A plain regen never
+    # pulls; load_file_catalog auto-writes the curated registry when no
+    # cache is present, so the layer always renders.
     if getattr(args, "pull_file_catalog", False):
         pull_file_catalog(repo)
 
@@ -11429,19 +11838,25 @@ def _run_report_pipeline(repo, args, out):
         run_probe_queue(repo, fams, uniq, datetime.date.today().isoformat())
         probes = load_probes(repo)
 
-    # File-only second layer: read whatever cache --pull-file-catalog left
-    # (real, stub, or none). Loaded AFTER fams so the dedup can match
-    # against API family titles. File-only entries never enter `fams` and
-    # never touch product_review.json.
+    # File-only second layer: read whatever cache is present (curated
+    # registry, a real pulled universe, or none - the loader auto-writes
+    # the curated registry when missing, and discards a cache that proves
+    # to be the API catalog in disguise). Loaded AFTER fams so the dedup
+    # can match against API family titles. File-only entries never enter
+    # `fams` and never touch product_review.json.
     file_cat = load_file_catalog(repo, fams)
     if file_cat:
         m = file_cat["meta"]
-        print(f"  [file-catalog] {m['file_only']} file-only datasets in "
-              f"{len(file_cat['groups'])} program groups "
-              f"({m['api_covered']} of {m['total_ckan']} data.gov records "
-              f"deduped as API-covered)"
-              + (" - STUB preview; run --pull-file-catalog from a networked "
-                 "machine" if m["stub"] else ""))
+        if m["curated"]:
+            print(f"  [file-catalog] {m['file_only']} file-only datasets in "
+                  f"{len(file_cat['groups'])} program groups "
+                  f"(team-curated registry - no machine-readable catalog "
+                  f"of the Bureau's file-only universe exists)")
+        else:
+            print(f"  [file-catalog] {m['file_only']} file-only datasets in "
+                  f"{len(file_cat['groups'])} program groups "
+                  f"({m['api_covered']} of {m['total_ckan']} catalog records "
+                  f"deduped as API-covered)")
 
     review, rpath, first, added = load_review(repo, fams)
     if first:
