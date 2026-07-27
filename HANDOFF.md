@@ -1,6 +1,6 @@
 # HANDOFF.md — Session Handoff Notes
 
-**Written:** 2026-07-09 at project setup; **last updated 2026-07-20** — Justus's EDA 06–07 (Phase 2 bridge) pulled and accounted for; `JL_Work_Tree` merge pending.
+**Written:** 2026-07-09 at project setup; **last updated 2026-07-26** — Product Scope Tracker tour scroll-trap fixed; census.gov CMS dataset endpoint (`/bin/faceted/getfacets`, 710 results) discovered — tomorrow's scrape plan is next-work #1. (Prior update 2026-07-20: Justus's EDA 06–07 pulled and accounted for; `JL_Work_Tree` merge pending.)
 **For:** the next Claude session (or teammate) picking this work up cold.
 
 ---
@@ -85,11 +85,16 @@
 
 ## Next work, in priority order
 
-1. **Merge `origin/JL_Work_Tree` into `main`** (lead-coordinated with Justus — his call or ours, decide together). His branch carries the analysis modules + unit tests notebooks 06/07 need, his JL_Analysis sandbox, glossary additions, and a findings-report §8 update. The `main` README was pre-aligned **verbatim** with his branch's README hunks on 2026-07-20, so that file merges clean; expect a small WORKLOG conflict (both sides added entries — keep both). **After merging:** run `analysis/test_*.py`, re-execute notebooks 06/07 top-to-bottom locally, confirm `eda06_*`/`eda07_*` charts regenerate.
-2. **Present the July 22 biweekly** (deck ready: `docs/biweekly-2026-07-22.pptx`; speaker notes on every slide; the README "Open Questions for Mentors" list — now including Justus's four — is the canonical question set). Decide beforehand whether EDA 06's 22.8% blind-spot number gets a slide. Afterward: log mentor answers as decisions in this file and the README.
-3. **Composite-score phase proper** (post-biweekly, once tier-philosophy + score-input questions are answered) — EDA 06/07 are the prototype; component list with empirical justification is in `docs/phase1-findings-report.md` §6.
-4. Pin package versions to a lockfile (reproducibility deliverable).
-5. Complete `docs/data-dictionary.md` (DHC, Demographic Profile, PPMF entries) once mentors confirm the product shortlist.
+1. **Product Scope Tracker — scrape the census.gov CMS dataset universe (Garrett, tomorrow 2026-07-27).** The Datasets page's backing endpoint was discovered late on 07-26: `https://www.census.gov/bin/faceted/getfacets` (AEM servlet), and the page shows **710 results — not the ~6,158 this project has been assuming from that same page**; do not cite either number until reconciled. Steps, in order:
+   1. **Capture the full getfacets request shape from browser DevTools** on the live Datasets page — exact URL, method, and payload — plus the results-pagination XHR fired by clicking page 2 (the facet call and the results call may be different endpoints).
+   2. **Build the CMS scraper as source 5 in `FILE_CATALOG_SOURCES`** in `tools/product_scope.py` (or replace the dead CKAN chain outright — CKAN is retired, `data.json` is the API catalog in disguise). Then **reconcile the three counts** — 710 (CMS page) vs ~6,158 (previously assumed from the same page) vs ~4,400 (file-only estimate) — they are almost certainly different units; the "Beyond the API" panel numbers get updated to whatever the verified figures are.
+   3. **Write the "how Census datasets are spread across sources" explainer** — the full map of where Bureau data lives (Data API / CMS Datasets listing / FTP tree / TIGERweb / interactive tools like data.census.gov), which universe each covers, and how they overlap. Likely shape: a new `/docs` page plus a compact visual in the tool itself.
+   4. **Spot-check the 11 comment-flagged registry URLs from Windows** (`# URL unverified - check on Windows` in `CURATED_FILE_REGISTRY`) — sandbox network can't reach them; a browser can.
+2. **Merge `origin/JL_Work_Tree` into `main`** (lead-coordinated with Justus — his call or ours, decide together). His branch carries the analysis modules + unit tests notebooks 06/07 need, his JL_Analysis sandbox, glossary additions, and a findings-report §8 update. The `main` README was pre-aligned **verbatim** with his branch's README hunks on 2026-07-20, so that file merges clean; expect a small WORKLOG conflict (both sides added entries — keep both). **After merging:** run `analysis/test_*.py`, re-execute notebooks 06/07 top-to-bottom locally, confirm `eda06_*`/`eda07_*` charts regenerate.
+3. **Present the July 22 biweekly** (deck ready: `docs/biweekly-2026-07-22.pptx`; speaker notes on every slide; the README "Open Questions for Mentors" list — now including Justus's four — is the canonical question set). Decide beforehand whether EDA 06's 22.8% blind-spot number gets a slide. Afterward: log mentor answers as decisions in this file and the README.
+4. **Composite-score phase proper** (post-biweekly, once tier-philosophy + score-input questions are answered) — EDA 06/07 are the prototype; component list with empirical justification is in `docs/phase1-findings-report.md` §6.
+5. Pin package versions to a lockfile (reproducibility deliverable).
+6. Complete `docs/data-dictionary.md` (DHC, Demographic Profile, PPMF entries) once mentors confirm the product shortlist.
 
 ## Environment gotchas
 

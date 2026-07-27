@@ -4507,9 +4507,13 @@ footer{padding:22px 44px;color:var(--muted);font-size:var(--fs-2);}
      font-size:var(--fs-1);background:var(--ice);color:var(--navy);
      border:1px solid var(--line);border-radius:3px;font-weight:var(--w-head);
      margin:0 2px;}
-/* When the tour is running, lift the header/freshbar out of the dimming so
-   they're not confusing dead pixels behind the halo. */
-body.tour-running{overflow:hidden;}
+/* Tour scroll-trap fix 2026-07-26: the tour must NEVER lock page scroll.
+   An earlier version set overflow:hidden on body here, which also disabled
+   window.scrollTo - any below-the-fold stop (step 3, the curriculum menu)
+   left the whole page dimmed with the callout off-screen and no way to
+   scroll out. The overlay now follows the target via a scroll listener
+   instead, so manual scrolling stays available for the whole tour. */
+body.tour-running{/* intentionally empty - no scroll lock */}
 .freshbar .kbd-hint kbd{display:inline-block;padding:0 5px;margin:0 2px;font-family:var(--f-mono);
      font-size:var(--fs-1);background:#28356B;color:#F5D77A;border:1px solid #3A4890;border-radius:3px;
      box-shadow:inset 0 -1px 0 #0F1738;font-weight:var(--w-head);line-height:14px;}
@@ -5912,12 +5916,17 @@ document.querySelectorAll('.filter input').forEach(function(inp){
 })();
 /* -------------------------------------------------------------------------
    UX pass 2026-07-26 commit #6 - Guided tour mode.
-   Walks a first-time reader through Home in 7 stops (~15s each). Overlay
+   Walks a first-time reader through Home in 6 stops (~15s each). Overlay
    dims the page except for a halo around the current step's target; the
    floating callout box carries the copy + next/back/skip controls.
    State: localStorage 'product_scope:tour_seen' remembers completion so the
    launcher hides itself after one full pass (the small "?" re-entry stays).
    No new deps: pure vanilla JS + the fixed-position DOM added above.
+   Scroll-trap fix 2026-07-26: no scroll lock; scrollIntoView + a rAF-
+   throttled scroll listener keep the halo glued to the target; stops whose
+   targets are missing/hidden are skipped (console.warn); the callout is
+   always clamped inside the viewport so Skip/Next stay reachable; Escape
+   exits from any state.
    -------------------------------------------------------------------------- */
 (function(){
   var TOUR_SEEN_KEY = 'product_scope:tour_seen';
@@ -5991,27 +6000,41 @@ document.querySelectorAll('.filter input').forEach(function(inp){
     launch.classList.add('hidden');
     relaunch.classList.add('visible');
   }
-  function _rectOf(sel){
-    var el = document.querySelector(sel);
-    if (!el) return null;
-    /* Ensure element is in view before measuring. Scroll with instant
-       behavior so we don't race the transition. */
+  function _visible(el){
+    /* True when the element participates in layout with a real box.
+       Catches display:none (e.g. a dismissed Start-here banner), detached
+       nodes, and zero-height collapsed containers. */
+    if (!el || !el.getClientRects().length) return false;
     var r = el.getBoundingClientRect();
-    if (r.top < 60 || r.bottom > window.innerHeight - 40){
-      var y = r.top + window.pageYOffset - 100;
-      window.scrollTo({top: y, behavior: 'smooth'});
+    return (r.width > 1 && r.height > 1);
+  }
+  function _target(stop){
+    /* Resolve a stop's target, opening any collapsed <details> ancestors
+       first so the element has a real box to scroll to and highlight.
+       Returns null when the target is missing or still invisible. */
+    var el = document.querySelector(stop.sel);
+    if (!el) return null;
+    for (var p = el; p; p = p.parentElement){
+      if (p.tagName === 'DETAILS' && !p.open) p.open = true;
     }
-    return el.getBoundingClientRect();
+    return _visible(el) ? el : null;
+  }
+  function _placeCurrent(){
+    var el = document.querySelector(STOPS[idx].sel);
+    if (el) _place(el.getBoundingClientRect());
   }
   function _place(rect){
     /* Position the four dim panels so their combined absence is a hole
        around the target rect. */
     var W = window.innerWidth, H = window.innerHeight;
     var pad = 8;
-    var rTop = Math.max(0, rect.top - pad);
-    var rLeft = Math.max(0, rect.left - pad);
-    var rBottom = Math.min(H, rect.bottom + pad);
-    var rRight = Math.min(W, rect.right + pad);
+    /* Clamp every edge to the viewport: mid-scroll (or if the target is
+       momentarily off-screen) the dim panels must never exceed the screen,
+       or the top dim alone can black out the whole page. */
+    var rTop = Math.min(H, Math.max(0, rect.top - pad));
+    var rLeft = Math.min(W, Math.max(0, rect.left - pad));
+    var rBottom = Math.max(0, Math.min(H, rect.bottom + pad));
+    var rRight = Math.max(0, Math.min(W, rect.right + pad));
     /* top dim */
     dims[0].style.top = 0; dims[0].style.left = 0;
     dims[0].style.width = W + 'px'; dims[0].style.height = rTop + 'px';
@@ -6030,35 +6053,47 @@ document.querySelectorAll('.filter input').forEach(function(inp){
     halo.style.top = rTop + 'px'; halo.style.left = rLeft + 'px';
     halo.style.width = Math.max(0, rRight - rLeft) + 'px';
     halo.style.height = Math.max(0, rBottom - rTop) + 'px';
-    /* callout: prefer below the target; if that overflows, above it. */
+    /* callout: prefer below the target; if that overflows, above it; and
+       ALWAYS clamp inside the viewport so Skip/Next stay reachable even
+       while the target is scrolling into place. */
     var cw = 296, ch = callout.offsetHeight || 180;
     var cLeft = Math.min(W - cw - 12, Math.max(12, rect.left + rect.width/2 - cw/2));
     var cTop = rBottom + 14;
     if (cTop + ch > H - 12){
-      cTop = Math.max(12, rTop - ch - 14);
+      cTop = rTop - ch - 14;
     }
+    cTop = Math.max(12, Math.min(H - ch - 12, cTop));
     callout.style.left = cLeft + 'px';
     callout.style.top = cTop + 'px';
   }
-  function _show(i){
-    if (i < 0) i = 0;
+  function _show(i, dir){
+    dir = dir || 1;
+    /* Skip stops whose targets are missing OR hidden (dismissed banner,
+       section not rendered in this build) rather than showing a broken
+       overlay. Direction-aware so Back skips backward over them too. */
+    while (i >= 0 && i < STOPS.length && !_target(STOPS[i])){
+      if (window.console && console.warn){
+        console.warn('[tour] skipping stop ' + (i + 1) +
+                     ' - target missing or hidden: ' + STOPS[i].sel);
+      }
+      i += dir;
+    }
+    if (i < 0) return;              /* no visible stop behind us: stay put */
     if (i >= STOPS.length){ _end(); return; }
     idx = i;
     var stop = STOPS[idx];
-    /* If the current stop's target is missing entirely, skip it forward. */
-    if (!document.querySelector(stop.sel)){
-      if (idx === STOPS.length - 1) return _end();
-      return _show(idx + 1);
-    }
+    var el = document.querySelector(stop.sel);
     titleEl.textContent = stop.title;
     bodyEl.textContent = stop.body;
     idxEl.textContent = (idx + 1) + ' / ' + STOPS.length;
     prevBtn.disabled = (idx === 0);
     nextBtn.textContent = (idx === STOPS.length - 1) ? 'Finish' : 'Next →';
-    /* Measure AFTER text swap so callout height is correct. */
-    var rect = _rectOf(stop.sel);
-    if (!rect) return _end();
-    _place(rect);
+    /* Bring the target into view; the scroll listener below repositions
+       the halo/callout on every frame of the smooth scroll (and during
+       any manual scrolling - the page is never scroll-locked). Position
+       AFTER the text swap so callout height is measured correctly. */
+    if (el.scrollIntoView) el.scrollIntoView({block: 'center', behavior: 'smooth'});
+    _placeCurrent();
   }
   function _start(){
     document.body.classList.add('tour-running');
@@ -6067,9 +6102,14 @@ document.querySelectorAll('.filter input').forEach(function(inp){
     var homeTab = document.querySelector('.tab[data-k="home"]');
     if (homeTab && !homeTab.classList.contains('on')) homeTab.click();
     idx = 0;
-    /* Give the layout one frame to settle after the tab click, then show. */
-    setTimeout(function(){ _show(0); }, 20);
-    nextBtn.focus();
+    /* Give the layout one frame to settle after the tab click, then show.
+       Focus Next after placement (preventScroll where supported) so the
+       focus jump can't fight the scrollIntoView animation. */
+    setTimeout(function(){
+      _show(0, 1);
+      try { nextBtn.focus({preventScroll: true}); }
+      catch(_){ nextBtn.focus(); }
+    }, 20);
   }
   function _end(){
     document.body.classList.remove('tour-running');
@@ -6079,23 +6119,33 @@ document.querySelectorAll('.filter input').forEach(function(inp){
   }
   launch.addEventListener('click', _start);
   relaunch.addEventListener('click', _start);
-  nextBtn.addEventListener('click', function(){ _show(idx + 1); });
-  prevBtn.addEventListener('click', function(){ _show(idx - 1); });
+  nextBtn.addEventListener('click', function(){ _show(idx + 1, 1); });
+  prevBtn.addEventListener('click', function(){ _show(idx - 1, -1); });
   skipBtn.addEventListener('click', _end);
-  /* Keyboard nav while the tour is running. */
+  /* Keyboard nav while the tour is running. Escape ALWAYS exits. */
   document.addEventListener('keydown', function(e){
     if (overlay.hidden) return;
     if (e.key === 'Escape'){ e.preventDefault(); _end(); }
-    else if (e.key === 'ArrowRight' || e.key === 'Enter'){ e.preventDefault(); _show(idx + 1); }
-    else if (e.key === 'ArrowLeft'){ e.preventDefault(); _show(idx - 1); }
+    else if (e.key === 'ArrowRight' || e.key === 'Enter'){ e.preventDefault(); _show(idx + 1, 1); }
+    else if (e.key === 'ArrowLeft'){ e.preventDefault(); _show(idx - 1, -1); }
   });
   /* Reflow on resize so the halo tracks the target. */
   window.addEventListener('resize', function(){
-    if (!overlay.hidden){
-      var r = _rectOf(STOPS[idx].sel);
-      if (r) _place(r);
-    }
+    if (!overlay.hidden) _placeCurrent();
   });
+  /* Reposition on every scroll (rAF-throttled) so the overlay tracks the
+     target through smooth programmatic scrolls AND manual scrolling. This
+     replaces the old body{overflow:hidden} scroll lock, which also broke
+     window scrolling entirely and trapped readers at below-the-fold stops. */
+  var _raf = false;
+  window.addEventListener('scroll', function(){
+    if (overlay.hidden || _raf) return;
+    _raf = true;
+    requestAnimationFrame(function(){
+      _raf = false;
+      if (!overlay.hidden) _placeCurrent();
+    });
+  }, {passive: true});
 })();
 </script>
 <footer>product_scope.py &bull; re-run before each biweekly &bull; --online refreshes the catalog &bull;
