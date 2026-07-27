@@ -1115,16 +1115,68 @@ def pathway_chips_html(pws):
         f'title="{_esc(PATHWAY_INFO[p][0])}">{p}</span>'
         for p in pws)
 
+def _howto_copy(cmd):
+    """Inline click-to-copy snippet for the pathway how-to guide (reuses the
+    standard .copy-cmd control; cmd must not contain double quotes)."""
+    e = _esc(cmd)
+    return (f'<span class="copy-cmd light"><code>{e}</code>'
+            f'<button data-copy="{e}">Copy</button></span>')
+
+def _pathway_howto_rows():
+    """The six how-to lines behind the legend's expandable guide (Garrett
+    request 2026-07-26: badges say WHICH pathway, this says HOW to fetch
+    through each). Returns {pathway: instruction_html}. Kept in one place so
+    every legend surface renders the identical guide."""
+    return {
+        "API": ('Queryable in one command from this tool: '
+                + _howto_copy("python tools/product_scope.py --sample <id>")
+                + ' Or directly: <code>https://api.census.gov/data/&lt;year&gt;/'
+                  '&lt;dataset&gt;?get=&lt;vars&gt;&amp;for=&lt;geo&gt;</code>. '
+                  'Free key optional under 500 req/day.'),
+        "BULK": ('Download the CSV/XLSX/ZIP from the linked census.gov page, '
+                 'then read with pandas: '
+                 + _howto_copy("pd.read_csv('file.csv')") + ' No key needed.'),
+        "FTP": ('Browse <a href="https://www2.census.gov/" target="_blank" '
+                'rel="noopener">www2.census.gov</a> like a file explorer; '
+                'fetch by URL with your browser or <code>urllib</code>. Best '
+                'for historical vintages + state-by-state file sets.'),
+        "TIGERWEB": ('Geography: download shapefiles from the '
+                     '<a href="https://www.census.gov/geographies/'
+                     'mapping-files.html" target="_blank" rel="noopener">'
+                     'mapping-files page</a> then '
+                     + _howto_copy("gpd.read_file('shapefile.shp')")
+                     + ' or query the TIGERweb REST service for boundaries '
+                       'without a download.'),
+        "TOOL": ('Interactive only (data.census.gov / MDAT): filter in the '
+                 'web UI, export CSV via the download button. Fine for '
+                 'one-offs; for reproducible pipelines note the query params '
+                 'in WORKLOG.'),
+        "PAGE": ('Landing page only - open it to find the actual '
+                 'distribution (usually leads to one of the above).'),
+    }
+
 def pathway_legend_html(subset=None, lead="Access pathways"):
-    """Mini-legend rendered where badges first appear. `subset` limits the
-    legend to the pathways actually present on that surface."""
+    """Mini-legend rendered where badges first appear, wrapped in a
+    details.disc disclosure whose body is the per-pathway how-to guide
+    (collapsed by default). `subset` limits both the chip legend and the
+    guide rows to the pathways actually present on that surface. Single
+    shared renderer for every surface so legend and guide can't drift."""
     show = [p for p in PATHWAYS if subset is None or p in subset]
     bits = "".join(
         f'<span class="pwleg"><span class="pwchip pw-{p.lower()}">{p}</span>'
         f'<span class="pwleg-t">{_esc(PATHWAY_INFO[p][0])}</span></span>'
         for p in show)
-    return (f'<div class="pw-legend"><b>{_esc(lead)}</b> - how you actually '
-            f'get each dataset: {bits}</div>')
+    howto = _pathway_howto_rows()
+    rows = "".join(
+        f'<div class="pw-howto-row"><span class="pwchip pw-{p.lower()}">{p}'
+        f'</span><span class="pw-howto-t">{howto[p]}</span></div>'
+        for p in show)
+    return (f'<div class="pw-legend"><details class="disc pw-howto">'
+            f'<summary><span class="pw-legend-sum"><b>{_esc(lead)}</b> - '
+            f'how you actually get each dataset: {bits}'
+            f'<span class="pwleg-hint">how do I use these? ▸</span>'
+            f'</span></summary>'
+            f'<div class="pw-howto-body">{rows}</div></details></div>')
 
 # ---------------------------------------------------------------------------
 # Program grouping for file-only records. The API side derives programs from
@@ -3662,6 +3714,26 @@ details.lscape-kind-details[open]{padding-left:0;}
 .pw-legend .pwleg{display:inline-block;margin:0 14px 0 0;white-space:nowrap;
        max-width:100%;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom;}
 .pw-legend .pwleg-t{margin-left:2px;}
+/* Expandable how-to guide attached to the legend (Garrett request
+   2026-07-26): the chip legend is the details.disc summary, the body is one
+   compact row per pathway saying HOW to fetch data through it. */
+.pw-legend details.pw-howto > summary{padding:2px 4px;margin-left:-4px;}
+.pw-legend .pw-legend-sum{min-width:0;flex:1;white-space:normal;
+       font-weight:var(--w-body);color:var(--muted);}
+.pw-legend .pwleg-hint{color:#3A6EA5;font-weight:var(--w-emph);
+       white-space:nowrap;margin-left:4px;}
+.pw-legend details.pw-howto[open] .pwleg-hint{display:none;}
+.pw-howto-body{margin-top:8px;border-top:1px dashed var(--line);
+       padding-top:8px;}
+.pw-howto-row{display:flex;gap:8px;align-items:baseline;margin:0 0 6px;
+       line-height:1.6;}
+.pw-howto-row:last-child{margin-bottom:0;}
+.pw-howto-row .pwchip{flex:0 0 auto;cursor:default;}
+.pw-howto-t{color:var(--ink);min-width:0;}
+.pw-howto-t code{font-family:var(--f-mono);background:#EFF2F7;
+       padding:1px 4px;border-radius:3px;font-size:11px;}
+.pw-howto-t .copy-cmd{margin:0 2px;vertical-align:baseline;}
+.pw-howto-t .copy-cmd code{background:transparent;padding:0;}
 /* --- File-only datasets panel (5th Products tab) ---
    Program-group cards in the unified details.disc grammar; dataset rows
    are compact list rows rendered lazily by JS from window.__FO_DATA (never

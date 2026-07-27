@@ -102,6 +102,21 @@ Inside a tab: **program → subject → products**. The subject level only appea
 
 ---
 
+## Access pathways
+
+Every dataset carries one or more colored badges saying **how** you actually get its data. The legend in the report expands into this same guide ("how do I use these?"):
+
+| Badge | How to get the data |
+|---|---|
+| `API` | Queryable in one command from this tool: `python tools/product_scope.py --sample <id>`. Or directly: `https://api.census.gov/data/<year>/<dataset>?get=<vars>&for=<geo>`. Free key optional under 500 req/day. |
+| `BULK` | Download the CSV/XLSX/ZIP from the linked census.gov page, then read with pandas: `pd.read_csv('file.csv')`. No key needed. |
+| `FTP` | Browse `www2.census.gov` like a file explorer; fetch by URL with your browser or `urllib`. Best for historical vintages + state-by-state file sets. |
+| `TIGERWEB` | Geography: download shapefiles from the [mapping-files page](https://www.census.gov/geographies/mapping-files.html) → `gpd.read_file(...)`, or query the TIGERweb REST service for boundaries without a download. |
+| `TOOL` | Interactive only (data.census.gov / MDAT): filter in the web UI, export CSV via the download button. Fine for one-offs; for reproducible pipelines note the query params in WORKLOG. |
+| `PAGE` | Landing page only — open it to find the actual distribution (usually leads to one of the above). |
+
+---
+
 ## Keyboard shortcuts and shareable views
 
 The report is browsable by keyboard once it's loaded. All of these are progressive enhancements — the report still works with JavaScript off, you just lose the shortcuts.
