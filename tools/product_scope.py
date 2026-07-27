@@ -34,7 +34,7 @@ Usage:
 Output: product_report.html (self-contained, no CDN, no storage APIs).
 """
 
-import argparse, json, os, re, subprocess, sys, datetime, time, urllib.request, webbrowser
+import argparse, json, os, re, subprocess, sys, datetime, tempfile, time, urllib.error, urllib.request, webbrowser
 from pathlib import Path
 
 try:
@@ -755,16 +755,39 @@ def fetch_catalog(cache_path: Path, online: bool):
 
 FILE_CATALOG_CACHE = "file_catalog_cache.json"
 
-# CKAN package_search on catalog.data.gov, filtered to the Census Bureau
-# organization. Pageable (rows/start), light (~1-2 MB per 1,000-row page),
-# ~6,000 records total. Fallback source if CKAN ever changes shape or
-# blocks: the Bureau's own DCAT file at https://www.census.gov/data.json
-# carries the same universe, but it is a single ~100+ MB document that
-# needs a chunked/streaming read - CKAN first because it pages.
-CKAN_SEARCH_URL = ("https://catalog.data.gov/api/3/action/package_search"
-                   "?fq=organization:census-gov&rows={rows}&start={start}")
+# SOURCE FALLBACK CHAIN (2026-07-26: catalog.data.gov started 404ing the
+# /api/3/ path during data.gov's catalog-infrastructure reshuffle, which
+# broke Garrett's real pull). --pull-file-catalog now tries each source in
+# order until one yields records:
+#   1. CKAN v3 path         catalog.data.gov/api/3/action/package_search?fq=
+#   2. CKAN unversioned     catalog.data.gov/api/action/package_search?fq=
+#      (CKAN has historically served both the versioned and bare path)
+#   3. CKAN with q=         same v3 path but q= instead of fq= - some CKAN
+#      configs restrict fq; q= can return false positives, so hits are
+#      filtered client-side on pkg["organization"]["name"] == "census-gov"
+#      whenever that field is present
+#   4. census.gov DCAT      the Bureau's own Project Open Data catalog at
+#      https://www.census.gov/data.json - the same universe data.gov
+#      harvests, but ONE ~100+ MB JSON document (streamed to a temp file
+#      with progress dots, then parsed and slimmed via _slim_dcat)
+# CKAN sources page (rows/start, ~1-2 MB per 1,000-row page, ~6,000
+# records); DCAT is last exactly because it does not page.
+FILE_CATALOG_SOURCES = [
+    ("CKAN v3", "ckan",
+     "https://catalog.data.gov/api/3/action/package_search"
+     "?fq=organization:census-gov&rows={rows}&start={start}"),
+    ("CKAN unversioned", "ckan",
+     "https://catalog.data.gov/api/action/package_search"
+     "?fq=organization:census-gov&rows={rows}&start={start}"),
+    ("CKAN q= search", "ckan_q",
+     "https://catalog.data.gov/api/3/action/package_search"
+     "?q=organization:census-gov&rows={rows}&start={start}"),
+    ("census.gov DCAT", "dcat", "https://www.census.gov/data.json"),
+]
 CKAN_PAGE_ROWS = 1000
-CKAN_TIMEOUT = 30          # seconds per page; one retry per page
+CKAN_TIMEOUT = 30          # seconds per CKAN page; one retry per page
+DCAT_TIMEOUT = 120         # connect timeout for the big data.json download
+_CATALOG_UA = {"User-Agent": "census-uncertainty-capstone/1.0"}
 
 def _slim_ckan(pkg):
     """Reduce one CKAN package (which can run to tens of KB of harvest
@@ -786,6 +809,45 @@ def _slim_ckan(pkg):
             "title": (pkg.get("title") or "").strip(),
             "notes": notes[:400],
             "tags": tags[:12],
+            "resources": resources,
+            "landing": landing}
+
+def _slim_dcat(entry):
+    """Reduce one DCAT dataset entry (from census.gov/data.json, Project
+    Open Data schema) to the SAME slim shape _slim_ckan produces, so every
+    downstream consumer (dedup, pathway classification, program grouping)
+    is source-agnostic. Defensive throughout: real-world data.json entries
+    drop fields, ship keyword as a bare string, or ship distribution as a
+    single dict instead of a list."""
+    ident = entry.get("identifier") or entry.get("title") or ""
+    name = re.sub(r"[^a-z0-9]+", "-", str(ident).lower()).strip("-")[:100]
+    kw = entry.get("keyword")
+    if isinstance(kw, str):
+        kw = [kw]
+    elif not isinstance(kw, list):
+        kw = []
+    tags = [str(k).strip() for k in kw if str(k).strip()][:12]
+    dists = entry.get("distribution")
+    if isinstance(dists, dict):
+        dists = [dists]
+    elif not isinstance(dists, list):
+        dists = []
+    dists = [d for d in dists if isinstance(d, dict)]
+    resources = [{"url": str(d.get("downloadURL") or d.get("accessURL") or "").strip(),
+                  "format": str(d.get("format") or d.get("mediaType") or "").strip()}
+                 for d in dists][:20]
+    notes = re.sub(r"\s+", " ", str(entry.get("description") or "")).strip()
+    landing = str(entry.get("landingPage") or "").strip()
+    if not landing:
+        for d in dists:
+            au = str(d.get("accessURL") or "").strip()
+            if au:
+                landing = au
+                break
+    return {"name": name,
+            "title": str(entry.get("title") or "").strip(),
+            "notes": notes[:400],
+            "tags": tags,
             "resources": resources,
             "landing": landing}
 
@@ -965,27 +1027,36 @@ STUB_FILE_CATALOG = [
      "landing": "https://www.census.gov/programs-surveys/international-programs/about/idb.html"},
 ]
 
-def pull_file_catalog(repo: Path):
-    """--pull-file-catalog: crawl the Census Bureau's full dataset universe
-    from data.gov's CKAN API (paged; ~6,000 records expected, ~6-7 pages)
-    and cache the slimmed records to file_catalog_cache.json at the repo
-    root (gitignored, same pattern as scope_field_cache.json).
+def _source_err(ex):
+    """One-line human string for a failed catalog source. HTTP errors get
+    the short 'HTTP 404' form (the full urllib text is noisy); everything
+    else falls back to str(ex) or the exception class name."""
+    if isinstance(ex, urllib.error.HTTPError):
+        return f"HTTP {ex.code}"
+    return str(ex) or ex.__class__.__name__
 
-    Needs: internet access to catalog.data.gov. Produces: the cache file;
-    regen then picks it up automatically (a plain regen NEVER pulls - this
-    flag is the only network path). On total failure with no existing cache,
-    writes the STUB_FILE_CATALOG marked "stub": true so the report's
-    file-only surfaces render (clearly labeled) until a networked machine
-    runs the real pull. Returns True if a real (non-stub) pull landed."""
-    cache_path = repo / FILE_CATALOG_CACHE
-    packages, start, total, err = [], 0, None, None
+def _ckan_org_ok(pkg):
+    """Client-side organization filter for the q= CKAN source, whose free-
+    text match can return false positives. Keep the package when the
+    organization field is absent/odd-shaped (can't disprove) or when it
+    names census-gov."""
+    org = pkg.get("organization")
+    if not isinstance(org, dict):
+        return True
+    return (org.get("name") or "census-gov") == "census-gov"
+
+def _pull_ckan_pages(url_tmpl, filter_org=False):
+    """Page through one CKAN package_search endpoint (rows/start) and return
+    the full slimmed package list. One retry per page. Raises on HTTP/parse
+    failure or a success=false payload so the caller can fall through to the
+    next source in FILE_CATALOG_SOURCES."""
+    packages, start, total = [], 0, None
     while True:
-        url = CKAN_SEARCH_URL.format(rows=CKAN_PAGE_ROWS, start=start)
-        payload = None
+        url = url_tmpl.format(rows=CKAN_PAGE_ROWS, start=start)
+        payload, err = None, None
         for attempt in (1, 2):   # one retry per page
             try:
-                req = urllib.request.Request(
-                    url, headers={"User-Agent": "census-uncertainty-capstone/1.0"})
+                req = urllib.request.Request(url, headers=_CATALOG_UA)
                 with urllib.request.urlopen(req, timeout=CKAN_TIMEOUT) as r:
                     payload = json.load(r)
                 break
@@ -993,33 +1064,120 @@ def pull_file_catalog(repo: Path):
                 err = ex
                 if attempt == 1:
                     time.sleep(2)
-        if payload is None or not payload.get("success"):
-            print(f"  [file-catalog] pull failed at start={start} ({err}) - run "
-                  f"`python tools/product_scope.py --pull-file-catalog` from a "
-                  f"machine with internet access; the report renders without "
-                  f"the file-only layer until then")
-            if not cache_path.exists():
-                stub = {"fetched_at": _now_iso_z(), "source": "stub (hand-written)",
-                        "stub": True, "packages": STUB_FILE_CATALOG}
-                cache_path.write_text(json.dumps(stub, indent=1), encoding="utf-8")
-                print(f"  [file-catalog] wrote {len(STUB_FILE_CATALOG)}-record STUB cache "
-                      f"so the file-only render paths stay visible (clearly labeled)")
-            return False
+        if payload is None:
+            raise err if err is not None else RuntimeError(
+                f"no payload at start={start}")
+        if not payload.get("success"):
+            raise RuntimeError(f"CKAN success=false at start={start}")
         res = payload.get("result") or {}
         total = res.get("count", 0)
         batch = res.get("results") or []
         if not batch:
             break
+        start += len(batch)              # paging follows RAW batch size...
+        if filter_org:                   # ...filtering only affects keeps
+            batch = [p for p in batch if _ckan_org_ok(p)]
         packages.extend(_slim_ckan(p) for p in batch)
-        start += len(batch)
         print(f"  [file-catalog] page fetched: {start}/{total} records")
         if start >= total:
             break
-    cache = {"fetched_at": _now_iso_z(), "source": "ckan:catalog.data.gov "
-             "(package_search fq=organization:census-gov)", "stub": False,
-             "packages": packages}
+    return packages
+
+def _pull_dcat(url):
+    """Fetch the Bureau's DCAT catalog (census.gov/data.json): stream the
+    single ~100+ MB document to a temp file in chunks (progress dot per
+    ~10 MB so a long download visibly isn't hung), json.load the temp file,
+    slim every dataset entry via _slim_dcat. 120s connect timeout, no total
+    cap - the file is big and that's expected. Temp file is deleted
+    best-effort after parse. Raises on any network/parse failure so the
+    caller's fallback chain handles it."""
+    fd, tmp = tempfile.mkstemp(suffix=".json", prefix="census_dcat_")
+    try:
+        req = urllib.request.Request(url, headers=_CATALOG_UA)
+        got, next_dot, dots = 0, 10 * 1024 * 1024, False
+        with os.fdopen(fd, "wb") as f:
+            with urllib.request.urlopen(req, timeout=DCAT_TIMEOUT) as r:
+                while True:
+                    chunk = r.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    got += len(chunk)
+                    if got >= next_dot:
+                        print(".", end="", flush=True)
+                        next_dot += 10 * 1024 * 1024
+                        dots = True
+        if dots:
+            print(flush=True)            # newline after the dot run
+        print(f"  [file-catalog] DCAT download complete "
+              f"({got / (1024 * 1024):.0f} MB); parsing...")
+        with open(tmp, encoding="utf-8-sig") as f:
+            doc = json.load(f)
+        entries = doc.get("dataset") if isinstance(doc, dict) else None
+        if not isinstance(entries, list):
+            raise RuntimeError("data.json has no 'dataset' list")
+        return [_slim_dcat(e) for e in entries if isinstance(e, dict)]
+    finally:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+
+def pull_file_catalog(repo: Path):
+    """--pull-file-catalog: crawl the Census Bureau's full dataset universe
+    (~6,000 records expected) and cache the slimmed records to
+    file_catalog_cache.json at the repo root (gitignored, same pattern as
+    scope_field_cache.json). Tries each entry in FILE_CATALOG_SOURCES in
+    order - three CKAN variants on catalog.data.gov, then the Bureau's own
+    DCAT file - moving on after any HTTP/parse failure or empty result, so
+    data.gov's 2026 catalog reshuffle can't kill the pull outright.
+
+    Needs: internet access to catalog.data.gov and/or www.census.gov.
+    Produces: the cache file (with a "via" field naming the source that
+    delivered); regen then picks it up automatically (a plain regen NEVER
+    pulls - this flag is the only network path). Only when ALL sources fail
+    AND no cache exists is the STUB_FILE_CATALOG written, marked "stub":
+    true, so the report's file-only surfaces render (clearly labeled) until
+    a networked machine runs the real pull. Returns True if a real
+    (non-stub) pull landed."""
+    cache_path = repo / FILE_CATALOG_CACHE
+    packages, via, n_src = None, None, len(FILE_CATALOG_SOURCES)
+    for i, (label, kind, url) in enumerate(FILE_CATALOG_SOURCES, 1):
+        try:
+            if kind == "dcat":
+                print(f"  [file-catalog] source {i} ({label}): downloading "
+                      f"{url} - one ~100+ MB document, a dot per ~10 MB...")
+                got = _pull_dcat(url)
+            else:
+                got = _pull_ckan_pages(url, filter_org=(kind == "ckan_q"))
+            if not got:
+                raise RuntimeError("0 records returned")
+            packages, via = got, f"source {i} ({label})"
+            break
+        except Exception as ex:
+            more = f" - trying source {i + 1}..." if i < n_src else ""
+            print(f"  [file-catalog] source {i} ({label}) failed: "
+                  f"{_source_err(ex)}{more}")
+    if packages is None:
+        print(f"  [file-catalog] all {n_src} sources failed - run "
+              f"`python tools/product_scope.py --pull-file-catalog` from a "
+              f"machine with internet access; the report renders without "
+              f"the file-only layer until then")
+        if not cache_path.exists():
+            stub = {"fetched_at": _now_iso_z(), "source": "stub (hand-written)",
+                    "via": "stub", "stub": True, "packages": STUB_FILE_CATALOG}
+            cache_path.write_text(json.dumps(stub, indent=1), encoding="utf-8")
+            print(f"  [file-catalog] wrote {len(STUB_FILE_CATALOG)}-record STUB cache "
+                  f"so the file-only render paths stay visible (clearly labeled)")
+        return False
+    print(f"  [file-catalog] pulled {len(packages):,} records via {via}")
+    cache = {"fetched_at": _now_iso_z(),
+             "source": ("ckan:catalog.data.gov (package_search "
+                        "organization:census-gov)" if "CKAN" in via
+                        else "dcat:www.census.gov/data.json"),
+             "via": via, "stub": False, "packages": packages}
     cache_path.write_text(json.dumps(cache, separators=(",", ":")), encoding="utf-8")
-    print(f"  [file-catalog] cached {len(packages)} data.gov records -> {cache_path.name}")
+    print(f"  [file-catalog] cached {len(packages):,} records -> {cache_path.name}")
     return True
 
 # ============================================================================
