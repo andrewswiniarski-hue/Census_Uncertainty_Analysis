@@ -1,0 +1,21 @@
+# Development-only dependencies. NOT needed to run any pull or report.
+#
+# Kept separate from requirements.txt so the runtime environment stays
+# exactly as small as it was -- the analysis modules import nothing beyond
+# pandas and numpy.
+#
+# Install alongside the main requirements:
+#     pip install -r requirements.txt -r requirements-dev.txt
+#
+# Then:
+#     python -m pytest tests/ -q
+
+pytest            # runs tests/ (98 tests as of 2026-07-28)
+
+# NOT required, deliberately:
+#
+# scipy   analysis/alloc_denominator.py needs Kendall tau-b, which
+#         pandas.corr(method="kendall") delegates to scipy. With six
+#         income sources that is fifteen pairs, so the coefficient is
+#         implemented directly in kendall_tau_b() instead. Adding scipy
+#         would pull in a large binary dependency for one small formula.
