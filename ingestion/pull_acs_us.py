@@ -19,10 +19,8 @@ Run from the repository root:
 
 from __future__ import annotations
 
-import os
 import sys
 import time
-from pathlib import Path
 
 import matplotlib
 
@@ -30,15 +28,13 @@ matplotlib.use("Agg")  # Render the verification map without opening a window.
 import censusdis.data as ced
 import matplotlib.pyplot as plt
 import pandas as pd
-from dotenv import load_dotenv
+
+from _common import OUT_DIR, REPO_ROOT, load_api_key
 
 
 DATASET = "acs/acs5"
 VINTAGE = 2024
 SCOPE = "us"
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
-OUT_DIR = REPO_ROOT / "data" / "raw"
 
 # Each table includes an E (estimate) and M (90% confidence margin of error).
 VARIABLES = {
@@ -65,18 +61,6 @@ GEO_LEVELS = {
     "state": (dict(state="*"), ["STATE"]),
     "county": (dict(state="*", county="*"), ["STATE", "COUNTY"]),
 }
-
-
-def load_api_key() -> str:
-    """Load the Census key from the untracked repo-root .env file."""
-    load_dotenv(REPO_ROOT / ".env")
-    key = os.getenv("CENSUS_API_KEY")
-    if not key or key == "paste_your_key_here":
-        sys.exit(
-            "CENSUS_API_KEY is missing. Create .env in the repository root and set "
-            "CENSUS_API_KEY to your Census API key."
-        )
-    return key
 
 
 def download_data(level: str, geo_kwargs: dict[str, str], api_key: str) -> pd.DataFrame:

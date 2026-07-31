@@ -31,10 +31,8 @@ Run from the repo root:
 
 from __future__ import annotations
 
-import os
 import sys
 import time
-from pathlib import Path
 
 import matplotlib
 
@@ -42,7 +40,8 @@ matplotlib.use("Agg")  # headless: render to file, no display needed
 import censusdis.data as ced
 import matplotlib.pyplot as plt
 import pandas as pd
-from dotenv import load_dotenv
+
+from _common import OUT_DIR, REPO_ROOT, load_api_key
 
 # ---------------------------------------------------------------------------
 # Configuration (kept identical to pull_acs_nj.py where shared)
@@ -51,9 +50,6 @@ from dotenv import load_dotenv
 DATASET = "acs/acs5"
 VINTAGE = 2024
 STATE_NJ = "34"
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
-OUT_DIR = REPO_ROOT / "data" / "raw"
 
 # Geography level -> (censusdis keyword args, ID columns used to join
 # geometry to the data files from pull_acs_nj.py).
@@ -68,18 +64,6 @@ GEO_LEVELS = {
 
 # Rough NJ bounding box (lon/lat) for an eyeball range check on the shapes.
 NJ_BOUNDS_APPROX = (-75.6, 38.9, -73.9, 41.4)
-
-
-def load_api_key() -> str:
-    """Read CENSUS_API_KEY from the repo-root .env (never from git)."""
-    load_dotenv(REPO_ROOT / ".env")
-    key = os.getenv("CENSUS_API_KEY")
-    if not key or key == "paste_your_key_here":
-        sys.exit(
-            "CENSUS_API_KEY is missing. Copy .env.example to .env in the repo "
-            "root and paste in your key (see README 'Getting Started')."
-        )
-    return key
 
 
 def join_check(gdf: pd.DataFrame, level: str, keys: list[str]) -> None:

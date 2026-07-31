@@ -77,9 +77,11 @@ Every finished piece of work — script, analysis, notebook, document — gets a
 
 **Cadence:** biweekly status meetings with mentors. Ground rule: bring a one-slide status update — what worked, what's blocked, what you need from us.
 
-## Candidate Datasets (confirm shortlist with mentor)
+## Candidate Datasets — shortlist confirmed with mentors 2026-07-22
 
-**Decennial & Disclosure Avoidance:** Demographic Profile; DHC / DHC-A / DHC-B; Supplemental DHC (SDHC); Privacy-Protected Microdata File (PPMF); DAS demonstration products; TIGER/Line shapefiles
+**Our 3 core products:** ACS 5-year estimates (2020–2024 vintage) · 2020 DHC (Demographic and Housing Characteristics) production release · 2020 Demographic Profile (DP1). See "Decisions already made" in [HANDOFF.md](HANDOFF.md) for how uncertainty is scored on each.
+
+**Supporting/mechanism-only data (not scored products themselves):** DAS demonstration products + 2010 SF1 (used to empirically measure disclosure-avoidance noise, feeding the DHC/DP score as a modeled input) · TIGER/Line shapefiles (geometry)
 
 **Metadata & Methodology:** sampling design documentation; disclosure avoidance technical documentation; editing & imputation methodology; error measurement / quality indicator documentation
 
@@ -107,7 +109,7 @@ Work through these in order. Each step has a concrete "done when" so we can trac
   - Add a `.gitignore` (Python template + `/data/raw/`) and commit this README to the root
 - [x] **Request a Census API key** — free and instant: https://api.census.gov/data/key_signup.html (each member can get their own) *(lead's key verified with a live call 2026-07-09; each teammate still gets their own)*
 - [x] **Set up the Python environment** — create `requirements.txt` with initial packages: `pandas`, `geopandas`, `matplotlib`, `censusdis` (or `census` + `us`), `jupyter` *(done 2026-07-09)*
-- [ ] **Done when:** everyone has cloned the repo, installed the environment, and stored their API key locally (in a `.env` file — never commit keys) *(in progress — teammates onboarding as of 2026-07-12; follow the Getting Started section above)*
+- [x] **Done when:** everyone has cloned the repo, installed the environment, and stored their API key locally (in a `.env` file — never commit keys) *(team has been actively contributing since mid-July — see WORKLOG for teammate commits; follow the Getting Started section above for a fresh clone)*
 
 ### Step 2: Methodology grounding (Days 1–4, parallel with Step 1)
 
@@ -148,19 +150,19 @@ Each analysis answers a specific question — keep notebooks organized by questi
 ### Bridge toward composite score (post Step 5)
 
 - [x] **ACS composite prototype (matrix first):** [`notebooks/06-composite-reliability-prototype.ipynb`](notebooks/06-composite-reliability-prototype.ipynb) — income CV × income allocation at NJ tracts; matched-size validation; equal-weight vs worst-component sensitivity; poverty / Black 65+ labeled robustness only *(done 2026-07-18 — helpers in `analysis/alloc.py` + `analysis/composite.py`)*
-- [x] **Stronger CV driver model:** [`notebooks/07-cv-driver-model.ipynb`](notebooks/07-cv-driver-model.ipynb) — nested OLS separating place population from estimate size; matched estimate-size panel; composite V2 `cv_residual_high` seed *(done 2026-07-19 — `analysis/cv_model.py`)*
+- [x] **Stronger CV driver model:** nested OLS separating place population from estimate size; matched estimate-size panel; composite V2 `cv_residual_high` seed *(done 2026-07-19 — `analysis/cv_model.py`; merged into [`notebooks/06-composite-reliability-and-cv-drivers.ipynb`](notebooks/06-composite-reliability-and-cv-drivers.ipynb) 2026-07-31)*
 
-### Step 6: Prep for first biweekly
+### Step 6: Prep for first biweekly — done, 2026-07-22
 
-- [ ] One-slide status: what worked, what's blocked, what we need
-- [ ] Bring the product shortlist question to mentors: *"We're leaning toward ACS 5-year + DHC + Demographic Profile as our 3 core products — is that the right mix?"*
-- [ ] Confirm recurring biweekly meeting slot
+- [x] One-slide status: what worked, what's blocked, what we need *(`docs/biweekly-2026-07-22.pptx`)*
+- [x] Bring the product shortlist question to mentors: *"We're leaning toward ACS 5-year + DHC + Demographic Profile as our 3 core products — is that the right mix?"* *(confirmed — see "Decisions already made" in HANDOFF.md)*
+- [x] Confirm recurring biweekly meeting slot *(biweekly cadence confirmed)*
 
 ---
 
 ## Open Questions for Mentors
 
-- Which 3–5 statistical products should we prioritize?
+- ~~Which 3–5 statistical products should we prioritize?~~ **Resolved 2026-07-22:** ACS 5-year + DHC + Demographic Profile — see "Decisions already made" in [HANDOFF.md](HANDOFF.md).
 - Are there internal precedents/prior work on composite quality scores we should review?
 - Preferred dashboard technology, or is that our call? (Sponsor doc: use professional judgment, open source encouraged)
 - Which DAS demonstration product vintage is best for the noise analysis? *(Provisional pick made 2026-07-15: the 2022-08-25 tabulated DHC demonstration summary file — newest tabulated release, closest to DHC production settings; the 2023-04-03 production suite is microdata-only and the 2022-03-16 release has a technical-issues alert. Please confirm or redirect.)*
@@ -170,7 +172,7 @@ Each analysis answers a specific question — keep notebooks organized by questi
 - The numeric privacy-loss-budget allocations for the 2022-08-25 demonstration release live in a separate allocations file we haven't pulled. For the composite score, should we use the published ε allocations, or is empirically measured noise (EDA 04's per-level RMSE) the better input?
 - Income allocation shows a weak positive association with income CV even after controlling for geography size (Spearman ρ ≈ +0.19 across NJ tracts; every other allocation–CV pairing is ≈ 0; found 2026-07-17, EDA 05). Is there a known mechanism (e.g., populations that resist income questions also being harder to sample precisely), or is this small enough to ignore in the composite score?
 - **Composite tier philosophy** (EDA 06 prototype): keep a visible two-axis matrix (CV × allocation) as the user-facing view, or collapse to a single weighted score for the dashboard? Equal-weight vs worst-component only agreed on ~85% of top-risk-quartile membership.
-- Should empirical DHC privacy RMSE stay a **separate product score** (our current boundary), rather than being mixed into ACS tract rows?
+- ~~Should empirical DHC privacy RMSE stay a **separate product score** (our current boundary), rather than being mixed into ACS tract rows?~~ **Resolved 2026-07-31 (lead decision, pending mentor confirmation):** yes, separate. DHC and Demographic Profile are each scored using the EDA 04 demo-derived noise model (RMSE by geography level/size bin) applied to real 2020 production data as a labeled estimate — never mixed into ACS rows, since ACS uncertainty is measured (sampling MOE) while DHC/DP uncertainty is modeled (no ground truth exists for production disclosure-avoidance noise by design).
 - Are labeled proxy/diagnostic pairings acceptable for poverty (family allocation) and Black 65+ (age/race allocation) in the concept pitch, with income remaining the exact headline case?
 - **Residual sampling flags** (EDA 07): for count estimates, flag CVs worse than predicted from estimate size. Prefer these alongside raw CV tiers on the dashboard, or raw CV only — especially since income medians are poorly predicted by household count (R² ≈ 0.01)?
 

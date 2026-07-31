@@ -314,12 +314,27 @@ def incremental_r2(results: list[OLSResult]) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def fit_income_size_model(df: pd.DataFrame) -> OLSResult:
-    """Income-only: log(CV) ~ log(household universe). Used for residual flags."""
-    income = model_ready(df[df["variable_group"] == "income"])
-    if income.empty:
-        raise ValueError("no usable income rows for residual model")
-    return fit_ols(income, ["log_estimate_size"], name="income_size_only")
+def loglog_slope(x: pd.Series, y: pd.Series) -> float:
+    """Slope of a log10-log10 OLS fit of y on x (np.polyfit, degree 1).
+
+    Pairwise-complete: rows with a non-positive or missing x or y are
+    dropped before fitting. Used for simple "does CV scale with size"
+    slope checks (EDA 01/02); the nested multi-term models above use
+    fit_ols instead.
+    """
+    x, y = x.reset_index(drop=True), y.reset_index(drop=True)
+    m = (x > 0) & (y > 0) & x.notna() & y.notna()
+    return float(np.polyfit(np.log10(x[m]), np.log10(y[m]), 1)[0])
+
+
+def spearman_corr(a: pd.Series, b: pd.Series) -> tuple[float, int]:
+    """Spearman rank correlation on the pairwise-complete mask (no scipy).
+
+    Returns (rho, n). rank().corr() is Pearson correlation of ranks, i.e.
+    Spearman's rho.
+    """
+    m = a.notna() & b.notna()
+    return float(a[m].rank().corr(b[m].rank())), int(m.sum())
 
 
 def flag_high_cv_residual(

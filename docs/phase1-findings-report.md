@@ -1,9 +1,9 @@
 # Phase 1 Findings Report — Census Uncertainty Analytics
 
 **Prepared for:** Andrew Swiniarski, project lead — for briefing the capstone team and Census Bureau mentors
-**Date:** July 17, 2026
-**Covers:** the complete Phase 1 exploratory analysis (notebooks 01–05), New Jersey testbed
-**Companion materials:** biweekly deck (`docs/biweekly-2026-07-22.pptx`), eight charts in `data/processed/`, five notebooks in `notebooks/`
+**Date:** July 17, 2026; **updated through EDA 06** (composite score + CV driver model), 2026-07-31
+**Covers:** the complete Phase 1 exploratory analysis (notebooks 01–05) plus the Phase 2 composite-score bridge (notebook 06), New Jersey testbed
+**Companion materials:** biweekly deck (`docs/biweekly-2026-07-22.pptx`), charts in `data/processed/`, six notebooks in `notebooks/`
 
 ---
 
@@ -137,13 +137,14 @@ And one sentence for the Bureau audience, which I'd stand behind in any room:
 
 ## 7. What we don't know yet (queued for the mentors)
 
-1. **Product shortlist** — confirm the 3–5 Census products the report and dashboard should cover.
+1. ~~**Product shortlist**~~ — **resolved 2026-07-22:** ACS 5-year + DHC + Demographic Profile (see HANDOFF.md decision #12).
 2. **Privacy-noise vintage** — is the 2022-08-25 demonstration release the right basis, or should we move to the 2023 production-settings files?
 3. **The block-group anomaly** — is our budget-allocation reading correct, and does the pattern persist in the production 2020 data?
-4. **Score input for privacy** — the Bureau's published noise-budget numbers, or the noise we measured empirically?
+4. **Score input for privacy** — the Bureau's published noise-budget numbers, or the noise we measured empirically? (Lead call pending mentor confirmation: empirically-measured noise, applied to production data as a modeled estimate — HANDOFF.md decisions #13–14.)
 5. **The 131-tract mystery** — why do 6% of NJ tracts publish near-zero population error margins?
 6. **The tract floor** — poverty and detailed demographic tables stop at tract level; is that an acceptable floor for the dashboard?
 7. **The income-allocation signal** — is the one weak correlation we found (0.19) a known mechanism or ignorable?
+8. **Score philosophy** — visible two-axis matrix, or a single collapsed 0–100 score? A single-score prototype was built and removed pending this decision.
 
 ---
 
@@ -154,10 +155,11 @@ And one sentence for the Bureau audience, which I'd stand behind in any room:
 - **Dashboard:** grow the EDA 03 map prototype into the linked-map deliverable a county planner can act on.
 - **Report:** this document's findings become the report's empirical backbone; the methodology write-up (`docs/uncertainty-sources.md`) is the next writing task.
 
-### Phase 2 bridge already started (EDA 06–07)
+### Phase 2 bridge (EDA 06, formerly two separate notebooks — merged 2026-07-31)
 
-- **EDA 06** built the ACS two-axis prototype (income CV × income allocation) and quantified the ~23% low-CV / high-allocation blind spot.
-- **EDA 07** answered the JL Final Takeaway: in a pooled NJ frame, place population alone fails (R² ≈ 0.005), while estimate size drives most of the pooled R² (≈ 0.67 alone; ≈ 0.71–0.73 with level, variable group, and interactions). A matched estimate-size panel still finds Black 65+ noisier than population at similar counts. Composite V2 adds an optional `cv_residual_high` sampling flag — informative for counts; weak for income medians (income size-model R² ≈ 0.01).
+- **Composite matrix** built the ACS two-axis prototype (income CV × income allocation) and quantified the ~23% low-CV / high-allocation blind spot.
+- **CV driver model** answered the JL Final Takeaway: in a pooled NJ frame, place population alone fails (R² ≈ 0.005), while estimate size drives most of the pooled R² (≈ 0.67 alone; ≈ 0.71–0.73 with level, variable group, and interactions). A matched estimate-size panel still finds Black 65+ noisier than population at similar counts. Composite V2 adds an optional `cv_residual_high` sampling flag — informative for counts; weak for income medians (income size-model R² ≈ 0.01).
+- An absolute 0–100 single-score prototype (mapping CV and allocation to a `Reliable`/`Caution`/`Unreliable` tier) was also built and tested against the Black 65+ subgroup, then deliberately removed (2026-07-31) — the score/tier philosophy (visible matrix vs. single collapsed score) is still an open mentor question, not a settled design. See README's Open Questions.
 
 ---
 
@@ -165,9 +167,9 @@ And one sentence for the Bureau audience, which I'd stand behind in any room:
 
 | Item | Location |
 |---|---|
-| Analyses (run top-to-bottom, checks included) | `notebooks/01…07-*.ipynb` |
-| Shared formulas, with citations | `analysis/acs.py`, `analysis/alloc.py`, `analysis/composite.py`, `analysis/cv_model.py`, `analysis/dhc.py` |
-| Data pull scripts (rerunnable by anyone) | `ingestion/pull_*.py` |
+| Analyses (run top-to-bottom, checks included) | `notebooks/01…06-*.ipynb` |
+| Shared formulas, with citations | `analysis/acs.py`, `analysis/alloc.py`, `analysis/composite.py`, `analysis/cv_model.py`, `analysis/dhc.py`, `analysis/viz.py` |
+| Data pull scripts (rerunnable by anyone) | `ingestion/pull_*.py`, `ingestion/_common.py` |
 | Charts | `data/processed/eda0*.png` |
 | Term definitions | `docs/glossary.md` |
 | Dataset catalog + landmines | `docs/data-dictionary.md` |

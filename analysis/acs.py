@@ -2,16 +2,18 @@
 
 What it does
 ------------
-Loads the parquet files produced by ingestion/pull_acs_nj.py and provides
-the small, formula-bearing functions the EDA notebooks share: coefficient
-of variation (CV), top-code flagging, and MOE aggregation. Keeping the
-formulas here means every notebook computes them identically and each
-formula's citation lives in exactly one place.
+Loads the parquet files produced by ingestion/pull_acs_nj.py and
+ingestion/pull_nj_geometry.py, and provides the small, formula-bearing
+functions the EDA notebooks share: coefficient of variation (CV), top-code
+flagging, and MOE aggregation. Keeping the formulas here means every
+notebook computes them identically and each formula's citation lives in
+exactly one place.
 
 What it needs
 -------------
 data/raw/acs5_2024_nj_{county,tract,block_group}.parquet on disk
-(regenerate with: python ingestion/pull_acs_nj.py).
+(regenerate with: python ingestion/pull_acs_nj.py); geo_2024_nj_*.parquet
+for load_geo (regenerate with: python ingestion/pull_nj_geometry.py).
 
 Formulas and sources
 --------------------
@@ -36,6 +38,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import geopandas as gpd
 import numpy as np
 import pandas as pd
 
@@ -44,6 +47,17 @@ RAW_DIR = REPO_ROOT / "data" / "raw"
 
 VINTAGE = 2024
 LEVELS = ["county", "tract", "block_group"]
+
+GEO_LABELS = {
+    "county": "County",
+    "tract": "Census tract",
+    "block_group": "Block group",
+}
+
+# NJ State Plane -- display-only reprojection so the state isn't stretched
+# on a map (see load_geo). No area/overlay math is done with this geometry
+# anywhere in the suite.
+DISPLAY_EPSG = 3424
 
 # Same codes and working names as ingestion/pull_acs_nj.py.
 VARIABLES = {
@@ -87,6 +101,24 @@ def load_level(level: str) -> pd.DataFrame:
     return df
 
 
+def load_geo(level: str) -> gpd.GeoDataFrame:
+    """Load one geometry parquet file for New Jersey, reprojected for display.
+
+    Reprojects to NJ State Plane (DISPLAY_EPSG) so the state isn't stretched
+    on a map. Display-only: no area or overlay math is done downstream in
+    this suite, so the 6 invalid tract/block-group geometries flagged at
+    ingestion are harmless here (no make_valid needed).
+    """
+    if level not in LEVELS:
+        raise ValueError(f"level must be one of {LEVELS}, got {level!r}")
+    path = RAW_DIR / f"geo_{VINTAGE}_nj_{level}.parquet"
+    if not path.exists():
+        raise FileNotFoundError(
+            f"{path} not found -- regenerate with: python ingestion/pull_nj_geometry.py"
+        )
+    return gpd.read_parquet(path).to_crs(epsg=DISPLAY_EPSG)
+
+
 def cv(estimate: pd.Series, moe: pd.Series) -> pd.Series:
     """Coefficient of variation: (MOE / 1.645) / estimate.
 
@@ -101,12 +133,6 @@ def cv(estimate: pd.Series, moe: pd.Series) -> pd.Series:
     return result.rename(None)
 
 
-def add_cv(df: pd.DataFrame, var: str) -> pd.DataFrame:
-    """Add a `{var}_CV` column computed from `{var}E` and `{var}M`."""
-    df[f"{var}_CV"] = cv(df[f"{var}E"], df[f"{var}M"])
-    return df
-
-
 def flag_topcoded_income(df: pd.DataFrame) -> pd.Series:
     """True where median household income is top-coded (published as 250,001).
 
@@ -115,6 +141,17 @@ def flag_topcoded_income(df: pd.DataFrame) -> pd.Series:
     report the count).
     """
     return df["B19013_001E"] == INCOME_TOP_CODE
+
+
+def income_cv(df: pd.DataFrame) -> pd.Series:
+    """CV of median household income, with top-coded rows excluded.
+
+    Shorthand for `cv(df["B19013_001E"], df["B19013_001M"]).mask(flag_topcoded_income(df))`
+    -- the pattern repeated at every call site that computes an income CV.
+    Top-coded rows get NaN, not a spuriously small CV from a censored point
+    estimate.
+    """
+    return cv(df["B19013_001E"], df["B19013_001M"]).mask(flag_topcoded_income(df))
 
 
 def aggregate_estimate(df: pd.DataFrame, variables: list[str]) -> pd.Series:

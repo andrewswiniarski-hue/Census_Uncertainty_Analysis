@@ -3,8 +3,10 @@
 Catalog of every statistical product this project uses: what it is, which
 geographies it covers, **what uncertainty measure ships with it**, how we access
 it, and the landmines we've hit. One entry per product; newest additions at the
-bottom. (README Phase 1, Step 4 — living document; DHC and Demographic Profile
-entries pending the mentor shortlist confirmation.)
+bottom. (README Phase 1, Step 4 — living document. Product shortlist confirmed
+2026-07-22 (ACS 5-year + DHC + Demographic Profile — HANDOFF.md decision #12);
+DHC production and Demographic Profile entries still pending the actual data
+pull, see HANDOFF.md "Next work.")
 
 ---
 

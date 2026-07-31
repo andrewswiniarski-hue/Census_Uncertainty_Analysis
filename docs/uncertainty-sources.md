@@ -30,7 +30,7 @@ expected given size (stronger for counts than for income medians).
 ## EDA 07 — What drives sampling CV
 
 Nested OLS on a long NJ frame (one row per geography × variable group;
-n ≈ 24,947). See [`notebooks/07-cv-driver-model.ipynb`](../notebooks/07-cv-driver-model.ipynb).
+n ≈ 24,947). See Section 7 of [`notebooks/06-composite-reliability-and-cv-drivers.ipynb`](../notebooks/06-composite-reliability-and-cv-drivers.ipynb) (merged from the former EDA 07 notebook, 2026-07-31).
 
 | Model | R² (approx.) | Takeaway |
 |-------|--------------|----------|

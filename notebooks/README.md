@@ -14,5 +14,4 @@ One notebook per question, named so the question is obvious from the filename
 | `01`–`03` | Sampling CV by size, variable type, and geography |
 | `04` | Privacy noise (DAS demo vs SF1) |
 | `05` | Allocation rates vs CV (independence) |
-| `06` | ACS composite prototype — CV × allocation matrix |
-| `07` | Stronger CV driver model — place pop vs estimate size + matched bins |
+| `06` | ACS composite prototype (CV × allocation matrix) + CV driver model (place pop vs estimate size, matched bins) — merged 2026-07-31 from the original separate 06/07 notebooks |
