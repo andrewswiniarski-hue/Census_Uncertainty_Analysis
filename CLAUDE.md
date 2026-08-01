@@ -27,6 +27,7 @@ The project lead is an MSBA student — smart, learning, and busy. Every explana
 - **After every analysis, answer three questions:** What did we find? Why does it matter to the Census Bureau? What should we do next?
 - **Define every statistical term the first time it appears** in any document or notebook (MOE, CV, differential privacy, allocation rate, etc.). Keep a running glossary in `/docs/glossary.md`.
 - **Never bluff.** If you're unsure about a Census methodology detail, say so and suggest checking the official documentation or asking the Census mentors at the next biweekly. Wrong-but-confident answers are the most expensive kind of error on this project.
+- **No em dashes, minimal metaphor, in any deliverable slide, report, or doc text.** Use a period, comma, or colon instead of an em dash. Prefer literal wording over figurative ("grows sharply," not "explodes"; "not measured," not "a blind spot" — unless the metaphor is already a named term of art elsewhere in the analysis, e.g. EDA 06's "blind spot" quadrant, in which case keep it and note why). This was applied once to the 2026-07-22 biweekly deck but never written down, so a later deck (Capstone 1, Aug 6) drifted back to 38 em dashes. Check this before finalizing any new slide deck or report.
 
 ## Technical Standards
 
