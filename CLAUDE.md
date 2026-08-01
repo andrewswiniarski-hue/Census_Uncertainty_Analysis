@@ -40,7 +40,7 @@ The project lead is an MSBA student — smart, learning, and busy. Every explana
 
 ## Working With Teammates
 
-The repo is shared: Katie Christiansen and Justus Long contribute alongside the lead, via the GitHub web UI and feature branches (see `Git_Instruct.md`).
+The repo is shared: Katie Christiansen, Justus Long, and Garrett Spangler contribute alongside the lead, via the GitHub web UI and feature branches (see `Git_Instruct.md`).
 
 - **Fetch `origin` at the start of every session and before any push** — check for new commits *and* new branches. Partial uploads happen (web-UI commits can land a notebook without its modules); never assume `main` is self-contained.
 - **WORKLOG.md is the team sync point.** Read entries newer than the last session before assuming project state, and account for teammate findings in HANDOFF/README rather than duplicating or contradicting them.
