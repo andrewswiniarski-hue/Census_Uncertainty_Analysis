@@ -5,8 +5,8 @@ geographies it covers, **what uncertainty measure ships with it**, how we access
 it, and the landmines we've hit. One entry per product; newest additions at the
 bottom. (README Phase 1, Step 4 — living document. Product shortlist confirmed
 2026-07-22 (ACS 5-year + DHC + Demographic Profile — HANDOFF.md decision #12);
-DHC production and Demographic Profile entries still pending the actual data
-pull, see HANDOFF.md "Next work.")
+DHC production and Demographic Profile were pulled 2026-07-31, Phase B —
+entries below.)
 
 ---
 
@@ -145,3 +145,60 @@ pull, see HANDOFF.md "Next work.")
   (verified live against the API, 2026-07-16 — note `PCT012B020` also exists
   and is a *different* table); 30% of NJ blocks have zero published population,
   so relative-error metrics must exclude/report them separately.
+
+## 2020 Census DHC (Demographic and Housing Characteristics) — production release
+
+- **What:** The real, published 2020 Decennial product (not a demonstration
+  file) — full-count total population and demographic tables, protected by
+  the 2020 Disclosure Avoidance System (TopDown Algorithm) at production
+  settings. Phase B's primary product, alongside DP1 below.
+- **Geographies used:** NJ state (1) / county (21) / tract (2,181) / block
+  group (6,599) / block (137,972) — all five levels, confirmed live against
+  the API (2026-07-31); a single statewide wildcard query works at every
+  level (no per-county looping needed, unlike the 2010 SF1 pull).
+- **Uncertainty shipped:** **none per cell** — like SF1, this is a full count.
+  The privacy noise is *in* the numbers; this project's only signal on its
+  size is the modeled estimate in `analysis/noise_model.py` (see EDA 04,
+  the 2010-demonstration-derived proxy — production noise is NOT separately
+  measured here, only estimated from the 2010 demonstration release).
+- **Variables pulled:** total population (`P1_001N`) and the twelve sex×age
+  cells making up "Black or African American alone, 65+" (table `P12B`,
+  `P12B_020N`–`025N` male, `P12B_044N`–`049N` female) — same subgroup as the
+  ACS and 2010 SF1 pulls, for a like-for-like contrast. Variable codes
+  verified live against the API, 2026-07-31.
+- **Access:** Census API dataset `dec/dhc`, vintage 2020, via censusdis —
+  [`ingestion/pull_dhc_nj.py`](../ingestion/pull_dhc_nj.py); loaders in
+  [`analysis/decennial.py`](../analysis/decennial.py). Raw parquet in
+  `data/raw/dhc_2020_nj_*.parquet` (gitignored, regenerable).
+- **Landmines:** total population is an exact hierarchical invariant — every
+  level's `P1_001N` sums to NJ's published 9,288,994 exactly (verified at
+  ingestion, all 5 levels); **not comparable to 2010 SF1 row-for-row**
+  (2,181 tracts in 2020 vs. 2,010 in 2010 — boundaries changed) — never
+  row-join `dhc_2020_*` to `sf1_2010_*`; 18% of NJ's 137,972 blocks have
+  zero published 2020 population (vs. 30% of 2010 blocks — different vintage,
+  not directly comparable).
+
+## 2020 Demographic Profile (DP1)
+
+- **What:** A simpler, general-purpose 2020 Decennial summary product,
+  published alongside DHC — same underlying protected data, packaged with
+  fewer geography levels and no race×age crosstabs.
+- **Geographies used:** NJ county (21) / tract (2,181) only — **DP1 has no
+  block group or block level** (confirmed against the live API, 2026-07-31),
+  unlike DHC's full five levels. Affects any dashboard spec calling for
+  micro-maps at block group/block — DP1 cannot populate those.
+- **Uncertainty shipped:** none per cell (full count, same as DHC).
+- **Variables pulled:** total population (`DP1_0001C`) and total Black-alone
+  population (`DP1_0079C`, **not age-restricted** — DP1 has no equivalent of
+  DHC's Black 65+ table, confirmed against the live variable list). This is
+  DP1's only usable "small subgroup" contrast, and it is coarser than DHC's.
+- **Access:** Census API dataset `dec/dp`, vintage 2020, via censusdis —
+  [`ingestion/pull_dp_nj.py`](../ingestion/pull_dp_nj.py); loaders in
+  [`analysis/decennial.py`](../analysis/decennial.py). Raw parquet in
+  `data/raw/dp1_2020_nj_*.parquet` (gitignored, regenerable).
+- **Landmines:** `DP1_0001C` is **verified identical to DHC's `P1_001N`**
+  for every NJ county and tract (checked at ingestion and re-verified in
+  EDA 08) — DP1's population is the same protected count repackaged, not an
+  independent re-noised tabulation, so `analysis/noise_model.py`'s
+  population model applies unchanged to DP1; EDA 04 never measured noise for
+  `DP1_0079C` (Black alone), so this project has no noise estimate for it.

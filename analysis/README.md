@@ -13,6 +13,8 @@ copy-pasted between notebooks.
 | [`composite.py`](composite.py) | Two-axis reliability matrix + equal-weight / worst-component + residual CV flag |
 | [`cv_model.py`](cv_model.py) | Long CV frame; nested OLS; place pop vs estimate size; residual flags; shared `loglog_slope` / `spearman_corr` |
 | [`dhc.py`](dhc.py) | Parse 2010 DHC demonstration files for privacy-noise work |
+| [`decennial.py`](decennial.py) | Load 2020 DHC/DP1 pulls; Black 65+ aggregate (Phase B) |
+| [`noise_model.py`](noise_model.py) | DAS noise model transcribed from EDA 04's committed output — 2010-demonstration-derived, applied to 2020 DHC/DP1 as an estimate (Phase B) |
 | [`viz.py`](viz.py) | Shared chart furniture: boxplot style, CV reference lines, brand palette, `save_chart` |
 | `test_*.py` | Focused unit tests for formula-bearing helpers |
 
