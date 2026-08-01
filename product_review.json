@@ -204,10 +204,22 @@
         "text": "cv_source role declared with note. No composite code references this product yet.",
         "when": "2026-07-26T00:03:46Z",
         "who": "auto"
+      },
+      {
+        "source": "auto:divergence",
+        "text": "cv_source role declared with note.",
+        "when": "2026-08-01T16:15:03Z",
+        "who": "auto"
+      },
+      {
+        "source": "human",
+        "text": "Probe caveat verified 2026-08-01: the 2024 variables.json lists ZERO M-variables (0 of 28,475 names) although every MOE variable is individually resolvable and queryable (B19013_001M -> HTTP 200 + live values). The probe's 'no _M margin-of-error variables found' reflects incomplete Bureau metadata, not missing MOEs - see data-dictionary ACS landmines.",
+        "when": "2026-08-01T16:24:34Z",
+        "who": "Andrew Swiniarski"
       }
     ],
-    "last_reviewed_by": "Garrett Spangler",
-    "last_reviewed_date": "2026-07-25",
+    "last_reviewed_by": "Andrew Swiniarski",
+    "last_reviewed_date": "2026-08-01",
     "note": "",
     "sample_config": "always",
     "stage": "focus",
@@ -244,9 +256,18 @@
     "uncertainty_metrics": "Pre-computed profile tables derived from acs/acs5 detailed tables. Inherits ACS 5-year sampling noise: MOEs ship on every cell, CV scales as 1/sqrt(N behind the estimate). [general methodology - needs mentor review]"
   },
   "acs/acs5/pums": {
-    "insights": [],
+    "insights": [
+      {
+        "source": "human",
+        "text": "Verified 2026-08-01: PWGTP1-80 and WGTP1-80 all 160 present in variables.json; PUMA geography floor confirmed. Proposed as exactness upgrade in docs/product-shortlist-proposal.md - exact-SE path for medians (B19013 has no VRT; VRTs cover B17001/C17002/B19001).",
+        "when": "2026-08-01T16:24:34Z",
+        "who": "Andrew Swiniarski"
+      }
+    ],
+    "last_reviewed_by": "Andrew Swiniarski",
+    "last_reviewed_date": "2026-08-01",
     "note": "",
-    "stage": "cataloged",
+    "stage": "candidate",
     "uncertainty_metrics": "Public-Use Microdata Sample. No per-estimate MOE published; 80 replicate weights ship with the file and the analyst computes their own standard errors via successive-difference replication. [general methodology - needs mentor review]"
   },
   "acs/acs5/pumspr": {
@@ -275,6 +296,12 @@
         "source": "auto:divergence",
         "text": "allocation_source role declared with note. No composite code references this product yet.",
         "when": "2026-07-26T00:03:46Z",
+        "who": "auto"
+      },
+      {
+        "source": "auto:divergence",
+        "text": "allocation_source role declared with note.",
+        "when": "2026-08-01T16:15:03Z",
         "who": "auto"
       }
     ],
@@ -932,6 +959,12 @@
         "text": "privacy_noise role declared with note. No composite code references this product yet.",
         "when": "2026-07-26T00:03:46Z",
         "who": "auto"
+      },
+      {
+        "source": "auto:divergence",
+        "text": "privacy_noise role declared with note.",
+        "when": "2026-08-01T16:15:03Z",
+        "who": "auto"
       }
     ],
     "last_reviewed_by": "Garrett",
@@ -1119,6 +1152,12 @@
         "source": "auto:divergence",
         "text": "benchmark role declared with note. No composite code references this product yet.",
         "when": "2026-07-26T00:03:46Z",
+        "who": "auto"
+      },
+      {
+        "source": "auto:divergence",
+        "text": "benchmark role declared with note.",
+        "when": "2026-08-01T16:15:03Z",
         "who": "auto"
       }
     ],
@@ -1718,6 +1757,12 @@
         "source": "auto:divergence",
         "text": "geometry role declared with note. No composite code references this product yet.",
         "when": "2026-07-26T00:03:46Z",
+        "who": "auto"
+      },
+      {
+        "source": "auto:divergence",
+        "text": "geometry role declared with note.",
+        "when": "2026-08-01T16:15:03Z",
         "who": "auto"
       }
     ],
@@ -3359,6 +3404,16 @@
     "stage": "cataloged",
     "uncertainty_metrics": ""
   },
+  "timeseries/govslocalfin": {
+    "composite_role": "",
+    "composite_role_note": "",
+    "insights": [],
+    "last_reviewed_by": "",
+    "last_reviewed_date": "",
+    "note": "",
+    "stage": "cataloged",
+    "uncertainty_metrics": ""
+  },
   "timeseries/govspension": {
     "insights": [],
     "note": "",
@@ -3636,9 +3691,18 @@
     "uncertainty_metrics": ""
   },
   "timeseries/poverty/saipe": {
-    "insights": [],
+    "insights": [
+      {
+        "source": "human",
+        "text": "Verified 2026-08-01: ships point + 90% CI + published MOE on all 10 income/poverty measures incl. age detail (40 SAEMHI*/SAEPOV* variables); us/state/county; time=2019-2024. Live receipt: Bergen NJ median HH income 121,894 +/- 2,571. Proposed as comparator/precedent in docs/product-shortlist-proposal.md.",
+        "when": "2026-08-01T16:24:33Z",
+        "who": "Andrew Swiniarski"
+      }
+    ],
+    "last_reviewed_by": "Andrew Swiniarski",
+    "last_reviewed_date": "2026-08-01",
     "note": "",
-    "stage": "cataloged",
+    "stage": "candidate",
     "uncertainty_metrics": ""
   },
   "timeseries/poverty/saipe/schdist": {

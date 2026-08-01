@@ -137,7 +137,7 @@ And one sentence for the Bureau audience, which I'd stand behind in any room:
 
 ## 7. What we don't know yet (queued for the mentors)
 
-1. **Product shortlist** — confirm the 3–5 Census products the report and dashboard should cover.
+1. **Product shortlist** — confirm the 3–5 Census products the report and dashboard should cover. *(Proposal drafted 2026-08-01 after the biweekly #1 scope guidance: [`product-shortlist-proposal.md`](product-shortlist-proposal.md) — an income & poverty stack with verified uncertainty receipts, pending mentor confirmation.)*
 2. **Privacy-noise vintage** — is the 2022-08-25 demonstration release the right basis, or should we move to the 2023 production-settings files?
 3. **The block-group anomaly** — is our budget-allocation reading correct, and does the pattern persist in the production 2020 data?
 4. **Score input for privacy** — the Bureau's published noise-budget numbers, or the noise we measured empirically?
