@@ -224,3 +224,13 @@ populated; a *vanished* place is the reverse. EDA 04 found 807 ghost blocks
 (4,695 phantom residents) and 427 vanished blocks (1,154 real residents erased)
 in NJ. For block-level uses this flips places between "inhabited" and "empty" —
 it is not adequately described as ±noise, so we report it as its own class.
+
+**Reliability tier (Solid / Use with care / Too risky)** — The plain-language
+labels the Trenton dashboard prototype (`Streamlit/app.py`, see
+`Streamlit/README.md`) attaches to every figure, built on a CV threshold:
+**Solid** (CV ≤ 0.12, the ESRI "high reliability" convention), **Use with care**
+(0.12 < CV ≤ 0.30, the NCHS "flag/caution" convention), **Too risky** (CV > 0.30).
+These are *our proposed tiers*, built on conventions already cited in
+`analysis/viz.py::CV_REFERENCE_LINES` — not adopted Census Bureau thresholds
+(see HANDOFF.md decision #8; confirming or revising them with mentors is still
+an open Weeks 4–6 item).
