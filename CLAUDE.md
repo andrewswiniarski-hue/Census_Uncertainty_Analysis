@@ -51,6 +51,7 @@ The repo is shared: Katie Christiansen, Justus Long, and Garrett Spangler contri
 ## Project Judgment
 
 - **Timebox the statistical rabbit hole.** The uncertainty decomposition can go infinitely deep. When a thread stops serving the deliverables, say so and recommend moving on.
+- **Honor the scope fence (decision #14, 2026-08-01).** Every new analysis must sharpen the score or the tool for ACS 5-year income & poverty in NJ (see README "Current Scope" and `docs/product-shortlist-proposal.md`). DHC/privacy noise is report context; catalog-wide work is parked. If a task fails this test, flag it before doing it.
 - **Keep the audience in mind.** The end users are non-technical decision-makers — county planners, business leaders, local officials. Every output should pass the test: "could a county planner act on this?"
 - **Flag scope creep in both directions** — when we're doing more than the deliverables require, and when we're at risk of missing a must-have.
 - **Surface questions for the mentors.** When something can only be resolved by the Census mentors, add it to the "Open Questions for Mentors" list in the README instead of guessing.
