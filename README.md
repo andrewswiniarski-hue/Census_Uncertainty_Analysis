@@ -67,6 +67,17 @@ Every finished piece of work — script, analysis, notebook, document — gets a
 
 **Nice-to-have (if time allows):** plain-language interpretive aids; interactive sliders for methodology/privacy tradeoffs; side-by-side comparisons; counterfactual tuning toolkit; uncertainty hot-spot maps.
 
+## Current Scope (biweekly #1 guidance 2026-07-22; lead decisions 2026-08-01)
+
+Mentor guidance from the first biweekly: the EDA breadth is good — now **narrow the project to a specific product or metric the EDA found interesting and build the tool around that**, rather than an uncertainty reporting tool for the whole product catalog. Lead decisions implementing it:
+
+- **Domain: income & poverty** — where our strongest findings already cluster (poverty defies the sampling law and is least reliable where poverty is suburbanizing, EDA 02/03; ~39% of median-tract households have imputed income, EDA 05; the 22.8% low-CV/high-allocation blind spot is an income finding, EDA 06).
+- **The composite score stays as-is as a deliverable.** The *form* of the reporting tool follows whichever product we anchor on.
+- **Geography: New Jersey pilot** for now; design should generalize by state.
+- **Product-first:** before further EDA, propose a product shortlist and verify what uncertainty each product actually publishes — headline: ACS 5-year income & poverty (B19013 / B17001 / C17002) + allocation tables (B99192 / B99172); supporting: SAIPE (the Bureau's precedent for publishing income/poverty with confidence intervals), PUMS replicate weights / Variance Replicate Tables (exact SEs). Mentor confirmation of the mix is on the question list.
+- **Whole-catalog work is parked** (CMS scrape etc.) — the Product Scope Tracker stands as the record of how the shortlist was chosen.
+- **EDA phase endpoint: 2026-08-12** — targeted income/poverty EDA only until then; concept pitch + wireframe ready by that date.
+
 ## Semester Milestones
 
 | Weeks | Phase | Exit criteria |
@@ -154,15 +165,15 @@ Each analysis answers a specific question — keep notebooks organized by questi
 
 ### Step 6: Prep for first biweekly
 
-- [ ] One-slide status: what worked, what's blocked, what we need
-- [ ] Bring the product shortlist question to mentors: *"We're leaning toward ACS 5-year + DHC + Demographic Profile as our 3 core products — is that the right mix?"*
-- [ ] Confirm recurring biweekly meeting slot
+- [x] One-slide status: what worked, what's blocked, what we need *(done — biweekly #1 held 2026-07-22; outcome logged 2026-08-01, see Current Scope)*
+- [x] Bring the product shortlist question to mentors: *"We're leaning toward ACS 5-year + DHC + Demographic Profile as our 3 core products — is that the right mix?"* *(asked 2026-07-22 — answer in principle: narrow to a specific product/metric from our EDA rather than a catalog-wide tool; scoped-stack confirmation question now open below)*
+- [ ] Confirm recurring biweekly meeting slot *(EDA endpoint set for 2026-08-12; next mentor touchpoint TBC)*
 
 ---
 
 ## Open Questions for Mentors
 
-- Which 3–5 statistical products should we prioritize?
+- Which 3–5 statistical products should we prioritize? *(Answered in principle 2026-07-22: narrow to a specific product/metric from our EDA — see Current Scope; confirming the scoped stack is the new question below.)*
 - Are there internal precedents/prior work on composite quality scores we should review?
 - Preferred dashboard technology, or is that our call? (Sponsor doc: use professional judgment, open source encouraged)
 - Which DAS demonstration product vintage is best for the noise analysis? *(Provisional pick made 2026-07-15: the 2022-08-25 tabulated DHC demonstration summary file — newest tabulated release, closest to DHC production settings; the 2023-04-03 production suite is microdata-only and the 2022-03-16 release has a technical-issues alert. Please confirm or redirect.)*
@@ -177,6 +188,7 @@ Each analysis answers a specific question — keep notebooks organized by questi
 - **Residual sampling flags** (EDA 07): for count estimates, flag CVs worse than predicted from estimate size. Prefer these alongside raw CV tiers on the dashboard, or raw CV only — especially since income medians are poorly predicted by household count (R² ≈ 0.01)?
 - Which non-API datasets should our product inventory include? The Data API covers ~1,800 dataset-vintages (~570 product families), but uncertainty-relevant products like ACS Variance Replicate Tables and some PUMS distributions ship as bulk files outside the API. We've hand-added TIGER and the DAS demonstration files — what else matters for the composite?
 - Is there an internal machine-readable index of the Bureau's file-only datasets (the ~6,158 on the website's Datasets page)? data.gov's harvest API is retired (all CKAN paths 404, confirmed 2026-07-26) and `census.gov/data.json` covers only the Data API — it's the same ~1,790-record catalog at a second URL. If none exists, our curated registry approach (35 uncertainty-relevant file-only datasets, hand-annotated in the Product Scope Tracker) may be worth flagging to the data-dissemination teams as a discoverability gap.
+- **Scoped product stack confirmation (new, 2026-08-01):** for the income & poverty scope — ACS 5-year (B19013/B17001/C17002) + allocation tables (B99192/B99172) + SAIPE + PUMS replicate weights / Variance Replicate Tables: is that the right mix? And since income doesn't exist in decennial products, does the DAS/privacy-noise analysis (EDA 04) stay as report context rather than a score component?
 
 ## Guardrails / Lessons to Remember
 
