@@ -31,7 +31,7 @@ Three tabs, one geography picker in the sidebar (Trenton citywide, Mercer County
 any of the 25 Mercer tracts that make up Trenton — Trenton is exactly
 tract-coextensive, confirmed live against the API):
 
-- **ACS (survey estimates).** Age × sex and poverty-by-age cards, each range-first:
+- **ACS (survey estimates).** Population-by-age and poverty-by-age cards, each range-first:
   the range is the headline, the point estimate is secondary, with a plain-language
   tier chip (**Solid / Use with care / Too risky**) and a collapsed "Show me the
   statistics" panel for CV/MOE detail. Ranges come directly from the Census Bureau's
@@ -59,6 +59,17 @@ tract-coextensive, confirmed live against the API):
    modeled errors, the same independence-assumption combination
    `analysis.acs.aggregate_moe` already uses for ACS. This is an extension of the
    noise model, not something notebook 04 measured directly.
+3. **Poverty rates use the true poverty-universe denominator, not total population.**
+   Every poverty card now also shows a rate (e.g. "≈ 27.8% of Under 5 residents in
+   poverty, range 22.2%–33.5%"), computed with the Census ratio-MOE formula
+   (`analysis.dashboard.poverty_rate`) — poverty count is a *subset* of the poverty
+   universe, so combining their MOEs in quadrature (like `aggregate_moe` does for
+   independent estimates) would be the wrong formula. The denominator is B17001's
+   own poverty-universe total (below + at-or-above poverty, both pulled), not
+   B01001's total population — the two differ by a few percent because B17001
+   excludes some group quarters residents from poverty-status determination. The
+   same rate, with a tooltip line, is available on the map for any "Poverty: *band*"
+   selection.
 
 ## A real bug the stakeholder test caught
 
@@ -70,9 +81,46 @@ clamping the number a stakeholder never touches the number that decides the tier
 range that dips below zero is now called out explicitly as its own warning: it's a
 signal of how unreliable the estimate is, not a bug to hide.
 
+A second gap, this one in labeling rather than data: the age cards were titled
+"Age × sex" on both product tabs, but every card calls `acs_sexage`/`dhc_sexage`
+with `sex="both"` — sex is never actually broken out on screen, just total
+population per age band. The section is titled **"Population by age"** now,
+which is what it has shown all along. The underlying tables (B01001, P12) do
+carry the male/female split if a future pass wants to surface it (a bigger UI
+decision, deliberately not made here — see WORKLOG).
+
+## The map
+
+Each product tab ends in an interactive tract choropleth (pydeck `GeoJsonLayer` over
+a CARTO basemap, `st.pydeck_chart`) — hover any of the 25 tracts for its tier, range,
+and best estimate. Colors are the **Okabe-Ito colorblind-safe palette** (blue / orange
+/ vermillion), chosen specifically to avoid red-green — the most common form of color
+blindness — and every tier also carries a distinct icon (● ▲ ■) on the cards as a
+second, color-independent cue. The legend is a small inline HTML strip under the map,
+not matplotlib's default legend (which rendered oversized at this figure size — the
+original static-map version of this app used `geopandas.plot` + matplotlib; it's been
+fully replaced). When the sidebar geography is a single tract, the map shows **only**
+that tract, zoomed in tight — the all-25 view is reserved for the citywide/county
+selections, where cross-tract comparison is the point.
+
+## Neighborhood names
+
+The sidebar and map tooltips show `Tract N — Neighborhood` (e.g. "Tract 3 —
+Chambersburg"). **No official Census or City of Trenton neighborhood-boundary file
+exists** — this project checked. The names come from OpenStreetMap's community-tagged
+`place=neighbourhood/suburb/quarter` points (15 fall inside Trenton's boundary), each
+tract labeled with its *nearest* such point to the tract centroid
+(`ingestion/pull_trenton_dashboard.py::_attach_neighborhood_names`). Verified in
+planning: all 25 tracts land within 0.70 miles of their assigned point. This is a
+**display-only approximation** — it affects no statistic, only what the sidebar and
+map tooltip are labeled — and is called out as such in the sidebar caption. Logged as
+an open question for mentors (README.md): is showing an approximate, crowdsourced
+neighborhood name an acceptable stakeholder-facing convenience, or does an unofficial
+label risk undermining trust in the (correct) statistics next to it?
+
 ## What's deliberately not here
 
 DP1 (adds a third caveat with no new capability at tract level — it stops at tract
-and duplicates DHC's population), interactive hover tooltips, block-group drilldown,
-any composite score (excluded from Phase B by design), authentication, caching beyond
-`st.cache_data`, and deployment. All MVP concerns, not prototype ones.
+and duplicates DHC's population), block-group drilldown, any composite score
+(excluded from Phase B by design), authentication, caching beyond `st.cache_data`,
+and deployment. All MVP concerns, not prototype ones.

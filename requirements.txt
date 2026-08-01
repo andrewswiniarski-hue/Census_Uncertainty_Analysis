@@ -14,3 +14,4 @@ python-dotenv     # loads CENSUS_API_KEY from the local .env file
 jupyter           # notebooks for exploratory analysis
 pyarrow           # fast, compact parquet file storage
 streamlit         # Trenton dashboard prototype (Streamlit/app.py)
+pydeck            # interactive tract choropleth in the Trenton dashboard

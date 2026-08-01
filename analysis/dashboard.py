@@ -78,6 +78,18 @@ _POVERTY_CELLS = {
     "18-64": {"male": ["010", "011", "012", "013", "014"], "female": ["024", "025", "026", "027", "028"]},
     "65+": {"male": ["015", "016"], "female": ["029", "030"]},
 }
+# The mirror "at or above poverty level" branch -- same age cells, offset
+# +29 from _POVERTY_CELLS. Below + at-or-above = the true poverty-universe
+# total per band (verified live in planning). This is NOT the same universe
+# as B01001's total population -- B17001 excludes some group quarters
+# populations from poverty-status determination -- so it must be pulled
+# and summed, not approximated from the population bands.
+_POVERTY_ABOVE_CELLS = {
+    "Under 5": {"male": ["033"], "female": ["047"]},
+    "5-17": {"male": ["034", "035", "036", "037", "038"], "female": ["048", "049", "050", "051", "052"]},
+    "18-64": {"male": ["039", "040", "041", "042", "043"], "female": ["053", "054", "055", "056", "057"]},
+    "65+": {"male": ["044", "045"], "female": ["058", "059"]},
+}
 
 
 def _sexes(sex: str) -> list[str]:
@@ -154,9 +166,53 @@ def acs_poverty(df: pd.DataFrame, band: str, sex: str) -> tuple[pd.Series, pd.Se
     return aggregate_estimate(df, codes), aggregate_moe(df, codes)
 
 
+def acs_poverty_universe(df: pd.DataFrame, band: str, sex: str) -> tuple[pd.Series, pd.Series]:
+    """(estimate, moe) for the poverty UNIVERSE (below + at-or-above) in a band.
+
+    The correct denominator for a poverty rate -- not B01001's total
+    population, which is a different (larger) universe. See module
+    docstring and ingestion/pull_trenton_dashboard.py.
+    """
+    codes = _codes("B17001", _POVERTY_CELLS, band, sex) + _codes(
+        "B17001", _POVERTY_ABOVE_CELLS, band, sex
+    )
+    return aggregate_estimate(df, codes), aggregate_moe(df, codes)
+
+
 def acs_range(est: float, moe: float) -> tuple[float, float]:
     """MOE is already a 90%-confidence half-width -- the range is est +/- moe."""
     return est - moe, est + moe
+
+
+def poverty_rate(
+    below_est: float, below_moe: float, universe_est: float, universe_moe: float
+) -> tuple[float, float]:
+    """Percent below poverty (0-100) and its MOE, via the ACS ratio-MOE formula.
+
+    `below` is a SUBSET of `universe` (poverty count within the poverty
+    universe for the same age band), so this is a proportion, not two
+    independent estimates -- summing MOEs in quadrature (aggregate_moe)
+    would be wrong here.
+
+    SE(p) = (1/Y) * sqrt(SE(X)^2 - p^2 * SE(Y)^2), where p = X/Y; if the
+    term under the root is negative, the handbook's fallback is to ADD
+    instead of subtract (this happens when X and Y are highly correlated,
+    which is common for small universes). Source: U.S. Census Bureau,
+    "Understanding and Using American Community Survey Data: What All Data
+    Users Need to Know," Appendix on calculating MOEs for derived
+    proportions (the same handbook cited in analysis/acs.py for the
+    zero-cell MOE-aggregation rule).
+    """
+    if universe_est <= 0:
+        return float("nan"), float("nan")
+    p = below_est / universe_est
+    se_x = below_moe / Z_90
+    se_y = universe_moe / Z_90
+    term = se_x**2 - (p**2) * se_y**2
+    if term < 0:
+        term = se_x**2 + (p**2) * se_y**2
+    se_p = (1 / universe_est) * term**0.5
+    return p * 100, se_p * Z_90 * 100
 
 
 # ---------------------------------------------------------------------------
@@ -262,6 +318,15 @@ if __name__ == "__main__":
     assert (lo, hi) == (800.0, 1200.0)
     assert abs(cv_from_range(1000.0, 800.0, 1200.0) - (200.0 / Z_90 / 1000.0)) < 1e-9
 
+    # poverty_rate: a clean case (independent-ish) and a forced-negative-term case.
+    rate, rate_moe = poverty_rate(100.0, 20.0, 1000.0, 50.0)
+    assert abs(rate - 10.0) < 1e-9 and rate_moe > 0
+    # below_moe way bigger than what an independent combination could support
+    # forces the sqrt term negative -> the handbook's add-instead-of-subtract
+    # fallback must still return a real, positive MOE, not a NaN from sqrt(-x).
+    rate2, rate2_moe = poverty_rate(100.0, 500.0, 1000.0, 50.0)
+    assert rate2_moe > 0 and not np.isnan(rate2_moe)
+
     if (RAW_DIR / "acs5_2024_trenton_place.parquet").exists():
         place = load_acs("place")
         total = 0.0
@@ -273,4 +338,21 @@ if __name__ == "__main__":
         )
         d_lo, d_hi = dhc_population_range(90_871.0, "tract", tract_pops=pd.Series([90_871.0]))
         assert d_lo < 90_871.0 < d_hi
+
+        # Poverty universe should be close to (never wildly off from) total
+        # population for the same band -- a real but bounded gap, since the
+        # two tables use slightly different universes (B17001 excludes some
+        # group quarters). More than a 20% gap would mean a wiring mistake,
+        # not a real universe difference.
+        for band in BANDS:
+            pop_est, _ = acs_sexage(place, band, "both")
+            univ_est, univ_moe = acs_poverty_universe(place, band, "both")
+            below_est, below_moe = acs_poverty(place, band, "both")
+            gap = abs(float(univ_est.iloc[0]) - float(pop_est.iloc[0])) / float(pop_est.iloc[0])
+            assert gap < 0.20, f"{band}: poverty universe vs. population gap {gap:.1%} looks wrong"
+            rate, rate_moe = poverty_rate(
+                float(below_est.iloc[0]), float(below_moe.iloc[0]),
+                float(univ_est.iloc[0]), float(univ_moe.iloc[0]),
+            )
+            assert 0.0 <= rate <= 100.0 and rate_moe > 0
     print("dashboard self-check OK")
