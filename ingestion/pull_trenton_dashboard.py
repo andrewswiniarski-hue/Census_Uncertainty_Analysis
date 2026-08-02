@@ -96,7 +96,14 @@ ACS_POVERTY_BELOW_VARS = [f"B17001_{n:03d}" for n in list(range(4, 17)) + list(r
 ACS_POVERTY_ABOVE_VARS = [f"B17001_{n:03d}" for n in list(range(33, 46)) + list(range(47, 60))]
 ACS_POVERTY_VARS = ACS_POVERTY_BELOW_VARS + ACS_POVERTY_ABOVE_VARS
 
-ACS_VARS = ["B01001_001"] + ACS_SEXAGE_VARS + ACS_POVERTY_VARS
+# Median household income -- the confirmed anchor variable for the income &
+# poverty scope (HANDOFF.md decision #14). Added 2026-08-01 alongside the
+# imputation axis; top-coded rows ($250,001) are flagged, not excluded here
+# (analysis.acs.flag_topcoded_income), since a citywide/county median is
+# unlikely to hit the cap but a single tract could.
+ACS_INCOME_VARS = ["B19013_001"]
+
+ACS_VARS = ["B01001_001"] + ACS_SEXAGE_VARS + ACS_POVERTY_VARS + ACS_INCOME_VARS
 DHC_VARS = ["P1_001N"] + [f"{v}N" for v in DHC_SEXAGE_VARS]
 
 ACS_ESTIMATE_COLS = [f"{v}E" for v in ACS_VARS]

@@ -26,8 +26,6 @@ from analysis.dashboard import (
     acs_range,
     acs_sexage,
     cv_from_range,
-    dhc_population_range,
-    dhc_subgroup_range,
     load_acs,
     poverty_rate,
     tier,
@@ -76,35 +74,6 @@ class AcsRangeTest(unittest.TestCase):
         est, moe = acs_sexage(df, "Under 5", "both")
         self.assertEqual(est.iloc[0], 30.0)
         self.assertAlmostEqual(moe.iloc[0], (3.0**2 + 4.0**2) ** 0.5)
-
-
-class DhcRangeTest(unittest.TestCase):
-    def test_population_range_widens_at_smaller_size(self) -> None:
-        _, small_hi = dhc_population_range(100.0, "tract")
-        _, big_hi = dhc_population_range(100_000.0, "tract")
-        small_half = small_hi - 100.0
-        big_half = big_hi - 100_000.0
-        # Relative width (half-width / estimate) must shrink as size grows.
-        self.assertGreater(small_half / 100.0, big_half / 100_000.0)
-
-    def test_place_requires_tract_pops(self) -> None:
-        with self.assertRaises(ValueError):
-            dhc_population_range(90_000.0, "place")
-
-    def test_place_range_is_rss_of_tracts_not_naive_sum(self) -> None:
-        pops = pd.Series([90_000.0] * 25)
-        lo, hi = dhc_population_range(90_000.0 * 25, "place", tract_pops=pops)
-        naive_half = 25 * (90_000.0 * 0.5)  # absurdly large if summed, not RSS'd
-        self.assertLess(hi - (90_000.0 * 25), naive_half)
-
-    def test_subgroup_range_place_bigger_than_tract(self) -> None:
-        _, tract_hi = dhc_subgroup_range(500.0, "tract")
-        _, place_hi = dhc_subgroup_range(500.0, "place")
-        self.assertGreater(place_hi - 500.0, tract_hi - 500.0)
-
-    def test_bad_level_raises(self) -> None:
-        with self.assertRaises(ValueError):
-            dhc_subgroup_range(500.0, "state")  # no Black 65+ RMSE anchor exists for state
 
 
 class PovertyRateTest(unittest.TestCase):

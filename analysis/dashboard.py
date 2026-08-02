@@ -3,38 +3,41 @@
 What it does
 ------------
 Everything the app needs that isn't presentation: the four grant-relevant
-age bands (mapped onto ACS's B01001/B17001 cells and DHC's P12 cells, which
-share an identical sex-x-age layout), range-first uncertainty for both
-products, and the plain-language reliability tier. Keeping this here means
-the Streamlit file only renders -- every number it shows traces to a tested
+age bands (mapped onto ACS's B01001/B17001 cells), range-first uncertainty,
+and the plain-language reliability tier. Keeping this here means the
+Streamlit file only renders -- every number it shows traces to a tested
 function.
 
 Reuses rather than reinvents: analysis.acs (aggregate_estimate,
 aggregate_moe, Z_90 -- the same handbook zero-cell MOE rule every ACS
-notebook uses) and analysis.noise_model (the DAS noise model, EDA 04).
+notebook uses).
 
 What it needs
 -------------
-data/raw/acs5_2024_trenton_{place,county,tract}.parquet and
-data/raw/dhc_2020_trenton_{place,county,tract}.parquet
+data/raw/acs5_2024_trenton_{place,county,tract}.parquet
 (regenerate with: python ingestion/pull_trenton_dashboard.py)
 
-Two methodology choices made here, both approved before building:
+Methodology choice made here, approved before building:
 --------------------------------------------------------------
-1. Tiers (Solid / Use with care / Too risky) use the ESRI 0.12 and NCHS
-   0.30 CV conventions already cited in analysis/viz.py -- labeled in the
-   app as OUR proposed tiers, not adopted Census thresholds (HANDOFF.md
-   decision #8: our tiers are a Weeks 4-6 call with mentors, not decided).
-2. DHC ships no MOE. To render a DHC number in the same range-first card
-   as ACS, its modeled relative noise is scaled by Z_90 into a
-   comparable interval -- flagged everywhere as MODELED, not measured.
-   "Place" (Trenton) is not a DAS spine geography (state/county/tract/
-   block group/block only), so its DHC range is NOT looked up directly --
-   it's built by root-sum-of-squares over the 25 constituent tracts'
-   modeled errors, the same independence-assumption aggregation the ACS
-   MOE handbook rule already uses (analysis.acs.aggregate_moe). This is
-   an extension of the noise model, not something notebook 04 measured;
-   call it out if reviewing this file.
+Tiers (Solid / Use with care / Too risky) use the ESRI 0.12 and NCHS
+0.30 CV conventions already cited in analysis/viz.py -- labeled in the
+app as OUR proposed tiers, not adopted Census thresholds (HANDOFF.md
+decision #8: our tiers are a Weeks 4-6 call with mentors, not decided).
+
+DHC was dropped from this app 2026-08-01 (HANDOFF.md decision #17): income
+does not exist in decennial products, so DHC cannot carry the anchor
+variable under the Phase 2 income & poverty scope. The DHC/DP1 modeled-noise
+analysis (analysis/noise_model.py, notebooks 10-12) remains valid report
+evidence; it no longer feeds this app.
+
+The imputation axis (added 2026-08-01, HANDOFF.md decision #17): reliability
+tiers here are CV-only and stay that way -- allocation is a SECOND, separate
+signal shown beside the tier, not folded into it (the mentor-gated composite
+tier-philosophy question, README Open Questions, is not pre-empted by this
+app). Rates come from analysis.alloc (already tested); the flag threshold is
+this app's own NJ-statewide 75th percentile (analysis.composite), not
+Trenton's own tracts -- judging a city against its own tracts would flag
+exactly a quarter of them by construction and carry no information.
 """
 
 from __future__ import annotations
@@ -44,15 +47,14 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from analysis import alloc
 from analysis.acs import Z_90, aggregate_estimate, aggregate_moe
-from analysis.noise_model import BLACK_65PLUS_RMSE_BY_LEVEL, estimate_relative_noise
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 RAW_DIR = REPO_ROOT / "data" / "raw"
 
 LEVELS = ["place", "county", "tract"]
 GEO_LABELS = {"place": "Trenton (whole city)", "county": "Mercer County", "tract": "Tract"}
-N_TRENTON_TRACTS = 25
 
 BANDS = ["Under 5", "5-17", "18-64", "65+"]
 SEXES = ["male", "female", "both"]
@@ -123,21 +125,6 @@ def load_acs(level: str) -> pd.DataFrame:
     return df
 
 
-def load_dhc(level: str) -> pd.DataFrame:
-    """2020 DHC P12 (sex x age, full count) for Trenton/Mercer."""
-    if level not in LEVELS:
-        raise ValueError(f"level must be one of {LEVELS}, got {level!r}")
-    path = RAW_DIR / f"dhc_2020_trenton_{level}.parquet"
-    if not path.exists():
-        raise FileNotFoundError(
-            f"{path} not found -- regenerate with: python ingestion/pull_trenton_dashboard.py"
-        )
-    df = pd.read_parquet(path)
-    value_cols = [c for c in df.columns if c.startswith("P1")]
-    df[value_cols] = df[value_cols].apply(pd.to_numeric, errors="coerce")
-    return df
-
-
 def load_trenton_tracts() -> pd.DataFrame:
     """25 Mercer tracts inside the Trenton place polygon (with geometry)."""
     import geopandas as gpd
@@ -148,6 +135,53 @@ def load_trenton_tracts() -> pd.DataFrame:
             f"{path} not found -- regenerate with: python ingestion/pull_trenton_dashboard.py"
         )
     return gpd.read_parquet(path)
+
+
+# ---------------------------------------------------------------------------
+# Allocation (imputation) -- the second, separate reliability signal
+# ---------------------------------------------------------------------------
+
+def load_alloc_nj_tract() -> pd.DataFrame:
+    """NJ statewide tract allocation rates (analysis.alloc).
+
+    Used both for the Mercer/Trenton tract-level lookups and for the
+    NJ-wide 75th-percentile flag threshold -- the same dataframe serves
+    both so the threshold and the rates it's judging are never computed
+    from different pulls.
+    """
+    return alloc.derive_rates(alloc.load_level("tract"))
+
+
+def load_alloc_nj_county() -> pd.DataFrame:
+    """NJ statewide county allocation rates -- for the Mercer County card."""
+    return alloc.derive_rates(alloc.load_level("county"))
+
+
+def alloc_place_rate(
+    alloc_tract_df: pd.DataFrame,
+    tract_codes,
+    numerator_cols: str | list[str],
+    denominator_col: str,
+    *,
+    complement: bool = False,
+) -> float:
+    """Denominator-weighted allocation rate across a set of tracts.
+
+    Trenton has no published "place" row in the allocation tables (they
+    stop at county/tract/block group), so its citywide rate is derived by
+    summing raw counts over the 25 constituent tracts and dividing -- never
+    by averaging the 25 tracts' own rates, per the "no bare allocation rate
+    without its denominator" rule. Allocation tables carry no MOE, so
+    summing their counts introduces no approximation, unlike the modeled
+    DHC place range this app used to build by root-sum-of-squares.
+    """
+    if isinstance(numerator_cols, str):
+        numerator_cols = [numerator_cols]
+    rows = alloc_tract_df[alloc_tract_df["TRACT"].isin(tract_codes)]
+    numerator = rows[numerator_cols].sum().sum()
+    denominator = rows[denominator_col].sum()
+    rate = numerator / denominator
+    return 1 - rate if complement else rate
 
 
 # ---------------------------------------------------------------------------
@@ -213,56 +247,6 @@ def poverty_rate(
         term = se_x**2 + (p**2) * se_y**2
     se_p = (1 / universe_est) * term**0.5
     return p * 100, se_p * Z_90 * 100
-
-
-# ---------------------------------------------------------------------------
-# DHC estimate + modeled range
-# ---------------------------------------------------------------------------
-
-def dhc_sexage(df: pd.DataFrame, band: str, sex: str) -> pd.Series:
-    """Estimate only -- DHC is a full count, no MOE exists to sum."""
-    codes = [f"P12_{n}N" for s in _sexes(sex) for n in _SEXAGE_CELLS[band][s]]
-    return df[codes].sum(axis=1, min_count=len(codes))
-
-
-def dhc_population_range(
-    est: float, level: str, *, tract_pops: pd.Series | None = None
-) -> tuple[float, float]:
-    """Modeled 90%-comparable range for a DHC total-population count.
-
-    "tract"/"county" look the modeled relative noise up directly (both are
-    real DAS spine levels). "place" is not on the spine, so its noise is
-    built as the root-sum-of-squares of the 25 constituent tracts' modeled
-    absolute errors -- the same independence-assumption combination the
-    ACS MOE handbook rule uses (analysis.acs.aggregate_moe) -- which
-    requires tract_pops (the 25 tract population counts).
-    """
-    if level == "place":
-        if tract_pops is None:
-            raise ValueError('level="place" requires tract_pops')
-        abs_errs = tract_pops * tract_pops.apply(lambda p: estimate_relative_noise("tract", p))
-        place_abs = float(np.sqrt((abs_errs**2).sum()))
-        rel = place_abs / est
-    else:
-        rel = estimate_relative_noise(level, est)
-    half = Z_90 * rel * est
-    return est - half, est + half
-
-
-def dhc_subgroup_range(est: float, level: str) -> tuple[float, float]:
-    """Modeled range for a DHC age-band subgroup, using the Black 65+
-    absolute RMSE as a same-order-of-magnitude proxy (no per-subgroup
-    curve exists -- notebook 09 makes and documents this same approximation).
-    "place" RSS-aggregates the tract-level proxy across the 25 tracts.
-    """
-    if level == "place":
-        abs_err = float(BLACK_65PLUS_RMSE_BY_LEVEL["tract"] * np.sqrt(N_TRENTON_TRACTS))
-    elif level in BLACK_65PLUS_RMSE_BY_LEVEL.index:
-        abs_err = float(BLACK_65PLUS_RMSE_BY_LEVEL[level])
-    else:
-        raise ValueError(f"no Black 65+ RMSE anchor for level {level!r}")
-    half = Z_90 * abs_err
-    return est - half, est + half
 
 
 # ---------------------------------------------------------------------------
@@ -336,8 +320,6 @@ if __name__ == "__main__":
         assert abs(total - float(place["B01001_001E"].iloc[0])) < 1.0, (
             f"band sum {total} != published total {place['B01001_001E'].iloc[0]}"
         )
-        d_lo, d_hi = dhc_population_range(90_871.0, "tract", tract_pops=pd.Series([90_871.0]))
-        assert d_lo < 90_871.0 < d_hi
 
         # Poverty universe should be close to (never wildly off from) total
         # population for the same band -- a real but bounded gap, since the
@@ -355,4 +337,19 @@ if __name__ == "__main__":
                 float(univ_est.iloc[0]), float(univ_moe.iloc[0]),
             )
             assert 0.0 <= rate <= 100.0 and rate_moe > 0
+
+    if (RAW_DIR / "acs5_2024_nj_alloc_tract.parquet").exists():
+        nj_tract = load_alloc_nj_tract()
+        trenton = load_trenton_tracts()
+        trenton_codes = trenton["TRACT"]
+        rows = nj_tract[nj_tract["TRACT"].isin(trenton_codes)]
+        city_income_alloc = alloc_place_rate(
+            nj_tract, trenton_codes, "B99192_002E", "B99192_001E", complement=True
+        )
+        # A weighted aggregate must land inside its own inputs' range -- if it
+        # doesn't, the denominators are wrong (e.g. summed the wrong column).
+        assert rows["income_alloc"].min() <= city_income_alloc <= rows["income_alloc"].max(), (
+            f"Trenton city income_alloc {city_income_alloc:.3f} falls outside its own "
+            f"25 tracts' range [{rows['income_alloc'].min():.3f}, {rows['income_alloc'].max():.3f}]"
+        )
     print("dashboard self-check OK")

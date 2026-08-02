@@ -10,7 +10,7 @@ tiers, never a bare number.
 Run from the repo root:
     streamlit run Streamlit/app.py
 
-Needs data/raw/{acs5_2024_trenton,dhc_2020_trenton,trenton_tracts}*.parquet
+Needs data/raw/{acs5_2024_trenton,trenton_tracts}*.parquet
 -- regenerate with: python ingestion/pull_trenton_dashboard.py
 """
 
@@ -24,10 +24,10 @@ sys.path.insert(0, str(REPO_ROOT))
 
 import json
 
-import matplotlib.pyplot as plt
 import pydeck as pdk
 import streamlit as st
 
+from analysis import composite
 from analysis.dashboard import (
     BANDS,
     TIER_CARE,
@@ -37,17 +37,16 @@ from analysis.dashboard import (
     acs_poverty_universe,
     acs_range,
     acs_sexage,
+    alloc_place_rate,
     cv_from_range,
-    dhc_population_range,
-    dhc_sexage,
-    dhc_subgroup_range,
     load_acs,
-    load_dhc,
+    load_alloc_nj_county,
+    load_alloc_nj_tract,
     load_trenton_tracts,
     poverty_rate,
     tier,
 )
-from analysis.acs import Z_90
+from analysis.acs import flag_topcoded_income, income_cv
 
 st.set_page_config(page_title="Trenton Grant Data Prototype", layout="wide")
 
@@ -61,13 +60,31 @@ TIER_ICON = {TIER_SOLID: "●", TIER_CARE: "▲", TIER_RISKY: "■", "No data": 
 TIER_TEXT = {TIER_SOLID: "#FFFFFF", TIER_CARE: "#1A1A1A",
              TIER_RISKY: "#000000", "No data": "#1A1A1A"}
 
+# Allocation-quadrant colors (analysis.composite.classify_quadrant), a
+# separate map view from the CV tier above -- reuses the same Okabe-Ito
+# palette so "vermillion = worst" and "blue = best" stay consistent, plus
+# reddish-purple for the blind spot (low CV, high allocation): a tract that
+# looks fine on sampling error alone but is mostly imputed.
+QUADRANT_LABELS_PLAIN = {
+    "low_cv_low_alloc": "Low sampling risk, low imputation",
+    "low_cv_high_alloc": "Blind spot: low sampling risk, high imputation",
+    "high_cv_low_alloc": "High sampling risk, low imputation",
+    "high_cv_high_alloc": "High sampling risk, high imputation",
+}
+QUADRANT_COLOR = {
+    QUADRANT_LABELS_PLAIN["low_cv_low_alloc"]: "#0072B2",
+    QUADRANT_LABELS_PLAIN["low_cv_high_alloc"]: "#CC79A7",
+    QUADRANT_LABELS_PLAIN["high_cv_low_alloc"]: "#E69F00",
+    QUADRANT_LABELS_PLAIN["high_cv_high_alloc"]: "#D55E00",
+    "No data": "#999999",
+}
+QUADRANT_ORDER = tuple(QUADRANT_COLOR)
+
 
 def _hex_to_rgba(hex_color: str, alpha: int = 170) -> list[int]:
     h = hex_color.lstrip("#")
     return [int(h[i : i + 2], 16) for i in (0, 2, 4)] + [alpha]
 
-
-TIER_RGBA = {label: _hex_to_rgba(color) for label, color in TIER_COLOR.items()}
 
 # One shared style block instead of the inline-style soup this replaces.
 # st.html (not st.markdown) -- style-only content is routed to the event
@@ -79,6 +96,8 @@ _CSS = """
 .card-range  { font-size: clamp(1.15rem, 2.2vw, 1.6rem); font-weight: 700; margin: 2px 0; }
 .card-sub    { color: #5A5A5A; font-size: 1.05rem; font-weight: 500; }
 .card-rate   { color: #333; font-size: 0.9rem; margin-top: 2px; }
+.card-alloc  { color: #333; font-size: 0.85rem; margin-top: 6px; padding-top: 6px;
+               border-top: 1px dashed #DDD; }
 .stat-row    { display: flex; justify-content: space-between; padding: 5px 2px;
                border-bottom: 1px solid #E6E6E6; font-size: 0.85rem; }
 .stat-row .label { color: #5A5A5A; }
@@ -98,10 +117,18 @@ _CSS = """
 
 @st.cache_data
 def _load_all() -> dict:
+    alloc_tract = load_alloc_nj_tract()
     return {
         "acs": {lvl: load_acs(lvl) for lvl in ("place", "county", "tract")},
-        "dhc": {lvl: load_dhc(lvl) for lvl in ("place", "county", "tract")},
         "tracts": load_trenton_tracts(),
+        "alloc_tract": alloc_tract,
+        "alloc_county": load_alloc_nj_county(),
+        # Judged against NJ statewide, not Trenton's own tracts -- a threshold
+        # computed on Trenton's own 84/25 tracts would flag exactly a quarter
+        # of them by construction and carry no information.
+        "income_alloc_threshold": composite.allocation_flag_threshold(
+            alloc_tract["income_alloc"]
+        ),
     }
 
 
@@ -144,9 +171,19 @@ def render_card(
     title: str, est: float, low: float, high: float, *,
     caveat: str | None = None,
     rate: tuple[float, float] | None = None, rate_label: str = "of this group",
+    alloc_pct: float | None = None, alloc_label: str = "this figure",
+    alloc_threshold_pct: float | None = None, alloc_is_proxy: bool = False,
 ) -> None:
     """`rate`, if given, is (percent, percent_moe) -- e.g. a poverty rate --
-    shown as a second range under the count and added to the stats panel."""
+    shown as a second range under the count and added to the stats panel.
+
+    `alloc_pct`, if given, is the share (0-100) of this figure that was
+    imputed rather than reported -- a SECOND, separate reliability signal
+    from the CV tier above, not folded into it. Only flagged (warning icon)
+    when `alloc_threshold_pct` is also given and exceeded -- that threshold
+    is only empirically established for income (analysis.composite); the
+    other allocation rates are shown as plain context, not a claimed cutoff.
+    """
     # CV uses the TRUE (possibly negative) low bound -- a small count's MOE
     # can exceed the estimate, which is real information about how weak the
     # estimate is. Only the DISPLAYED low bound is floored at 0: nobody can
@@ -167,12 +204,24 @@ def render_card(
             f"(range {rate_lo:.1f}%&ndash;{rate_hi:.1f}%)</div>"
         )
 
+    alloc_line = ""
+    alloc_flagged = False
+    if alloc_pct is not None:
+        alloc_flagged = alloc_threshold_pct is not None and alloc_pct > alloc_threshold_pct
+        icon = "⚠️" if alloc_flagged else "ℹ️"
+        proxy_note = " (a family-income proxy, not measured person by person)" if alloc_is_proxy else ""
+        alloc_line = (
+            f"<div class='card-alloc'>{icon} About <b>{alloc_pct:.0f}%</b> of {alloc_label} "
+            f"were filled in by the Census Bureau, not reported{proxy_note}. The margin of "
+            f"error above does not account for this.</div>"
+        )
+
     with st.container(border=True):
         st.markdown(f"**{title}**")
         st.markdown(
             f"<div class='card-range'>{display_low:,.0f} &ndash; {high:,.0f}</div>"
             f"<div class='card-sub'>best estimate: {est:,.0f}</div>"
-            + rate_line,
+            + rate_line + alloc_line,
             unsafe_allow_html=True,
         )
         st.markdown(
@@ -215,6 +264,16 @@ def render_card(
                     "true poverty-universe denominator, not total population -- the two "
                     "differ slightly (B17001 excludes some group quarters residents)."
                 )
+            if alloc_pct is not None:
+                rows.append(("Imputed (allocated)", f"{alloc_pct:.1f}%" + (" [proxy]" if alloc_is_proxy else "")))
+                if alloc_threshold_pct is not None:
+                    rows.append(("NJ statewide flag line (75th pct.)", f"{alloc_threshold_pct:.1f}%"))
+                note += (
+                    " Allocation is a separate signal from the CV tier above -- a tract can "
+                    "read Solid on sampling error and still have most of this figure imputed. "
+                    "Allocation tables carry no margin of error (Census Bureau publishes "
+                    "estimates only), so this rate is exact, not itself a range."
+                )
             _stats_panel(rows, note)
 
 
@@ -231,6 +290,8 @@ def render_tier_map(
     *,
     selected_tract: str | None = None,
     pct_by_tract: dict[str, float] | None = None,
+    color_map: dict[str, str] | None = None,
+    legend_order: tuple[str, ...] | None = None,
 ) -> None:
     """Interactive pydeck choropleth: hover a tract for its number and tier.
 
@@ -240,13 +301,19 @@ def render_tier_map(
     `selected_tract` is set (sidebar geography = one tract), the map shows
     ONLY that tract, zoomed in tight -- otherwise all 25, city-wide.
     `pct_by_tract` (poverty rate maps only) adds a rate line to the tooltip.
+    `color_map`/`legend_order` let this same function render a different
+    label set (e.g. the four allocation quadrants) -- default is the CV tier.
     """
+    hexmap = color_map if color_map is not None else TIER_COLOR
+    order = legend_order if legend_order is not None else (TIER_SOLID, TIER_CARE, TIER_RISKY, "No data")
+    rgba_map = {label: _hex_to_rgba(hexcolor) for label, hexcolor in hexmap.items()}
+
     gdf = tracts_gdf.to_crs(epsg=4326).copy()
     if selected_tract is not None:
         gdf = gdf[gdf["TRACT"] == selected_tract]
     gdf["short_name"] = gdf.apply(_tract_full_label, axis=1)
     gdf["tier_label"] = gdf["TRACT"].map(tier_by_tract).fillna("No data")
-    gdf["fill_color"] = gdf["tier_label"].map(TIER_RGBA)
+    gdf["fill_color"] = gdf["tier_label"].map(rgba_map)
     gdf["estimate_text"] = gdf["TRACT"].map(
         lambda t: f"{est_by_tract[t]:,.0f}" if t in est_by_tract else "n/a"
     )
@@ -297,12 +364,64 @@ def render_tier_map(
         use_container_width=True,
     )
     legend = " &nbsp;&nbsp; ".join(
-        f"<span class='legend-swatch' style='background:{TIER_COLOR[label]};'></span>"
+        f"<span class='legend-swatch' style='background:{hexmap[label]};'></span>"
         f"<span class='legend-label'>{label}</span>"
-        for label in (TIER_SOLID, TIER_CARE, TIER_RISKY, "No data")
+        for label in order
     )
     st.markdown(legend, unsafe_allow_html=True)
     st.caption("Hover a tract for its number and tier.")
+
+
+# ---------------------------------------------------------------------------
+# Allocation (imputation) lookups for the current geography selection
+# ---------------------------------------------------------------------------
+
+def _alloc_rate(
+    data: dict, level: str, tract_code: str | None, *,
+    rate_col: str, numerator_cols: str | list[str], denominator_col: str,
+    complement: bool = False,
+) -> float:
+    """Allocation rate for whatever geography is currently selected.
+
+    Tract and county are published allocation-table rows (analysis.alloc).
+    Trenton citywide ("place") has no published row -- allocation tables
+    stop at county/tract/block group -- so it's derived by summing raw
+    counts over the 25 constituent tracts (dashboard.alloc_place_rate),
+    never by averaging the 25 tracts' own rates.
+    """
+    if level == "tract":
+        row = data["alloc_tract"][data["alloc_tract"]["TRACT"] == tract_code]
+        return float(row[rate_col].iloc[0])
+    if level == "county":
+        county_code = data["tracts"]["COUNTY"].iloc[0]
+        row = data["alloc_county"][data["alloc_county"]["COUNTY"] == county_code]
+        return float(row[rate_col].iloc[0])
+    return alloc_place_rate(
+        data["alloc_tract"], data["tracts"]["TRACT"], numerator_cols, denominator_col,
+        complement=complement,
+    )
+
+
+def _income_alloc(data: dict, level: str, tract_code: str | None) -> float:
+    return _alloc_rate(
+        data, level, tract_code, rate_col="income_alloc",
+        numerator_cols="B99192_002E", denominator_col="B99192_001E", complement=True,
+    )
+
+
+def _age_alloc(data: dict, level: str, tract_code: str | None) -> float:
+    return _alloc_rate(
+        data, level, tract_code, rate_col="age_alloc",
+        numerator_cols="B99012_002E", denominator_col="B99012_001E",
+    )
+
+
+def _fam_pov_alloc(data: dict, level: str, tract_code: str | None) -> float:
+    return _alloc_rate(
+        data, level, tract_code, rate_col="fam_pov_alloc",
+        numerator_cols=["B99172_002E", "B99172_009E"], denominator_col="B99172_001E",
+        complement=True,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -357,60 +476,107 @@ def main() -> None:
     level, tract_code, geo_label = geography_picker(data["tracts"])
 
     acs_row = data["acs"][level]
-    dhc_row = data["dhc"][level]
     if level == "tract":
         acs_row = acs_row[acs_row["TRACT"] == tract_code]
-        dhc_row = dhc_row[dhc_row["TRACT"] == tract_code]
 
-    tab_acs, tab_dhc, tab_compare = st.tabs(
-        ["ACS (survey estimates)", "DHC 2020 (full count)", "Compare"]
+    st.subheader(f"{geo_label} -- American Community Survey (2020-2024, 5-year)")
+    st.info(
+        "ACS surveys a *sample* of households, not everyone. Every number below ships "
+        "with a real, measured margin of error (MOE) -- the range comes directly from "
+        "the Census Bureau, not a model."
     )
+    pop_est = float(acs_row["B01001_001E"].iloc[0])
+    pop_moe = float(acs_row["B01001_001M"].iloc[0])
+    render_card("Total population", pop_est, *acs_range(pop_est, pop_moe))
 
-    # --- Tab 1: ACS -----------------------------------------------------
-    with tab_acs:
-        st.subheader(f"{geo_label} -- American Community Survey (2020-2024, 5-year)")
+    st.markdown("##### Median household income")
+    if bool(flag_topcoded_income(acs_row).iloc[0]):
         st.info(
-            "ACS surveys a *sample* of households, not everyone. Every number below ships "
-            "with a real, measured margin of error (MOE) -- the range comes directly from "
-            "the Census Bureau, not a model."
+            f"{geo_label}'s median household income is top-coded at $250,001 -- the Census "
+            "Bureau censors values at this cap, and top-coded rows publish no margin of "
+            "error. Not shown as a range; the true median is at least $250,001."
         )
-        pop_est = float(acs_row["B01001_001E"].iloc[0])
-        pop_moe = float(acs_row["B01001_001M"].iloc[0])
-        render_card("Total population", pop_est, *acs_range(pop_est, pop_moe))
+    else:
+        income_est = float(acs_row["B19013_001E"].iloc[0])
+        income_moe = float(acs_row["B19013_001M"].iloc[0])
+        render_card(
+            "Median household income", income_est, *acs_range(income_est, income_moe),
+            alloc_pct=_income_alloc(data, level, tract_code) * 100,
+            alloc_label="household incomes",
+            alloc_threshold_pct=data["income_alloc_threshold"] * 100,
+        )
 
-        st.markdown("##### Population by age")
-        cols = st.columns(4, gap="medium")
-        for col, band in zip(cols, BANDS):
-            est, moe = acs_sexage(acs_row, band, "both")
-            with col:
-                render_card(band, float(est.iloc[0]), *acs_range(float(est.iloc[0]), float(moe.iloc[0])))
-
-        st.markdown("##### Living below the poverty line, by age")
-        cols = st.columns(4, gap="medium")
-        for col, band in zip(cols, BANDS):
-            est, moe = acs_poverty(acs_row, band, "both")
-            univ_est, univ_moe = acs_poverty_universe(acs_row, band, "both")
-            rate = poverty_rate(
-                float(est.iloc[0]), float(moe.iloc[0]), float(univ_est.iloc[0]), float(univ_moe.iloc[0])
+    st.markdown("##### Population by age")
+    age_alloc_pct = _age_alloc(data, level, tract_code) * 100
+    cols = st.columns(4, gap="medium")
+    for col, band in zip(cols, BANDS):
+        est, moe = acs_sexage(acs_row, band, "both")
+        with col:
+            render_card(
+                band, float(est.iloc[0]), *acs_range(float(est.iloc[0]), float(moe.iloc[0])),
+                alloc_pct=age_alloc_pct, alloc_label="age records",
             )
-            with col:
-                render_card(
-                    band, float(est.iloc[0]), *acs_range(float(est.iloc[0]), float(moe.iloc[0])),
-                    rate=rate, rate_label=f"of {band} residents in poverty",
-                )
 
-        map_heading = "Where can you actually cite this?"
-        map_heading += f" ({geo_label})" if level == "tract" else " (all 25 tracts)"
-        st.markdown(f"##### {map_heading}")
-        poverty_options = [f"Poverty: {b}" for b in BANDS]
-        map_choice = st.selectbox(
-            "Map this figure", ["Total population"] + BANDS + poverty_options, key="acs_map",
+    st.markdown("##### Living below the poverty line, by age")
+    fam_pov_alloc_pct = _fam_pov_alloc(data, level, tract_code) * 100
+    cols = st.columns(4, gap="medium")
+    for col, band in zip(cols, BANDS):
+        est, moe = acs_poverty(acs_row, band, "both")
+        univ_est, univ_moe = acs_poverty_universe(acs_row, band, "both")
+        rate = poverty_rate(
+            float(est.iloc[0]), float(moe.iloc[0]), float(univ_est.iloc[0]), float(univ_moe.iloc[0])
         )
-        is_poverty_map = map_choice in poverty_options
-        tract_df = data["acs"]["tract"]
+        with col:
+            render_card(
+                band, float(est.iloc[0]), *acs_range(float(est.iloc[0]), float(moe.iloc[0])),
+                rate=rate, rate_label=f"of {band} residents in poverty",
+                alloc_pct=fam_pov_alloc_pct, alloc_label="family poverty determinations",
+                alloc_is_proxy=True,
+            )
+
+    map_heading = "Where can you actually cite this?"
+    map_heading += f" ({geo_label})" if level == "tract" else " (all 25 tracts)"
+    st.markdown(f"##### {map_heading}")
+    poverty_options = [f"Poverty: {b}" for b in BANDS]
+    IMPUTATION_INCOME = "Imputation: household income"
+    map_choice = st.selectbox(
+        "Map this figure",
+        ["Total population"] + BANDS + poverty_options + [IMPUTATION_INCOME],
+        key="acs_map",
+    )
+    is_poverty_map = map_choice in poverty_options
+    tract_df = data["acs"]["tract"]
+
+    if map_choice == IMPUTATION_INCOME:
+        # A different map view from the CV tier above: sampling risk crossed
+        # with imputation risk (analysis.composite), colored by quadrant --
+        # not folded into the CV tier itself. The blind-spot quadrant (low
+        # CV, high allocation) is exactly the case a CV-only map would miss.
+        income_df = tract_df[["TRACT", "B19013_001E", "B19013_001M"]].merge(
+            data["alloc_tract"][["TRACT", "income_alloc"]], on="TRACT", how="left"
+        ).set_index("TRACT")
+        cv_series = income_cv(income_df)
+        quadrant = composite.classify_quadrant(
+            cv_series, income_df["income_alloc"],
+            alloc_threshold=data["income_alloc_threshold"],
+        )
+        plain = quadrant.map(QUADRANT_LABELS_PLAIN)
+        quadrant_by_tract = {t: (v if isinstance(v, str) else "No data") for t, v in plain.items()}
+        est_by_tract = income_df["B19013_001E"].to_dict()
+        range_by_tract = {
+            t: (max(0.0, e - m), e + m)
+            for t, e, m in zip(income_df.index, income_df["B19013_001E"], income_df["B19013_001M"])
+        }
+        render_tier_map(
+            data["tracts"], quadrant_by_tract, est_by_tract, range_by_tract,
+            "Income reliability: sampling risk x imputation",
+            selected_tract=tract_code if level == "tract" else None,
+            color_map=QUADRANT_COLOR, legend_order=QUADRANT_ORDER,
+        )
+    else:
         tier_by_tract: dict[str, str] = {}
-        est_by_tract: dict[str, float] = {}
-        range_by_tract: dict[str, tuple[float, float]] = {}
+        est_by_tract = {}
+        range_by_tract = {}
         pct_by_tract: dict[str, float] | None = {} if is_poverty_map else None
         for _, row in tract_df.iterrows():
             t_code = row["TRACT"]
@@ -437,110 +603,6 @@ def main() -> None:
             f"ACS reliability: {map_choice}",
             selected_tract=tract_code if level == "tract" else None,
             pct_by_tract=pct_by_tract,
-        )
-
-    # --- Tab 2: DHC -------------------------------------------------------
-    with tab_dhc:
-        st.subheader(f"{geo_label} -- 2020 Census DHC (full count)")
-        st.warning(
-            "DHC counts **everyone** -- no sampling error. But the Census Bureau adds "
-            "deliberate privacy noise to every cell (differential privacy) and publishes "
-            "no margin of error for it. The ranges below are **modeled**, not measured -- "
-            "built from a 2010 demonstration study of the noise, not a direct 2020 "
-            "measurement. DHC also publishes no poverty table, so there is no poverty "
-            "section on this tab -- that gap is itself a finding, not an omission."
-        )
-        pop_est = float(dhc_row["P1_001N"].iloc[0])
-        if level == "place":
-            tract_pops = data["dhc"]["tract"].merge(
-                data["tracts"][["STATE", "COUNTY", "TRACT"]], on=["STATE", "COUNTY", "TRACT"]
-            )["P1_001N"]
-            pop_range = dhc_population_range(pop_est, "place", tract_pops=tract_pops)
-        else:
-            pop_range = dhc_population_range(pop_est, level)
-        render_card("Total population", pop_est, *pop_range, caveat="Modeled, not measured.")
-
-        st.markdown("##### Population by age")
-        cols = st.columns(4, gap="medium")
-        for col, band in zip(cols, BANDS):
-            est = dhc_sexage(dhc_row, band, "both")
-            e = float(est.iloc[0])
-            rng = dhc_subgroup_range(e, level)
-            with col:
-                render_card(band, e, *rng, caveat="Modeled, not measured.")
-
-        st.markdown(f"##### {map_heading}")
-        map_choice_dhc = st.selectbox(
-            "Map this figure", ["Total population"] + BANDS, key="dhc_map",
-        )
-        dhc_tract_df = data["dhc"]["tract"]
-        tier_by_tract_dhc: dict[str, str] = {}
-        est_by_tract_dhc: dict[str, float] = {}
-        range_by_tract_dhc: dict[str, tuple[float, float]] = {}
-        for _, row in dhc_tract_df.iterrows():
-            if map_choice_dhc == "Total population":
-                e = float(row["P1_001N"])
-                lo, hi = dhc_population_range(e, "tract")
-            else:
-                one = dhc_tract_df[dhc_tract_df["TRACT"] == row["TRACT"]]
-                e = float(dhc_sexage(one, map_choice_dhc, "both").iloc[0])
-                lo, hi = dhc_subgroup_range(e, "tract")
-            t_code = row["TRACT"]
-            tier_by_tract_dhc[t_code] = tier(cv_from_range(e, lo, hi))[0]
-            est_by_tract_dhc[t_code] = e
-            range_by_tract_dhc[t_code] = (max(0.0, lo), hi)
-        render_tier_map(
-            data["tracts"], tier_by_tract_dhc, est_by_tract_dhc, range_by_tract_dhc,
-            f"DHC modeled reliability: {map_choice_dhc}",
-            selected_tract=tract_code if level == "tract" else None,
-        )
-
-    # --- Tab 3: Compare -----------------------------------------------------
-    with tab_compare:
-        st.subheader(f"{geo_label} -- ACS vs. DHC, side by side")
-        st.markdown(
-            "**Two things to read correctly before comparing any numbers:**\n\n"
-            "1. **They are not the same moment.** ACS 5-year is a 2020-2024 average; "
-            "DHC is a snapshot of April 1, 2020. A gap between them is mostly *timing*, "
-            "not error -- Trenton's citywide population is 90,338 (ACS) vs. 90,871 (DHC), "
-            "a 0.6% difference almost entirely explained by which years are being counted.\n"
-            "2. **Their error stories are opposite in shape.** ACS error is measured, "
-            "published per cell, and grows fast as geography shrinks. DHC error is "
-            "unmeasurable by design (the Census Bureau injects it on purpose), estimated "
-            "here from a decade-old demonstration file, and behaves differently by level."
-        )
-
-        fig, ax = plt.subplots(figsize=(8, 4.5))
-        x = range(len(BANDS))
-        width = 0.35
-        acs_lo, acs_hi, acs_mid, dhc_lo, dhc_hi, dhc_mid = [], [], [], [], [], []
-        for band in BANDS:
-            ae, am = acs_sexage(acs_row, band, "both")
-            ae, am = float(ae.iloc[0]), float(am.iloc[0])
-            alo, ahi = acs_range(ae, am)
-            acs_lo.append(ae - alo); acs_hi.append(ahi - ae); acs_mid.append(ae)
-
-            de = float(dhc_sexage(dhc_row, band, "both").iloc[0])
-            dlo, dhi = dhc_subgroup_range(de, level)
-            dhc_lo.append(de - dlo); dhc_hi.append(dhi - de); dhc_mid.append(de)
-
-        ax.errorbar([i - width / 2 for i in x], acs_mid, yerr=[acs_lo, acs_hi],
-                    fmt="o", color=TIER_COLOR[TIER_SOLID], capsize=4, label="ACS (measured)")
-        ax.errorbar([i + width / 2 for i in x], dhc_mid, yerr=[dhc_lo, dhc_hi],
-                     fmt="s", color=TIER_COLOR[TIER_RISKY], capsize=4, label="DHC (modeled)")
-        ax.set_xticks(list(x)); ax.set_xticklabels(BANDS)
-        ax.set_ylabel("People")
-        ax.set_title(f"{geo_label}: age bands, ACS vs. DHC (bars = 90% range)")
-        ax.legend()
-        st.pyplot(fig)
-        plt.close(fig)
-
-        st.caption(
-            "Notice the pattern flip: ACS ranges widen fastest for small subgroups "
-            "(65+ is usually the widest ACS bar). DHC's modeled range is comparatively flat "
-            "across bands here, because it is built from an aggregate subgroup proxy, not a "
-            "band-specific measurement -- a limitation of the model, not a real absence of "
-            "risk in the smaller DHC bands."
         )
 
 
