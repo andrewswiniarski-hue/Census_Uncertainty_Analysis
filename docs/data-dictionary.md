@@ -6,7 +6,10 @@ it, and the landmines we've hit. One entry per product; newest additions at the
 bottom. (README Phase 1, Step 4 — living document. Product shortlist confirmed
 2026-07-22 (ACS 5-year + DHC + Demographic Profile — HANDOFF.md decision #12);
 DHC production and Demographic Profile were pulled 2026-07-31, Phase B —
-entries below.)
+entries below. Scoped income & poverty set completed 2026-08-01 — SAIPE, PUMS,
+and Variance Replicate Tables added per the product-shortlist sprint. Phase 2
+(2026-08-01) narrowed the product to income & poverty; DHC and Demographic
+Profile entries stay below as privacy-noise report evidence, not score inputs.)
 
 ---
 
@@ -23,11 +26,21 @@ entries below.)
 - **Access:** Census API via censusdis — [`ingestion/pull_acs_nj.py`](../ingestion/pull_acs_nj.py);
   raw parquet in `data/raw/` (gitignored, regenerable).
 - **Landmines:** annotation codes arrive as NaN via censusdis, erasing the
-  controlled-vs-insufficient-sample distinction; median income top-coded at
+  controlled-vs-insufficient-sample distinction (in raw API responses they are
+  jam values — `-666666666` estimate / `-222222222` MOE, seen live at Mercer
+  tract 1 BG 1, 2026-08-01); median income top-coded at
   $250,001 with **no MOE published for top-coded rows**; county total population
   is controlled (no MOE, extremely reliable); 131 NJ tracts show unexplained
   near-controlled population MOEs (mentor question); 2 block groups have income
-  estimates but no MOE for unknown reasons.
+  estimates but no MOE for unknown reasons; **the 2024 `variables.json`
+  metadata census lists no `M` variables at all** (0 of 28,475 names match the
+  `_NNNM` MOE pattern) even though every MOE variable is individually
+  resolvable and queryable (verified 2026-08-01:
+  `variables/B19013_001M.json` → HTTP 200 with proper label; block-group data
+  query returns MOE values) — any tool inventorying uncertainty from
+  `variables.json` alone will wrongly conclude ACS ships no MOEs (the Product
+  Scope Tracker's probe currently prints exactly that; flagged for Garrett —
+  the probe code is fine, the metadata is incomplete).
 
 ### ACS allocation (imputation) tables — sub-entry (added 2026-07-17, EDA 05)
 
@@ -56,6 +69,15 @@ entries below.)
   are independent of CVs once geography size is controlled (all controlled
   Spearman ρ in [−0.00, +0.19]) — the empirical justification for a
   multi-component composite score.
+- **Scope addendum (2026-08-01):** five further income-**intensity** tables
+  exist — B99191/B99192/B99193/B99194/B99201, 8 cells each
+  (percent-of-income-allocated bins, split by **universe rather than income
+  source**) — discovered by concept filter and geography-probed at
+  county/tract/BG on Garrett's `financial-eda-imputation` branch, merged
+  2026-08-01 (`docs/api-surface-verified.md`). Same E-only rule applies.
+  Companion decision from that branch's EDA 08: **never quote a bare
+  allocation rate** — across eight defensible denominators, income sources
+  rank anywhere from 1st to 6th.
 
 ## Cartographic boundary files (vintage 2024)
 
@@ -202,3 +224,104 @@ entries below.)
   independent re-noised tabulation, so `analysis/noise_model.py`'s
   population model applies unchanged to DP1; EDA 04 never measured noise for
   `DP1_0079C` (Black alone), so this project has no noise estimate for it.
+
+## SAIPE — Small Area Income & Poverty Estimates (API years 2019–2024) — *scoped-stack comparator* (added 2026-08-01)
+
+- **What:** The Bureau's **model-based** annual estimates of median household
+  income and poverty (counts and rates, for all ages / 0–17 / 0–4 / related
+  children 5–17) at state, county, and school-district level — ACS data
+  combined with administrative records and population estimates in a
+  small-area model. In this project: the **comparator/precedent product** —
+  the Bureau already ships uncertainty with these income/poverty numbers,
+  which is what our tool wants to do for ACS estimates.
+- **Geographies:** us / state / county via API `timeseries/poverty/saipe`
+  (51 variables, probe 2026-08-01); school districts (elementary / secondary /
+  unified) via `timeseries/poverty/saipe/schdist` (12 variables).
+- **Uncertainty shipped:** **point estimate + 90% CI bounds + MOE on every
+  measure** — 40 `SAEMHI*`/`SAEPOV*` variables (each measure ×
+  `_PT/_LB90/_UB90/_MOE`), verified live 2026-08-01. Receipt (`time=2024`):
+  Bergen County NJ median HH income **$121,894 ± $2,571** (90% CI
+  $119,323–$124,465), poverty rate 6.7 ± 0.9%; Mercer **$102,760 ± $4,099**,
+  10.0 ± 1.5%. Published MOE equals `(UB90−LB90)/2` exactly in the receipt.
+- **Update cadence:** annual single-year estimates; the API `time=` parameter
+  serves 2019–2024; older years in bulk files.
+- **Access:** API, key optional for light use.
+  [`ingestion/pull_saipe_counties.py`](../ingestion/pull_saipe_counties.py)
+  (all US counties × 2019–2024, merged from Garrett's
+  `financial-eda-imputation` branch, 2026-08-01). Bulk:
+  `www2.census.gov/programs-surveys/saipe/datasets/`.
+- **Landmines:** SAIPE 2024 is a **single-year model estimate**; ACS 5-year
+  vintage 2024 is a 2020–2024 average centered ~2022 — the same-named years
+  describe different windows, so compare uncertainty *styles*, never join as
+  the same quantity. Its intervals reflect **model error**, not ACS sampling
+  error. County FIPS churn (CT planning regions from 2022) breaks naive
+  year-over-year joins.
+
+## ACS 5-year PUMS — Public Use Microdata Sample (vintage 2024) — *exact SEs + person-level imputation* (added 2026-08-01)
+
+- **What:** Anonymized ACS person and household records — supports **any
+  custom estimate** instead of pre-published tables. In this project: the
+  **exactness upgrade** (exact standard errors for medians and custom cuts)
+  and the person-level view of imputation (who gets inferred — Garrett's
+  EDA 09, branch).
+- **Geographies:** region / division / state / **PUMA only** (~100k people
+  each) — no county, tract, or block group (probe 2026-08-01). NJ ≈ 445k
+  person records.
+- **Uncertainty shipped:** no per-estimate MOEs. Instead **80 person replicate
+  weights (`PWGTP1–80`) and 80 household replicate weights (`WGTP1–80`) — all
+  160 verified present in `variables.json` 2026-08-01** (521 variables
+  total). SE by successive difference replication:
+  `Var = (4/80)·Σ(θ_r − θ)²`, `MOE = 1.645·SE` (the 4/80 constant is
+  ACS-design-specific). Implementation:
+  [`analysis/replicate.py`](../analysis/replicate.py) (merged from Garrett's
+  `financial-eda-imputation` branch, 2026-08-01).
+- **Update cadence:** annual 1-year and 5-year releases.
+- **Access:** API `acs/acs5/pums` (≤50 variables per query — the 80 replicate
+  weights need chunked pulls, as the branch script's `--replicates` mode
+  does); bulk CSVs at `www2.census.gov/programs-surveys/acs/data/pums/`.
+  Method + design-factor PDFs verified at
+  `www2.census.gov/programs-surveys/acs/tech_docs/pums/accuracy/`
+  (per-vintage `AccuracyPUMS.pdf`, checked 2026-08-01).
+- **Landmines:** income N/A sentinels are **not uniform** — `WAGP/SSP/RETP/PAP`
+  use −1 but `SEMP/INTP` use −10001, so a blanket `<0` filter corrupts the
+  two most interesting sources; `FHINCP` is a household flag delivered on
+  person rows — dedupe on `SERIALNO` or NJ reads 9.07M households instead of
+  ~3.4M; the PUMA floor means PUMS facts can never be row-joined to
+  tract-level scores (ecological-inference limits). (First two found by
+  Garrett, EDA 09.)
+
+## ACS Variance Replicate Estimate Tables (5-year; vintages 2014–2024) — *exact MOEs for aggregates* (added 2026-08-01)
+
+- **What:** Pre-computed 80-replicate versions of selected ACS detailed
+  tables, distributed as **bulk CSVs outside the API**. They yield **exact**
+  MOEs for sums/aggregations of estimates — replacing the handbook
+  root-sum-of-squares approximation (which EDA 02 showed needs the zero-cell
+  rule and tends to overstate for same-table cells). Role: the exact-SE path
+  if the tool scores aggregated estimates or custom regions.
+- **Geographies:** per-summary-level directories verified 2026-08-01: US(010),
+  state(040), county(050), county subdivision(060), **tract(140), block
+  group(150)**, place(160), and others; files are per table × state (suffix =
+  state FIPS).
+- **Uncertainty shipped:** replicate estimates → exact variance for any linear
+  combination of cells.
+- **Coverage (verified live 2026-08-01):** at tract (6,552 files) NJ has
+  **`B17001_34`, `C17002_34`, `B19001_34`**; at block group (3,796 files)
+  `C17002_34` and `B19001_34` — **B17001 absent at BG, exactly mirroring its
+  API publication floor**. **`B19013` (median income) is not covered at any
+  level** — medians are nonlinear, so exact SEs for medians come from PUMS
+  replicate weights instead. Division of labor: **counts + the income
+  distribution → VRTs; the median → PUMS.**
+- **Update cadence:** annual 5-year vintages, 2014–2024 all present in the
+  tree. **5-year only — the 1-year path returns 404** (curated-registry
+  suspicion confirmed 2026-08-01).
+- **Access:** `www2.census.gov/programs-surveys/acs/replicate_estimates/2024/data/5-year/<summary-level>/`;
+  landing page + Table & Geography List:
+  `census.gov/programs-surveys/acs/data/variance-tables.html`. **No API
+  product ID** — invisible to catalog-based tooling; carried by the Product
+  Scope Tracker's curated registry (whose 2023 entry is now superseded by
+  2024, and whose 1-year entry should be marked nonexistent — noted for
+  Garrett).
+- **Landmines:** bulk-only; nothing downloaded yet — no pull script exists,
+  and scoring-layer use would need one (scripted, per reproducibility rules);
+  per-state × per-table file layout means a custom-region workflow touches
+  many files.

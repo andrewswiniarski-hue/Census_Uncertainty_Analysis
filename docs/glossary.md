@@ -234,3 +234,59 @@ These are *our proposed tiers*, built on conventions already cited in
 `analysis/viz.py::CV_REFERENCE_LINES` — not adopted Census Bureau thresholds
 (see HANDOFF.md decision #8; confirming or revising them with mentors is still
 an open Weeks 4–6 item).
+
+**Confidence interval (CI)** — A range built so that, across repeated sampling
+(or repeated model estimation), a stated share of such ranges would contain the
+true value. "90% CI $119,323–$124,465" means: build intervals this way many
+times and about 90% of them cover the truth. An MOE is a CI expressed as a
+half-width — `estimate ± MOE` reconstructs the interval. SAIPE publishes both
+forms, and they agree exactly: its `_MOE` equals `(UB90 − LB90)/2` (verified
+live, 2026-08-01). *Source: ACS "Accuracy of the Data"; SAIPE documentation.*
+First used in docs/product-shortlist-proposal.md.
+
+**SAIPE (Small Area Income and Poverty Estimates)** — The Bureau's
+**model-based** annual program for median household income and poverty at
+state, county, and school-district level. Unlike ACS *direct* survey estimates,
+SAIPE combines ACS data with administrative records and population estimates in
+a statistical model — and publishes a 90% confidence interval and MOE with
+every number. In this project it is the comparator product: the Bureau's own
+precedent for shipping uncertainty alongside income/poverty estimates. Caveat:
+a SAIPE interval reflects **model error**, not ACS sampling error, so the two
+are compared as communication styles, never pooled. *Source: census.gov SAIPE
+methodology pages.*
+
+**PUMS (Public Use Microdata Sample)** — Anonymized individual ACS person and
+household records, released so analysts can build **any custom estimate**
+rather than relying on pre-published tables. The tradeoffs: coarse geography
+only (PUMA — areas of ~100k people; no counties, tracts, or block groups) and
+do-it-yourself error bars (see *Replicate weights*). The 5-year 2024 PUMS
+serves 521 variables at region/division/state/PUMA (verified 2026-08-01).
+*Source: ACS PUMS documentation.*
+
+**Replicate weights** — Eighty alternative weighting columns shipped with each
+PUMS record (person `PWGTP1–80`, household `WGTP1–80`; all 160 verified in the
+API, 2026-08-01). Recompute an estimate under each weight and the spread of the
+80 answers gives its **exact** standard error:
+`Var = (4/80)·Σ(θ_r − θ)²`, `SE = √Var`, `MOE = 1.645·SE` (successive
+difference replication; the 4/80 constant is specific to the ACS design). This
+is the exact-SE path for custom estimates — **including medians**, which the
+Variance Replicate Tables do not cover. *Source: "PUMS Accuracy of the Data"
+(per-vintage PDFs under census.gov tech_docs).* Implemented in
+`analysis/replicate.py` (merged from Garrett's `financial-eda-imputation`
+branch, 2026-08-01).
+
+**Variance Replicate Estimate Tables (VRTs)** — Pre-computed 80-replicate
+versions of selected ACS detailed tables, distributed as bulk CSVs **outside
+the API**. They let users compute exact MOEs for sums of estimates — replacing
+the handbook's root-sum-of-squares approximation (see *MOE aggregation*),
+which assumes independence between cells. 5-year only (the 1-year path 404s —
+verified 2026-08-01); vintages 2014–2024; covers our poverty tables and the
+income distribution (B17001/C17002/B19001) down to tract or block group, but
+**not the income median B19013** — medians are nonlinear, so their exact SEs
+come from PUMS replicate weights. *Source:
+census.gov/programs-surveys/acs/data/variance-tables.html.*
+
+**Design factors** — Published multipliers in the PUMS accuracy documentation
+for approximating a standard error from a generalized formula when replicate
+weights aren't used — the quick-but-approximate path, versus the exact
+replicate-weight computation. *Source: "PUMS Accuracy of the Data".*

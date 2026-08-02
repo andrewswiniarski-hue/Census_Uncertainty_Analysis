@@ -137,7 +137,7 @@ And one sentence for the Bureau audience, which I'd stand behind in any room:
 
 ## 7. What we don't know yet (queued for the mentors)
 
-1. ~~**Product shortlist**~~ — **resolved 2026-07-22:** ACS 5-year + DHC + Demographic Profile (see HANDOFF.md decision #12).
+1. ~~**Product shortlist**~~ — **resolved 2026-07-22:** ACS 5-year + DHC + Demographic Profile (see HANDOFF.md decision #12); **narrowed 2026-08-01** per biweekly #1 scope guidance to an income & poverty stack (ACS anchor + allocation + SAIPE + PUMS; DHC/DP demoted to report context) — see [`product-shortlist-proposal.md`](product-shortlist-proposal.md), pending mentor confirmation.
 2. **Privacy-noise vintage** — is the 2022-08-25 demonstration release the right basis, or should we move to the 2023 production-settings files?
 3. **The block-group anomaly** — is our budget-allocation reading correct, and does the pattern persist in the production 2020 data?
 4. **Score input for privacy** — the Bureau's published noise-budget numbers, or the noise we measured empirically? (Lead call pending mentor confirmation: empirically-measured noise, applied to production data as a modeled estimate — HANDOFF.md decisions #13–14.)

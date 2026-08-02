@@ -24,3 +24,52 @@ Thumbs.db
 
 # Office lock files (created while a .pptx/.docx is open — never data)
 ~$*
+
+# Product scope tool (tools/product_scope.py)
+# The report and the API catalog cache are regenerated on every run; the review
+# file is team-owned state and IS committed. The --export csv/xlsx outputs are
+# script output too — regenerate on demand, don't commit.
+product_report.html
+scope_field_cache.json
+# File-only second catalog layer - ~6,000 slimmed data.gov CKAN records,
+# fetched once via `python tools/product_scope.py --pull-file-catalog`.
+# Regenerable from data.gov; a fetch-failure stub (marked "stub": true)
+# may sit here on machines without internet access.
+file_catalog_cache.json
+product_review.csv
+product_review.xlsx
+# Diff snapshot - captures per-product state so successive runs can show
+# 'since last regeneration' deltas on the Home tab. Regenerable on every run.
+.product_scope_last_run.json
+# Phase 3 sample cache - actual data slices for candidate products (EDA on
+# API-fetched rows). Local-only because a sample is a moment-in-time slice
+# against a rate-limited endpoint; if two teammates need it, each runs their
+# own `python tools/product_scope.py --repo . --sample`.
+scope_data_cache.json
+# Phase 3 EDA diff - written by --sample --refresh, consumed by the next
+# regen so the diff banner can flag data drift alongside repo drift.
+.scope_last_eda_diff.json
+# Phase 4 warm-cache batch summary - counts + path lists from the last
+# --warm-cache run. Consumed by the cache-coverage header and Quick Look's
+# 'non_api' detection so both survive a session restart.
+.warm_cache_last_run.json
+# Phase 5 last-regen timestamp - read by the auto:repo insight collector to
+# scope `git log --since=<T>` to the window since the previous run. Written
+# at end of every regen. Local-only; not shareable state.
+.product_scope_last_regen.json
+# Phase 5 review-lock companion file (fcntl.flock target so the --review CLI
+# helper, --warm-cache, and regen serialize their writes to
+# product_review.json). Byte content is empty; only the file's exclusive
+# lock is used. Also the temp file the atomic-rename writer stages under
+# (.product_review.json.tmp.<pid>).
+.product_review.json.lock
+.product_review.json.tmp.*
+# Beginner-UX pass commit #5: dev-only smoke-test artifacts from the notes/
+# ingestion flow. The dev container can't unlink these files, so this pattern
+# keeps them out of the commit while leaving them harmless on disk.
+notes/ingested/test_beginner_ux_flow*
+# Phase A 2026-07-26 commit #2: Bureau press-release mini-feed cache.
+# Refreshed every 24h on regen from https://www.census.gov/newsroom/press-releases.xml.
+# Local-only; regen fetches fresh copy so caching another teammate's cache adds
+# no value and would just churn.
+.census_press_cache.json
