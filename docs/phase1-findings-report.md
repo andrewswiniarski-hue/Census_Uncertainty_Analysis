@@ -1,9 +1,9 @@
 # Phase 1 Findings Report — Census Uncertainty Analytics
 
 **Prepared for:** Andrew Swiniarski, project lead — for briefing the capstone team and Census Bureau mentors
-**Date:** July 17, 2026; **updated through EDA 06** (composite score + CV driver model), 2026-07-31
-**Covers:** the complete Phase 1 exploratory analysis (notebooks 01–05) plus the Phase 2 composite-score bridge (notebook 06), New Jersey testbed
-**Companion materials:** biweekly deck (`docs/biweekly-2026-07-22.pptx`), charts in `data/processed/`, six notebooks in `notebooks/`
+**Date:** July 17, 2026; **updated through EDA 13** (SAIPE vs. ACS county comparator), 2026-08-01
+**Covers:** the complete Phase 1 exploratory analysis (notebooks 01-05), the Phase 2 composite-score bridge (notebook 06), Garrett's allocation-denominator and PUMS work (notebooks 08-09), and the Phase 3 scope pivot: DHC dropped from the dashboard, the allocation/imputation axis added beside the CV tier, and the SAIPE county comparator (notebook 13). New Jersey testbed throughout; Trenton and Mercer County are the dashboard pilot.
+**Companion materials:** biweekly deck (`docs/biweekly-2026-07-22.pptx`), charts in `data/processed/`, thirteen notebooks in `notebooks/` (01-13; the DHC/DP1 modeled-noise work moved to 10-12 during a 2026-08-01 branch merge, see HANDOFF.md)
 
 ---
 
@@ -129,6 +129,8 @@ Phase 1's purpose was to find out what a credible reliability score needs to con
 | **Data completeness** (imputation rate) | Independent of everything the MOE captures (Finding 9) |
 | **A "no usable estimate" class** | Zero counts, top-coded values, ghost/vanished places — never averaged in, always labeled (Findings 6 + landmines) |
 
+**Scope update, 2026-08-01:** the "Product mechanism" row above stays true as an EDA 04 finding: survey and full-count products really do follow different noise laws. But it is no longer a live axis in the composite score. The income-and-poverty scope narrowing (Section 7, item 1) dropped the decennial full-count product (DHC) from the dashboard entirely, since income has no decennial analog to compare against; DHC/DP1's modeled-noise work (now EDA 10-12) stands as report evidence only, not a scored product. The score's actual second axis, built and running in the prototype dashboard, is the allocation (imputation) rate from Finding 9, not product mechanism.
+
 And one sentence for the Bureau audience, which I'd stand behind in any room:
 
 > *A tight margin of error is not the same thing as a trustworthy number. We can now show, with the Bureau's own published data, that two places with identical error bars can differ enormously in how much of their data was imputed and how much privacy noise they carry — and a reliability score that reflects all three dimensions is buildable, because all three turned out to be measurable and lawful.*
@@ -161,14 +163,21 @@ And one sentence for the Bureau audience, which I'd stand behind in any room:
 - **CV driver model** answered the JL Final Takeaway: in a pooled NJ frame, place population alone fails (R² ≈ 0.005), while estimate size drives most of the pooled R² (≈ 0.67 alone; ≈ 0.71–0.73 with level, variable group, and interactions). A matched estimate-size panel still finds Black 65+ noisier than population at similar counts. Composite V2 adds an optional `cv_residual_high` sampling flag — informative for counts; weak for income medians (income size-model R² ≈ 0.01).
 - An absolute 0–100 single-score prototype (mapping CV and allocation to a `Reliable`/`Caution`/`Unreliable` tier) was also built and tested against the Black 65+ subgroup, then deliberately removed (2026-07-31) — the score/tier philosophy (visible matrix vs. single collapsed score) is still an open mentor question, not a settled design. See README's Open Questions.
 
+### Phase 3 bridge: DHC dropped, the imputation axis goes live, SAIPE comparator (EDA 08-09, 13 — 2026-08-01)
+
+- **The scope narrowing is now built, not just decided.** `Streamlit/app.py` no longer has a DHC tab or an ACS-vs-DHC Compare tab: decennial full-count data cannot carry the anchor variable (income) under the income-and-poverty scope, so the pairing was removed rather than left half-relevant. DHC ingestion, `analysis/noise_model.py`, and the modeled-noise notebooks (renumbered 10-12 to resolve a collision after a branch merge) stay in the repo as valid Finding 4-5 evidence; they no longer feed the dashboard.
+- **The imputation axis (Finding 9, operationalized) is live in the dashboard.** Allocation rate now displays beside the CV tier on every card, income, age, and poverty, flagged against the New Jersey statewide 75th percentile rather than Trenton's own tracts (judging a city against its own 25 tracts would flag exactly a quarter of them by construction and carry no information). Tract 1 in South Trenton is the dashboard's live demonstration of the blind spot Finding 9 predicted: Use with care on sampling error, but 49% of its household incomes were imputed. The poverty figures carry this rate as a labeled proxy (the family-income table, not a person-level poverty determination), stated explicitly wherever the number appears.
+- **EDA 13 (SAIPE vs. ACS, Mercer County)** answers Q3 with a direct comparison instead of an argument. Mercer County, 2024: ACS reports median household income $100,645 ± $2,565 (sampling error only); SAIPE reports $102,760, 90% CI [$98,661-$106,859] (sampling error plus model uncertainty). SAIPE's published margin of error matches its own `(upper bound - lower bound) / 2` exactly, on Mercer and on all 18,854 comparable county-year rows nationwide, so the two products are each internally consistent and simply not measuring the same kind of uncertainty. A wider SAIPE interval does not mean a less reliable number; it means a different question was asked. The dashboard surfaces this as one comparison element on the Mercer County view only, since SAIPE publishes no tract-level product.
+- **Garrett's EDA 08-09** (allocation-denominator sensitivity, PUMS allocation profile) sharpened the imputation finding further: an allocation rate depends on a denominator choice nobody actually specifies in the published tables, and PUMS microdata is the one place that choice can be made explicit and person-level allocation profiled directly. Full findings live in those notebooks; not restated here.
+
 ---
 
 ## Appendix: where everything lives
 
 | Item | Location |
 |---|---|
-| Analyses (run top-to-bottom, checks included) | `notebooks/01…06-*.ipynb` |
-| Shared formulas, with citations | `analysis/acs.py`, `analysis/alloc.py`, `analysis/composite.py`, `analysis/cv_model.py`, `analysis/dhc.py`, `analysis/viz.py` |
+| Analyses (run top-to-bottom, checks included) | `notebooks/01-13-*.ipynb` (10-12 are DHC/DP1 modeled-noise, report evidence only; 13 is SAIPE vs. ACS) |
+| Shared formulas, with citations | `analysis/acs.py`, `analysis/alloc.py`, `analysis/alloc_denominator.py`, `analysis/alloc_profile.py`, `analysis/composite.py`, `analysis/cv_model.py`, `analysis/dashboard.py`, `analysis/dhc.py`, `analysis/replicate.py`, `analysis/viz.py` |
 | Data pull scripts (rerunnable by anyone) | `ingestion/pull_*.py`, `ingestion/_common.py` |
 | Charts | `data/processed/eda0*.png` |
 | Term definitions | `docs/glossary.md` |
