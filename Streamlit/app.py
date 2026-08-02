@@ -42,6 +42,7 @@ from analysis.dashboard import (
     load_acs,
     load_alloc_nj_county,
     load_alloc_nj_tract,
+    load_saipe_mercer,
     load_trenton_tracts,
     poverty_rate,
     tier,
@@ -424,6 +425,31 @@ def _fam_pov_alloc(data: dict, level: str, tract_code: str | None) -> float:
     )
 
 
+def _render_saipe_comparison(acs_est: float, acs_moe: float) -> None:
+    """County-only comparator: ACS vs. SAIPE for the same variable (Phase 3, HANDOFF #17).
+
+    SAIPE stops at the county level, so this never appears on the tract or
+    citywide views. It is one element, not a tab -- the methodological point
+    (a SAIPE interval is model error, an ACS MOE is sampling error, the
+    widths are not comparable at face value) is made in full in
+    notebooks/13-saipe-vs-acs-county.ipynb; this only surfaces the numbers.
+    """
+    saipe = load_saipe_mercer()
+    st.markdown("###### Bureau comparison: SAIPE for the same variable")
+    st.markdown(
+        f"<div class='card-alloc'>SAIPE (a separate Census Bureau program that models "
+        f"income rather than surveying it) puts Mercer County's {saipe['year']} median "
+        f"household income at <b>{saipe['SAEMHI_PT']:,.0f}</b>, 90% interval "
+        f"<b>{saipe['SAEMHI_LB90']:,.0f}&ndash;{saipe['SAEMHI_UB90']:,.0f}</b> "
+        f"(ACS above: {acs_est:,.0f} range {acs_est - acs_moe:,.0f}&ndash;{acs_est + acs_moe:,.0f}). "
+        "The two ranges are not measuring the same kind of error: ACS's is sampling error "
+        "only, SAIPE's blends sampling error with model uncertainty. A wider SAIPE range "
+        "does not mean SAIPE is less reliable. See notebooks/13-saipe-vs-acs-county.ipynb "
+        "for the full comparison.</div>",
+        unsafe_allow_html=True,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Geography selection
 # ---------------------------------------------------------------------------
@@ -505,6 +531,8 @@ def main() -> None:
             alloc_label="household incomes",
             alloc_threshold_pct=data["income_alloc_threshold"] * 100,
         )
+        if level == "county":
+            _render_saipe_comparison(income_est, income_moe)
 
     st.markdown("##### Population by age")
     age_alloc_pct = _age_alloc(data, level, tract_code) * 100

@@ -38,6 +38,13 @@ app). Rates come from analysis.alloc (already tested); the flag threshold is
 this app's own NJ-statewide 75th percentile (analysis.composite), not
 Trenton's own tracts -- judging a city against its own tracts would flag
 exactly a quarter of them by construction and carry no information.
+
+The SAIPE comparator (added 2026-08-01, HANDOFF.md decision #17, Phase 3):
+one county-level-only element comparing ACS median household income against
+SAIPE's for Mercer County. SAIPE stops at the county level, so it never
+appears on the tract view. See notebooks/13-saipe-vs-acs-county.ipynb for
+the full methodological point (a SAIPE interval is model error, not ACS
+sampling error) and the interval-coherence check.
 """
 
 from __future__ import annotations
@@ -47,7 +54,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from analysis import alloc
+from analysis import alloc, common
 from analysis.acs import Z_90, aggregate_estimate, aggregate_moe
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -123,6 +130,28 @@ def load_acs(level: str) -> pd.DataFrame:
     value_cols = [c for c in df.columns if c[:-1].startswith(("B01001_", "B17001_"))]
     df[value_cols] = df[value_cols].apply(pd.to_numeric, errors="coerce")
     return df
+
+
+def load_saipe_mercer(year: int = common.ACS_VINTAGE) -> pd.Series:
+    """SAIPE's median household income row for Mercer County, NJ (Phase 3, HANDOFF #17).
+
+    SAIPE is a MODEL-based interval (sampling variance of its inputs plus
+    model uncertainty), not an ACS-style sampling-only margin of error --
+    see notebooks/13-saipe-vs-acs-county.ipynb, which is where the two are
+    checked against each other and where the interval-coherence assert
+    ((UB90-LB90)/2 == published MOE) lives. This loader does no derivation
+    of its own, so it needs no separate check beyond that notebook's.
+    """
+    path = RAW_DIR / "saipe_counties_2019_2024.parquet"
+    if not path.exists():
+        raise FileNotFoundError(
+            f"{path} not found -- regenerate with: python ingestion/pull_saipe_counties.py"
+        )
+    df = pd.read_parquet(path)
+    row = df[(df["STATE"] == common.STATE_NJ) & (df["NAME"] == "Mercer County") & (df["year"] == year)]
+    if row.empty:
+        raise ValueError(f"No SAIPE row for Mercer County, {year}")
+    return row.iloc[0]
 
 
 def load_trenton_tracts() -> pd.DataFrame:
@@ -352,4 +381,13 @@ if __name__ == "__main__":
             f"Trenton city income_alloc {city_income_alloc:.3f} falls outside its own "
             f"25 tracts' range [{rows['income_alloc'].min():.3f}, {rows['income_alloc'].max():.3f}]"
         )
+    if (RAW_DIR / "saipe_counties_2019_2024.parquet").exists():
+        mercer_saipe = load_saipe_mercer()
+        assert mercer_saipe["NAME"] == "Mercer County"
+        assert mercer_saipe["SAEMHI_LB90"] <= mercer_saipe["SAEMHI_PT"] <= mercer_saipe["SAEMHI_UB90"]
+        derived = common.half_width(mercer_saipe["SAEMHI_LB90"], mercer_saipe["SAEMHI_UB90"])
+        assert abs(derived - mercer_saipe["SAEMHI_MOE"]) < 1.0, (
+            f"Mercer SAIPE half-width {derived:.1f} vs published MOE {mercer_saipe['SAEMHI_MOE']:.1f}"
+        )
+
     print("dashboard self-check OK")
