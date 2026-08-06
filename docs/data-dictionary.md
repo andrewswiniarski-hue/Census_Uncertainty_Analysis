@@ -195,6 +195,14 @@ unless mentors want the wider catalog documented.)
   the same quantity. Its intervals reflect **model error**, not ACS sampling
   error. County FIPS churn (CT planning regions from 2022) breaks naive
   year-over-year joins.
+- **Key EDA 10 facts (2026-08-06):** at NJ county scale SAIPE's published
+  interval is **~2× the ACS 5-year's relative width, essentially always**
+  (wider in 99–100% of 2019–2024 county-years; median relative half-widths
+  4.3% vs 2.2% for income, 14.8% vs 7.3% for the poverty rate), while
+  same-label points agree within ~2% — SAIPE's width buys single-year
+  currency, the ACS's narrowness buys a five-year average. All NJ counties
+  are large; SAIPE's small-area advantage is invisible here (national test
+  queued post-merge). See `notebooks/10-saipe-vs-acs-county.ipynb`.
 
 ## ACS 5-year PUMS — Public Use Microdata Sample (vintage 2024) — *exact SEs + person-level imputation* (added 2026-08-01)
 

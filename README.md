@@ -76,7 +76,7 @@ Mentor guidance from the first biweekly: the EDA breadth is good — now **narro
 - **Geography: New Jersey pilot** for now; design should generalize by state.
 - **Product-first:** before further EDA, propose a product shortlist and verify what uncertainty each product actually publishes — headline: ACS 5-year income & poverty (B19013 / B17001 / C17002) + allocation tables (B99192 / B99172); supporting: SAIPE (the Bureau's precedent for publishing income/poverty with confidence intervals), PUMS replicate weights / Variance Replicate Tables (exact SEs). Mentor confirmation of the mix is on the question list. **Done 2026-08-01: [`docs/product-shortlist-proposal.md`](docs/product-shortlist-proposal.md) — all four candidates verified with live receipts.**
 - **Whole-catalog work is parked** (CMS scrape etc.) — the Product Scope Tracker stands as the record of how the shortlist was chosen.
-- **EDA phase endpoint: 2026-08-12** — targeted income/poverty EDA only until then; concept pitch + wireframe ready by that date.
+- **EDA phase endpoint: 2026-08-12** — targeted income/poverty EDA only until then; concept pitch + wireframe ready by that date. *Progress: EDA 10 (SAIPE vs ACS, the two published uncertainty styles compared) done 2026-08-06 — [`notebooks/10-saipe-vs-acs-county.ipynb`](notebooks/10-saipe-vs-acs-county.ipynb); headline: SAIPE's interval runs ~2× the ACS's relative width at NJ county scale, so tool verdicts must be product-aware. EDA 11 (tier stability across vintages) remains.*
 
 ## Semester Milestones
 

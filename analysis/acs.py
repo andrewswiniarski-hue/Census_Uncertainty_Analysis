@@ -30,6 +30,14 @@ Formulas and sources
   zero, include only the LARGEST zero-cell MOE in the sum. Zero-estimate
   MOEs are near-identical placeholder values, and root-sum-squaring many
   of them overstates the aggregate MOE.
+- MOE_p = sqrt(MOE_num^2 - p^2 * MOE_den^2) / den   for a PROPORTION
+  p = num/den where the numerator is a subset of the denominator (e.g.,
+  a poverty rate). When the radicand is negative (a large denominator
+  MOE), the same handbook chapter prescribes falling back to the RATIO
+  formula, which adds instead of subtracting:
+  MOE_r = sqrt(MOE_num^2 + r^2 * MOE_den^2) / den.
+  Source: same handbook, Ch. 8 ("Calculating Measures of Error for
+  Derived Estimates" -- proportions vs. ratios).
 """
 
 from __future__ import annotations
@@ -151,6 +159,28 @@ def aggregate_moe(
     else:
         sum_sq = moes.pow(2).sum(axis=1)
     return pd.Series(np.sqrt(sum_sq), index=df.index).mask(invalid)
+
+
+def proportion_moe(
+    num_est: pd.Series, num_moe: pd.Series, den_est: pd.Series, den_moe: pd.Series
+) -> pd.Series:
+    """MOE for a proportion p = num/den where num is a subset of den.
+
+    The handbook proportion formula subtracts the denominator's
+    contribution (the numerator and denominator share the same sample, so
+    their errors are positively correlated); where the radicand goes
+    negative -- possible when the denominator's MOE is large relative to
+    the numerator's -- the handbook's prescribed fallback is the ratio
+    formula, which adds it instead (conservative). See the module
+    docstring for both formulas and the citation. NaN where the
+    denominator is missing or <= 0 or either MOE is missing.
+    """
+    den = den_est.where(den_est > 0)
+    p = num_est / den
+    radicand = num_moe.pow(2) - p.pow(2) * den_moe.pow(2)
+    fallback = num_moe.pow(2) + p.pow(2) * den_moe.pow(2)
+    moe = np.sqrt(radicand.where(radicand >= 0, fallback)) / den
+    return moe.rename(None)
 
 
 def cv_long(df: pd.DataFrame, variables: list[str], level: str) -> pd.DataFrame:
