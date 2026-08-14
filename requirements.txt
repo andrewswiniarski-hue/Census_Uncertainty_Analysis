@@ -16,3 +16,6 @@ pyarrow           # fast, compact parquet file storage
 streamlit         # Trenton dashboard prototype (Streamlit/app.py)
 pydeck            # interactive tract choropleth in the Trenton dashboard
 openpyxl          # .xlsx read/write (tools/product_scope.py --export xlsx)
+topojson          # shared-border-aware geometry simplification (nationwide county app) --
+                   # shapely.simplify preserves each polygon's own validity but not shared
+                   # borders with its neighbors, which creates slivers at national tolerances

@@ -50,6 +50,7 @@ sampling error) and the interval-coherence check.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import NamedTuple
 
 import numpy as np
 import pandas as pd
@@ -62,6 +63,271 @@ RAW_DIR = REPO_ROOT / "data" / "raw"
 
 LEVELS = ["place", "county", "tract"]
 GEO_LABELS = {"place": "Trenton (whole city)", "county": "Mercer County", "tract": "Tract"}
+
+
+# ---------------------------------------------------------------------------
+# Geography level registry -- the map-first dashboard's drill-down ladder
+# ---------------------------------------------------------------------------
+#
+# One entry per level the map can show. Adding a level (e.g. a future US
+# state) means adding a LevelSpec plus a data pull -- every function below
+# (load_level_data, load_level_geo, geo_key, children_of) is written against
+# this shape, not against "county" or "tract" by name. Kept a plain dict of
+# NamedTuple, not a class hierarchy: there is nothing here that varies in
+# behavior, only in which files and columns to read.
+
+class LevelSpec(NamedTuple):
+    label: str
+    data_file: str
+    geo_file: str
+    key_cols: tuple[str, ...]
+    parent: str | None
+
+
+LEVEL_SPECS: dict[str, LevelSpec] = {
+    "county": LevelSpec(
+        label="County",
+        data_file="acs5_2024_njdash_county.parquet",
+        geo_file="geo_2024_nj_county.parquet",
+        key_cols=("COUNTY",),
+        parent=None,
+    ),
+    "tract": LevelSpec(
+        label="Tract",
+        data_file="acs5_2024_njdash_tract.parquet",
+        geo_file="geo_2024_nj_tract.parquet",
+        key_cols=("COUNTY", "TRACT"),
+        parent="county",
+    ),
+}
+
+# Nationwide county app's OWN registry (Streamlit/app_US.py) -- deliberately
+# separate from LEVEL_SPECS above, not a replacement of it. NJ's "county"
+# key_cols is bare COUNTY (no STATE) because NJ only ever pulls one state,
+# so a 3-digit county code is already unique within that data. Nationwide,
+# county FIPS "001" exists in ~50 different states, so US_LEVEL_SPECS's
+# county entry MUST include STATE in its key -- changing NJ's own entry to
+# match would have been unnecessary (NJ's data never collides) and would
+# have changed every existing NJ key's string format for no reason. Every
+# function below that reads a registry takes an optional `specs` argument
+# (default LEVEL_SPECS) so app_NJ.py's calls are completely unaffected;
+# app_US.py passes specs=US_LEVEL_SPECS explicitly.
+US_LEVEL_SPECS: dict[str, LevelSpec] = {
+    "state": LevelSpec(
+        label="State",
+        data_file="acs5_2024_usdash_state.parquet",
+        geo_file="geo_2024_usdash_state_simple.parquet",
+        key_cols=("STATE",),
+        parent=None,
+    ),
+    "county": LevelSpec(
+        label="County",
+        data_file="acs5_2024_usdash_county.parquet",
+        geo_file="geo_2024_usdash_county_simple.parquet",
+        key_cols=("STATE", "COUNTY"),
+        parent="state",
+    ),
+}
+
+
+def _join_key_cols(df: pd.DataFrame, cols: tuple[str, ...]) -> pd.Series:
+    return df[list(cols)].astype(str).agg("".join, axis=1)
+
+
+def load_level_data(level: str, specs: dict[str, LevelSpec] = LEVEL_SPECS) -> pd.DataFrame:
+    """ACS B01001 (age x sex) + B17001 (poverty) + B19013 (income) for every
+    geography at this level, for whichever registry (`specs`) is passed --
+    NJ's LEVEL_SPECS by default, or US_LEVEL_SPECS for the nationwide app."""
+    spec = specs[level]
+    path = RAW_DIR / spec.data_file
+    if not path.exists():
+        raise FileNotFoundError(
+            f"{path} not found -- regenerate with: python ingestion/pull_njdash.py "
+            f"(NJ) or python ingestion/pull_usdash.py (nationwide)"
+        )
+    df = pd.read_parquet(path)
+    value_cols = [
+        c for c in df.columns if c[:-1].startswith(("B01001_", "B17001_", "B19013_"))
+    ]
+    df[value_cols] = df[value_cols].apply(pd.to_numeric, errors="coerce")
+    return df
+
+
+def load_level_geo(level: str, specs: dict[str, LevelSpec] = LEVEL_SPECS):
+    """Boundary geometry (GeoParquet) for this level, from whichever
+    registry (`specs`) is passed."""
+    import geopandas as gpd
+
+    spec = specs[level]
+    path = RAW_DIR / spec.geo_file
+    if not path.exists():
+        raise FileNotFoundError(
+            f"{path} not found -- regenerate with: python ingestion/pull_nj_geometry.py "
+            f"(NJ) or python ingestion/pull_us_geometry.py (nationwide)"
+        )
+    return gpd.read_parquet(path)
+
+
+def geo_key(df: pd.DataFrame, level: str, specs: dict[str, LevelSpec] = LEVEL_SPECS) -> pd.Series:
+    """Single string join key for a level's geography.
+
+    What the map click, the search dropdown, and every data lookup address
+    a geography by -- e.g. tract key = COUNTY + TRACT concatenated, so the
+    same string identifies a tract everywhere in the app. `specs` selects
+    which geography ladder's key_cols to use (NJ's LEVEL_SPECS by default).
+    """
+    return _join_key_cols(df, specs[level].key_cols)
+
+
+def children_of(
+    level: str, parent_key: str, df: pd.DataFrame | None = None,
+    specs: dict[str, LevelSpec] = LEVEL_SPECS,
+) -> pd.DataFrame:
+    """Rows of `level` inside the geography identified by `parent_key`.
+
+    `parent_key` is the PARENT level's own geo_key value (e.g. a county's
+    key, to get that county's tracts, or a state's key, to get that
+    state's counties) -- this is the drill-down primitive: at US scale, a
+    county layer scoped to one selected state is far smaller than every US
+    county at once (62 median, 254 max in Texas, vs. 3,144 nationwide).
+    """
+    spec = specs[level]
+    if spec.parent is None:
+        raise ValueError(f"{level!r} has no parent level to filter by")
+    if df is None:
+        df = load_level_data(level, specs=specs)
+    parent_cols = specs[spec.parent].key_cols
+    return df[_join_key_cols(df, parent_cols) == parent_key]
+
+
+# ---------------------------------------------------------------------------
+# Nationwide geography filters (Streamlit/app_US.py's filter stack) -- these
+# are FILTERS on the county view, not new geography levels. Selecting a
+# region/division/RUCC-tier/population-bin narrows which counties are shown;
+# none of them needs its own geometry file.
+# ---------------------------------------------------------------------------
+
+# State FIPS -> (region, division). Fixed groupings that do not change
+# year to year, so a hardcoded lookup beats a data pull. Source: U.S.
+# Census Bureau, "Census Regions and Divisions of the United States"
+# (https://www2.census.gov/geo/docs/maps-data/maps/reg_div.txt), verified
+# live 2026-08-12. 51 entries: 50 states + DC (Puerto Rico is excluded
+# from every nationwide pull in this project -- see pull_usdash.py).
+CENSUS_DIVISIONS: dict[str, tuple[str, str]] = {
+    "09": ("Northeast", "New England"), "23": ("Northeast", "New England"),
+    "25": ("Northeast", "New England"), "33": ("Northeast", "New England"),
+    "44": ("Northeast", "New England"), "50": ("Northeast", "New England"),
+    "34": ("Northeast", "Middle Atlantic"), "36": ("Northeast", "Middle Atlantic"),
+    "42": ("Northeast", "Middle Atlantic"),
+    "17": ("Midwest", "East North Central"), "18": ("Midwest", "East North Central"),
+    "26": ("Midwest", "East North Central"), "39": ("Midwest", "East North Central"),
+    "55": ("Midwest", "East North Central"),
+    "19": ("Midwest", "West North Central"), "20": ("Midwest", "West North Central"),
+    "27": ("Midwest", "West North Central"), "29": ("Midwest", "West North Central"),
+    "31": ("Midwest", "West North Central"), "38": ("Midwest", "West North Central"),
+    "46": ("Midwest", "West North Central"),
+    "10": ("South", "South Atlantic"), "11": ("South", "South Atlantic"),
+    "12": ("South", "South Atlantic"), "13": ("South", "South Atlantic"),
+    "24": ("South", "South Atlantic"), "37": ("South", "South Atlantic"),
+    "45": ("South", "South Atlantic"), "51": ("South", "South Atlantic"),
+    "54": ("South", "South Atlantic"),
+    "01": ("South", "East South Central"), "21": ("South", "East South Central"),
+    "28": ("South", "East South Central"), "47": ("South", "East South Central"),
+    "05": ("South", "West South Central"), "22": ("South", "West South Central"),
+    "40": ("South", "West South Central"), "48": ("South", "West South Central"),
+    "04": ("West", "Mountain"), "08": ("West", "Mountain"),
+    "16": ("West", "Mountain"), "30": ("West", "Mountain"),
+    "32": ("West", "Mountain"), "35": ("West", "Mountain"),
+    "49": ("West", "Mountain"), "56": ("West", "Mountain"),
+    "02": ("West", "Pacific"), "06": ("West", "Pacific"),
+    "15": ("West", "Pacific"), "41": ("West", "Pacific"),
+    "53": ("West", "Pacific"),
+}
+
+
+def census_region(state_fips: str) -> str | None:
+    entry = CENSUS_DIVISIONS.get(state_fips)
+    return entry[0] if entry else None
+
+
+def census_division(state_fips: str) -> str | None:
+    entry = CENSUS_DIVISIONS.get(state_fips)
+    return entry[1] if entry else None
+
+
+# Round-number bin edges for legibility, not a statistically derived
+# cutpoint. The sponsor's own rationale for wanting this filter is the
+# right one to state directly: population size drives MOE magnitude --
+# smaller population implies a smaller ACS sample, which implies a larger
+# RELATIVE margin of error, all else equal.
+POPULATION_BINS = [0, 10_000, 50_000, 250_000, 1_000_000, float("inf")]
+POPULATION_BIN_LABELS = [
+    "Under 10,000", "10,000-50,000", "50,000-250,000", "250,000-1,000,000", "1,000,000+",
+]
+
+
+def population_size_bin(pop_est: pd.Series) -> pd.Series:
+    """Population-size bin per geography, for the nationwide app's filter
+    stack. `pop_est` is expected to be B01001_001E (total population)."""
+    return pd.cut(pop_est, bins=POPULATION_BINS, labels=POPULATION_BIN_LABELS, right=False)
+
+
+def load_us_acs1_county() -> pd.DataFrame:
+    """ACS 1-year, county level (Streamlit/app_US.py's precision comparison).
+
+    The 1-year product only publishes above a 65,000-population floor, so
+    the row set THIS PULL RETURNS is the exact answer to "does this county
+    have 1-year data," not a threshold applied after the fact -- see
+    pull_usdash.py's module docstring for why deriving this from
+    B01001_001E >= 65000 instead would be wrong at the boundary (the
+    Bureau's threshold applies to its own population estimate for the
+    geography, not to the 5-year ACS figure this project otherwise uses).
+    """
+    path = RAW_DIR / "acs1_2024_usdash_county.parquet"
+    if not path.exists():
+        raise FileNotFoundError(
+            f"{path} not found -- regenerate with: python ingestion/pull_usdash.py"
+        )
+    df = pd.read_parquet(path)
+    value_cols = [
+        c for c in df.columns if c[:-1].startswith(("B01001_", "B17001_", "B19013_"))
+    ]
+    df[value_cols] = df[value_cols].apply(pd.to_numeric, errors="coerce")
+    return df
+
+
+def acs_1yr_available_keys() -> set[str]:
+    """STATE+COUNTY keys with ACS 1-year data -- see load_us_acs1_county's
+    docstring for why this is the pulled row set itself, not a threshold."""
+    return set(geo_key(load_us_acs1_county(), "county", specs=US_LEVEL_SPECS))
+
+
+def load_rucc() -> pd.DataFrame:
+    """USDA ERS Rural-Urban Continuum Codes, 2023 vintage, county level.
+
+    See ingestion/pull_rucc.py for the source, encoding, and format quirks
+    already handled at ingestion time -- this loader just reads the
+    already-cleaned parquet.
+    """
+    path = RAW_DIR / "rucc_2023_county.parquet"
+    if not path.exists():
+        raise FileNotFoundError(
+            f"{path} not found -- regenerate with: python ingestion/pull_rucc.py"
+        )
+    return pd.read_parquet(path)
+
+
+def load_alloc_us_county() -> pd.DataFrame:
+    """Nationwide county allocation (imputation) rates -- see
+    ingestion/pull_usdash_alloc.py. Estimates only; allocation tables
+    publish no margin of error (same as load_alloc_nj_county/tract)."""
+    path = RAW_DIR / "acs5_2024_usdash_alloc_county.parquet"
+    if not path.exists():
+        raise FileNotFoundError(
+            f"{path} not found -- regenerate with: python ingestion/pull_usdash_alloc.py"
+        )
+    return alloc.derive_rates(pd.read_parquet(path))
+
 
 BANDS = ["Under 5", "5-17", "18-64", "65+"]
 SEXES = ["male", "female", "both"]
@@ -132,8 +398,18 @@ def load_acs(level: str) -> pd.DataFrame:
     return df
 
 
-def load_saipe_mercer(year: int = common.ACS_VINTAGE) -> pd.Series:
-    """SAIPE's median household income row for Mercer County, NJ (Phase 3, HANDOFF #17).
+def load_saipe_county(state: str, county: str, year: int = common.ACS_VINTAGE) -> pd.Series:
+    """SAIPE's median household income + poverty row for any US county
+    (generalizes the Mercer-only Phase 3 comparator, HANDOFF #17, to the
+    nationwide app -- Streamlit/app_US.py). saipe_counties_2019_2024.parquet
+    already covers every US county nationwide (pull_saipe_counties.py's own
+    docstring: `for=county:*` with no state qualifier serves all 3,144 --
+    confirmed 2026-08-12, this needed no new pull).
+
+    Looked up by FIPS (state, county), NOT by county name: county names
+    repeat nationwide -- "Mercer County" alone exists in NJ, IL, KY, and MO
+    (confirmed live), so a name-only lookup would silently return the wrong
+    county's row outside NJ.
 
     SAIPE is a MODEL-based interval (sampling variance of its inputs plus
     model uncertainty), not an ACS-style sampling-only margin of error --
@@ -148,10 +424,62 @@ def load_saipe_mercer(year: int = common.ACS_VINTAGE) -> pd.Series:
             f"{path} not found -- regenerate with: python ingestion/pull_saipe_counties.py"
         )
     df = pd.read_parquet(path)
-    row = df[(df["STATE"] == common.STATE_NJ) & (df["NAME"] == "Mercer County") & (df["year"] == year)]
+    row = df[(df["STATE"] == state) & (df["COUNTY"] == county) & (df["year"] == year)]
     if row.empty:
-        raise ValueError(f"No SAIPE row for Mercer County, {year}")
+        raise ValueError(f"No SAIPE row for STATE={state} COUNTY={county}, {year}")
     return row.iloc[0]
+
+
+def load_saipe_mercer(year: int = common.ACS_VINTAGE) -> pd.Series:
+    """Mercer County, NJ's SAIPE row (Phase 3, HANDOFF #17) -- kept for the
+    existing NJ app; a thin wrapper over the generalized load_saipe_county
+    so there's exactly one lookup implementation, not two."""
+    return load_saipe_county(common.STATE_NJ, "021", year)
+
+
+def load_pums_profile() -> pd.DataFrame:
+    """NJ statewide person-level allocation profile (EDA 09, analysis.alloc_profile).
+
+    Reads only the columns the profile needs -- the six income allocation
+    flags plus person weight, age, sex, education -- out of the ~46 MB / 102
+    column PUMS file, most of which are the 80 replicate weights this profile
+    does not use. `analysis.alloc_profile.prepare()`/`profile_all()` do the
+    actual work; this loader only gets the right slice of data to them.
+    """
+    from analysis.alloc_denominator import FLAG_TO_AMOUNT
+    from analysis.alloc_profile import PERSON_WEIGHT, prepare, profile_all
+
+    path = RAW_DIR / f"pums_{common.ACS_VINTAGE}_nj_alloc_flags.parquet"
+    if not path.exists():
+        raise FileNotFoundError(
+            f"{path} not found -- regenerate with: "
+            "python ingestion/pull_pums_alloc_flags.py --replicates"
+        )
+    columns = list(FLAG_TO_AMOUNT) + [PERSON_WEIGHT, "AGEP", "SEX", "SCHL"]
+    raw = pd.read_parquet(path, columns=columns)
+    return profile_all(prepare(raw))
+
+
+def load_pums_puma_profile() -> pd.DataFrame:
+    """Same person-level outcomes as load_pums_profile, aggregated by PUMA.
+
+    EDA 09 section 5: supports a map/table of AREAS, not a demographic claim
+    about the people in them (aggregating erases the person-level link that
+    licenses that claim -- the ecological fallacy). Present with that caption.
+    """
+    from analysis.alloc_denominator import FLAG_TO_AMOUNT
+    from analysis.alloc_profile import PERSON_WEIGHT, prepare, profile
+
+    path = RAW_DIR / f"pums_{common.ACS_VINTAGE}_nj_alloc_flags.parquet"
+    if not path.exists():
+        raise FileNotFoundError(
+            f"{path} not found -- regenerate with: "
+            "python ingestion/pull_pums_alloc_flags.py --replicates"
+        )
+    puma_col = "public use microdata area"
+    columns = list(FLAG_TO_AMOUNT) + [PERSON_WEIGHT, "AGEP", "SEX", "SCHL", puma_col]
+    raw = pd.read_parquet(path, columns=columns).rename(columns={puma_col: "puma"})
+    return profile(prepare(raw), by="puma").drop(columns="characteristic")
 
 
 def load_trenton_tracts() -> pd.DataFrame:
@@ -308,7 +636,16 @@ def cv_from_range(est: float, low: float, high: float) -> float:
 
 
 def tier(cv: float) -> tuple[str, str]:
-    """(tier label, plain-English line) for a coefficient of variation."""
+    """(tier label, plain-English line) for a coefficient of variation.
+
+    Kept for the NJ app, analysis/composite.py, and the notebooks --
+    Streamlit/app_US.py deliberately stops calling this (see its module
+    docstring): the nationwide app colors its map on the CV value directly
+    via cv_color(), a continuous ramp, rather than a 3-tier verdict, per
+    the sponsor's neutral-voice direction (2026-08-12, see WORKLOG and
+    README's "Composite tier philosophy" open question). The tier labels
+    and thresholds below are unchanged either way.
+    """
     if np.isnan(cv):
         return TIER_RISKY, "No reliable estimate available for this figure."
     if cv <= TIER_CV_SOLID_MAX:
@@ -318,6 +655,89 @@ def tier(cv: float) -> tuple[str, str]:
     else:
         label = TIER_RISKY
     return label, TIER_LINES[label]
+
+
+# Diverging blue->orange sequential ramp endpoints for cv_color() below.
+# Originally a single-hue light-to-dark blue ramp (rationale: "colour
+# carries magnitude not identity," same hue as
+# Streamlit/pages/1_Whose_data_is_this.py's BLUE_450). Replaced per live
+# design feedback (2026-08-13): a single hue that only varies in lightness
+# reads as "different amounts of the same thing" but doesn't pop -- a low-
+# CV and a high-CV county both being "a shade of blue" makes them too easy
+# to eyeball as similar. The two endpoints are Okabe-Ito's blue (#0072B2)
+# and orange (#E69F00) -- already used elsewhere in this app for the
+# imputation quadrant chart, so the ramp reuses colors already vetted
+# colorblind-safe rather than introducing a new pair. Blue-vs-orange
+# specifically (rather than the more common red-vs-green diverging scheme)
+# is one of the standard colorblind-safe substitutions: the two hues differ
+# enough in perceived lightness and cone response that protanopia/
+# deuteranopia viewers (the common forms) still separate them, which a
+# red-green diverging ramp would not survive.
+# Tradeoff worth stating plainly: this is a diverging-style ramp applied to
+# a variable (CV) that has no meaningful zero-centered midpoint -- CV=25%
+# isn't "the opposite of" CV=0% and CV=50% the way a temperature anomaly's
+# negative and positive halves are opposites of a real zero. The midpoint
+# color here means nothing on its own; it exists only so the two endpoints
+# don't blend into a muddy brown/purple in between. It also means the ramp
+# is no longer monotonic in lightness alone -- a hue-blind (achromatopsia,
+# very rare, unlike red-green colorblindness) or true-grayscale reading of
+# this legend would see the middle as lightest and both ends as similarly
+# dark, and couldn't tell "low CV" from "high CV" by lightness alone. That
+# failure mode is accepted here as a rare edge case in exchange for the
+# common case (hue-perceiving viewers, including most colorblind viewers)
+# reading the difference faster.
+CV_COLOR_LOW = (0, 114, 178)     # Okabe-Ito blue -- low CV
+CV_COLOR_MID = (247, 247, 245)   # near-white transition point, not a meaningful value
+CV_COLOR_HIGH = (230, 159, 0)    # Okabe-Ito orange -- high CV
+CV_COLOR_NO_DATA = (200, 200, 200)
+
+
+def cv_color(cv: float, *, cv_cap: float = 0.5, alpha: int = 200) -> list[int]:
+    """RGBA on a continuous blue(low)->orange(high) ramp for a coefficient
+    of variation, for Streamlit/app_US.py's map and card uncertainty bars
+    (no tier bins -- see tier()'s docstring for why). `cv_cap`: CV is
+    unbounded above, so without a cap the vast majority of counties (CVs
+    well under 0.5 for most measures at county scale) would compress into
+    a narrow band near the blue end; CVs at or above the cap render as the
+    ramp's full orange, not an off-scale color -- there is no "verdict"
+    color, only "more/less."
+    """
+    if cv is None or np.isnan(cv):
+        return list(CV_COLOR_NO_DATA) + [alpha]
+    t = min(max(cv, 0.0), cv_cap) / cv_cap
+    if t <= 0.5:
+        lo, hi, local_t = CV_COLOR_LOW, CV_COLOR_MID, t / 0.5
+    else:
+        lo, hi, local_t = CV_COLOR_MID, CV_COLOR_HIGH, (t - 0.5) / 0.5
+    rgb = [int(lo[i] + local_t * (hi[i] - lo[i])) for i in range(3)]
+    return rgb + [alpha]
+
+
+def difference_is_significant(est1: float, moe1: float, est2: float, moe2: float) -> float:
+    """Whether two ACS estimates differ at 90% confidence (Census Bureau's
+    own two-sample difference test -- "Understanding and Using American
+    Community Survey Data," Appendix on comparing estimates):
+
+        Z = (X1 - X2) / sqrt(SE1^2 + SE2^2),  significant if |Z| > 1.645
+
+    Returns NaN if any input is NaN (no MOE published) -- never silently
+    treats "no test possible" as "not significant." Returns 1.0/0.0 rather
+    than a bool so it composes cleanly with pandas aggregation.
+
+    CAVEAT, and it belongs in any caption using this: if one geography
+    NESTS inside the other (e.g. a county compared to its own state), the
+    two estimates share sample and are not independent -- this formula
+    then OVERSTATES their combined variance, since it assumes independence
+    it doesn't have. The Census Bureau does not publish the covariance
+    needed to correct for it. A "significant" result from this formula in
+    the nested case is therefore CONSERVATIVE: a true difference could be
+    significant even when this test says no, never the reverse.
+    """
+    if any(pd.isna(x) for x in (est1, moe1, est2, moe2)):
+        return float("nan")
+    se1, se2 = moe1 / Z_90, moe2 / Z_90
+    z = (est1 - est2) / (se1**2 + se2**2) ** 0.5
+    return float(abs(z) > 1.645)
 
 
 if __name__ == "__main__":
