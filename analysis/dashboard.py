@@ -134,10 +134,24 @@ def _join_key_cols(df: pd.DataFrame, cols: tuple[str, ...]) -> pd.Series:
     return df[list(cols)].astype(str).agg("".join, axis=1)
 
 
+# Every ACS table this project's loaders know how to coerce to numeric --
+# shared by load_level_data() and load_us_acs1_county() so a new table only
+# needs to be added here once (variable expansion, 2026-08-30). The last six
+# prefixes are US-app-only (see ingestion/pull_usdash.py); NJ/Trenton parquet
+# files simply have no columns matching them, so sharing this list with
+# load_level_data() (used by both apps) is harmless.
+VALUE_COL_PREFIXES = (
+    "B01001_", "B17001_", "B19013_",
+    "B27001_", "B25064_", "B25071_", "B25003_", "C16002_", "B08201_", "B19001_",
+)
+
+
 def load_level_data(level: str, specs: dict[str, LevelSpec] = LEVEL_SPECS) -> pd.DataFrame:
-    """ACS B01001 (age x sex) + B17001 (poverty) + B19013 (income) for every
-    geography at this level, for whichever registry (`specs`) is passed --
-    NJ's LEVEL_SPECS by default, or US_LEVEL_SPECS for the nationwide app."""
+    """ACS B01001 (age x sex) + B17001 (poverty) + B19013 (income) -- plus,
+    for the nationwide app only, health insurance/rent/language/vehicles/
+    income-brackets (VALUE_COL_PREFIXES) -- for every geography at this
+    level, for whichever registry (`specs`) is passed: NJ's LEVEL_SPECS by
+    default, or US_LEVEL_SPECS for the nationwide app."""
     spec = specs[level]
     path = RAW_DIR / spec.data_file
     if not path.exists():
@@ -146,9 +160,7 @@ def load_level_data(level: str, specs: dict[str, LevelSpec] = LEVEL_SPECS) -> pd
             f"(NJ) or python ingestion/pull_usdash.py (nationwide)"
         )
     df = pd.read_parquet(path)
-    value_cols = [
-        c for c in df.columns if c[:-1].startswith(("B01001_", "B17001_", "B19013_"))
-    ]
+    value_cols = [c for c in df.columns if c[:-1].startswith(VALUE_COL_PREFIXES)]
     df[value_cols] = df[value_cols].apply(pd.to_numeric, errors="coerce")
     return df
 
@@ -289,9 +301,7 @@ def load_us_acs1_county() -> pd.DataFrame:
             f"{path} not found -- regenerate with: python ingestion/pull_usdash.py"
         )
     df = pd.read_parquet(path)
-    value_cols = [
-        c for c in df.columns if c[:-1].startswith(("B01001_", "B17001_", "B19013_"))
-    ]
+    value_cols = [c for c in df.columns if c[:-1].startswith(VALUE_COL_PREFIXES)]
     df[value_cols] = df[value_cols].apply(pd.to_numeric, errors="coerce")
     return df
 
@@ -377,6 +387,122 @@ def _codes(prefix: str, cells: dict, band: str, sex: str) -> list[str]:
     if band not in BANDS:
         raise ValueError(f"band must be one of {BANDS}, got {band!r}")
     return [f"{prefix}_{n}" for s in _sexes(sex) for n in cells[band][s]]
+
+
+# ---------------------------------------------------------------------------
+# US dashboard extra measures -- health insurance, language, vehicles,
+# income brackets, rent (variable expansion, 2026-08-30). County/state only
+# (see ingestion/pull_usdash.py); NJ/Trenton never gain these columns. Each
+# table has its own cell shape, not the BANDS/SEXES layout above, so these
+# get their own small cell lists rather than reusing _codes(). Cell numbers
+# verified live against the ACS 2024 variables-group endpoint during
+# planning (all seven tables publish in both acs/acs5 and acs/acs1).
+# ---------------------------------------------------------------------------
+
+# B27001 health insurance coverage by sex by age -- a repeating
+# (bracket total, with coverage, no coverage) triple per age bracket, two
+# sexes, nine brackets each. These are the "no coverage" cells, all ages.
+# Universe is B27001_001, the CIVILIAN NONINSTITUTIONALIZED population --
+# not the same universe as B01001's total population.
+_UNINSURED_CELLS = [
+    "005", "008", "011", "014", "017", "020", "023", "026", "029",  # male brackets
+    "033", "036", "039", "042", "045", "048", "051", "054", "057",  # female brackets
+]
+
+# C16002 household language by limited-English-speaking status -- one
+# "Limited English speaking household" cell per language group (Spanish,
+# other Indo-European, Asian/Pacific Island, other). Universe is
+# C16002_001, total households.
+_LIMITED_ENGLISH_CELLS = ["004", "007", "010", "013"]
+
+# B19001 household income, collapsed from 16 published brackets onto 4
+# grant-relevant bands -- boundaries verified live against the brackets
+# themselves (e.g. "$25,000 to $29,999" through "$45,000 to $49,999" for
+# the $25k-$50k band), not assumed from the band names.
+INCOME_BANDS = ["Under $25k", "$25k-$50k", "$50k-$100k", "$100k+"]
+_INCOME_BRACKET_CELLS = {
+    "Under $25k": ["002", "003", "004", "005"],
+    "$25k-$50k": ["006", "007", "008", "009", "010"],
+    "$50k-$100k": ["011", "012", "013"],
+    "$100k+": ["014", "015", "016", "017"],
+}
+
+
+def acs_uninsured(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """(estimate, moe) for the civilian noninstitutionalized population
+    with no health insurance coverage, all ages combined -- B27001."""
+    codes = [f"B27001_{n}" for n in _UNINSURED_CELLS]
+    return aggregate_estimate(df, codes), aggregate_moe(df, codes)
+
+
+def acs_insurance_universe(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """(estimate, moe) for B27001's own universe cell -- the civilian
+    noninstitutionalized population acs_uninsured() is a share of."""
+    return df["B27001_001E"].astype(float), df["B27001_001M"].astype(float)
+
+
+def acs_limited_english(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """(estimate, moe) for households in a limited-English-speaking
+    household, any language group combined -- C16002."""
+    codes = [f"C16002_{n}" for n in _LIMITED_ENGLISH_CELLS]
+    return aggregate_estimate(df, codes), aggregate_moe(df, codes)
+
+
+def acs_language_universe(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """(estimate, moe) for C16002's total-households cell -- the universe
+    acs_limited_english() is a share of."""
+    return df["C16002_001E"].astype(float), df["C16002_001M"].astype(float)
+
+
+def acs_no_vehicle(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """(estimate, moe) for households with no vehicle available -- B08201,
+    a single published cell, no aggregation needed."""
+    return df["B08201_002E"].astype(float), df["B08201_002M"].astype(float)
+
+
+def acs_vehicle_universe(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """(estimate, moe) for B08201's total-households cell -- the universe
+    acs_no_vehicle() is a share of."""
+    return df["B08201_001E"].astype(float), df["B08201_001M"].astype(float)
+
+
+def acs_income_bracket(df: pd.DataFrame, band: str) -> tuple[pd.Series, pd.Series]:
+    """(estimate, moe) for households in an income band -- B19001,
+    collapsed from its published brackets per band (see INCOME_BANDS)."""
+    if band not in INCOME_BANDS:
+        raise ValueError(f"band must be one of {INCOME_BANDS}, got {band!r}")
+    codes = [f"B19001_{n}" for n in _INCOME_BRACKET_CELLS[band]]
+    return aggregate_estimate(df, codes), aggregate_moe(df, codes)
+
+
+def acs_income_bracket_universe(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """(estimate, moe) for B19001's total-households cell -- the universe
+    acs_income_bracket() bands are a share of."""
+    return df["B19001_001E"].astype(float), df["B19001_001M"].astype(float)
+
+
+def acs_median_rent(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """(estimate, moe) for median gross rent -- B25064, a single published
+    cell, no aggregation needed."""
+    return df["B25064_001E"].astype(float), df["B25064_001M"].astype(float)
+
+
+def acs_rent_burden(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """(estimate, moe) for the Census Bureau's OWN median gross rent as a
+    percentage of household income -- B25071. NOT the same as dividing
+    median rent by median income by hand: dividing two published medians
+    is not a valid derived statistic (the median of a ratio is not the
+    ratio of two medians). This is the Bureau's own answer, computed
+    household by household before taking the median of that ratio."""
+    return df["B25071_001E"].astype(float), df["B25071_001M"].astype(float)
+
+
+def acs_renter_occupied(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """(estimate, moe) for renter-occupied housing units -- B25003, the
+    universe rent and rent burden are measured against. Surfaced as
+    context on the rent card, not its own card -- explains why rent MOEs
+    widen in counties with few renters."""
+    return df["B25003_003E"].astype(float), df["B25003_003M"].astype(float)
 
 
 # ---------------------------------------------------------------------------
@@ -606,6 +732,12 @@ def poverty_rate(
     return p * 100, se_p * Z_90 * 100
 
 
+# Same Census proportion-MOE formula, generic name -- used by the US
+# dashboard's new rate-bearing measures (uninsured, limited English,
+# no vehicle), where "poverty" would be the wrong word for the numerator.
+proportion_rate = poverty_rate
+
+
 # ---------------------------------------------------------------------------
 # Reliability tier
 # ---------------------------------------------------------------------------
@@ -738,6 +870,51 @@ def difference_is_significant(est1: float, moe1: float, est2: float, moe2: float
     se1, se2 = moe1 / Z_90, moe2 / Z_90
     z = (est1 - est2) / (se1**2 + se2**2) ** 0.5
     return float(abs(z) > 1.645)
+
+
+def statistical_peers(est: pd.Series, moe: pd.Series, key: str) -> pd.DataFrame:
+    """Every candidate's relation to `key`'s own estimate at 90% confidence,
+    via the same Census two-sample test as difference_is_significant()
+    above -- vectorized here since Streamlit/app_US.py's peer panel runs
+    it against every other row in a candidate pool (up to ~3,143 counties)
+    rather than one pair at a time (statistical peer counties, 2026-08-30).
+
+    Unlike difference_is_significant()'s own docstring caveat -- that a
+    NESTED comparison (e.g. a county vs. its own state) shares sample and
+    understates combined variance -- TWO DIFFERENT COUNTIES do not nest
+    and are drawn from disjoint ACS samples. This is the test's clean,
+    independent case: no conservative-bias caveat applies to a
+    county-vs-county comparison the way it does to county-vs-state.
+
+    `est`/`moe` must share an index (typically county `_key`) and include
+    `key` itself. Returns a DataFrame on that same index with columns
+    `est`, `moe`, `relation`, where `relation` is one of:
+    - "self": `key`'s own row.
+    - "tied": not significantly different from `key`'s estimate.
+    - "higher"/"lower": this candidate's estimate is significantly
+      higher/lower than `key`'s.
+    - "untestable": `key`'s or the candidate's estimate or MOE is NaN --
+      never silently folded into "tied" (same principle as
+      difference_is_significant() returning NaN rather than False).
+    """
+    if key not in est.index:
+        raise KeyError(f"{key!r} not found in est index")
+    e_sel, m_sel = float(est[key]), float(moe[key])
+    se_sel, se = m_sel / Z_90, moe / Z_90
+    with np.errstate(invalid="ignore"):
+        z = (e_sel - est) / np.sqrt(se_sel**2 + se**2)
+    # z > 0 means the SELECTED county's estimate is the higher one, so the
+    # CANDIDATE is "lower" -- and vice versa. Untestable rows land here as
+    # "tied" first (NaN comparisons are always False) and get overwritten
+    # below by the untestable mask, which is evaluated independently.
+    relation = pd.Series(
+        np.where(z > 1.645, "lower", np.where(z < -1.645, "higher", "tied")),
+        index=est.index,
+    )
+    untestable = est.isna() | moe.isna() | pd.isna(e_sel) | pd.isna(m_sel)
+    relation = relation.mask(untestable, "untestable")
+    relation.loc[key] = "self"
+    return pd.DataFrame({"est": est, "moe": moe, "relation": relation})
 
 
 if __name__ == "__main__":

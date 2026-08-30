@@ -1,6 +1,37 @@
+[runner]
+# app.py never relies on bare-expression auto-display (everything goes
+# through explicit st.xxx() calls, confirmed by inspection) -- magic's AST
+# rewrite of the whole script measured at ~85ms of ast.fix_missing_locations
+# work PER RERUN (every click, every dropdown change), for a feature this
+# app doesn't use. Off.
+magicEnabled = false
+
+[client]
+# app_US.py (change D) moves every filter/search control out of the
+# sidebar into a top-of-page expander, so the only thing still forcing a
+# sidebar to render is Streamlit's automatic pages/ nav link (currently
+# "Whose data is this", still used by app_NJ.py). Turning this off removes
+# that link -- and therefore the sidebar itself -- without touching the
+# page file on disk.
+showSidebarNavigation = false
+
 [theme]
+# Census Bureau palette/typography (screenshot-sampled 2026-08-18):
+# census.gov's own stylesheets declare Roboto as the site font, so this is
+# a direct match, not a substitute. Colors sampled from the reference
+# screenshot: hero/primary blue, gold call-to-action accent, link blue,
+# body ink. NOTE: this theme is shared by app_NJ.py and the "Whose data is
+# this" page (Streamlit resolves ONE .streamlit/config.toml per repo) --
+# flagged to the user; confined-to-app_US-only theming would require
+# per-widget CSS instead of native theme.* keys.
 base = "light"
-primaryColor = "#1E2761"
+font = "Roboto:https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap, sans-serif"
+headingFont = "Roboto:https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap, sans-serif"
+primaryColor = "#0D54B0"
+linkColor = "#1A6BB5"
 backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#EEF3FD"
-textColor = "#111111"
+secondaryBackgroundColor = "#F1F1F1"
+textColor = "#131313"
+borderColor = "#D6D6D6"
+baseRadius = "small"
+buttonRadius = "small"
