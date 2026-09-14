@@ -290,3 +290,49 @@ census.gov/programs-surveys/acs/data/variance-tables.html.*
 for approximating a standard error from a generalized formula when replicate
 weights aren't used — the quick-but-approximate path, versus the exact
 replicate-weight computation. *Source: "PUMS Accuracy of the Data".*
+
+---
+
+## Dashboard measures (added 2026-09-14)
+
+**Universe:** The group of people or housing units an ACS table counts. Each table
+states its own: B23025 covers the population 16 and over, B25070 covers
+renter-occupied housing units. A rate divides a count by the universe of the same
+table, never by total population, because the two can differ (group quarters
+residents, for example, are left out of poverty status).
+
+**Low income (below 200% of poverty):** People whose household income is less than
+twice the federal poverty line for their household size, from table C17002 (ratio of
+income to poverty level). Many programs set their low-income line here rather than
+at the poverty line itself, including CDBG low-and-moderate income and EJScreen.
+
+**Unemployment rate:** Unemployed people as a share of the **civilian labor force**:
+people 16 and over who are working or looking for work, excluding the Armed Forces.
+People not looking for work are not in the labor force, so they are in neither the
+numerator nor the denominator. From table B23025.
+
+**Rent burden: cost-burdened and severely cost-burdened:** A renter household is
+cost-burdened when gross rent takes a large share of household income: 30% or more
+here, and severely cost-burdened at 50% or more, from table B25070. HUD's CHAS data
+describe cost burden as more than 30%; the ACS brackets start at 30.0%, so the two
+can differ slightly. Households whose burden cannot be computed (no household
+income, or no cash rent) are left out of the base, as the Census Bureau does in its
+DP04 profile. The **rent burden** card is different again: it is the Bureau's own
+median of that ratio (B25071).
+
+**State-rate benchmark (expected at the state rate):** **Our methodology**, not a
+Census Bureau figure. The reference marker on a count card: what the county's count
+would be if the county matched its state's rate for that measure. It is the state's
+rate multiplied by the county's own universe. Needed because a raw state count is 10
+to 25 times a county's and cannot share its axis. Its margin of error combines the
+ACS proportion formula (for the rate) with the product formula
+MOE(A x B) = sqrt(A^2 x MOE(B)^2 + B^2 x MOE(A)^2) from the ACS handbook. It treats
+the state rate and county universe as independent, which overstates the margin,
+since the county is part of the state. Implemented as
+`analysis.dashboard.expected_at_rate`.
+
+**Suppressed estimate:** An estimate the Census Bureau does not publish for a
+geography, usually because too few sampled households fall in the category. Five US
+counties publish no median home value in the 2020-2024 ACS 5-year data. Different
+from a zero, which is a published count of none.
+

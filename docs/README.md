@@ -9,5 +9,8 @@
 | [`acs-data-shape-diagram.md`](acs-data-shape-diagram.md) | Wide ACS rows vs long `variable_group` frame; county / tract / BG examples | Teaching diagram for the CV-driver model |
 | [`biweekly-2026-07-22.pptx`](biweekly-2026-07-22.pptx) | July 22 mentor biweekly deck, with speaker notes | Presented 2026-07-22 |
 | [`product-shortlist-proposal.md`](product-shortlist-proposal.md) | The scoped income & poverty product stack — verified uncertainty receipts + the mentor ask | Proposed 2026-08-01 — pending mentor confirmation |
+| [`dashboard-variable-shortlist.md`](dashboard-variable-shortlist.md) | Which variables the dashboard carries, for which audiences, and why | Adopted in part by decision #18, 2026-09-14; includes a correction to its table-level CVs |
+| [`user-segments-and-needs.md`](user-segments-and-needs.md) | Garrett Spangler's user research: who needs ACS uncertainty help and for which decisions | Research summary, 2026-08-24; basis for decision #18 |
+| [`acs-user-needs-and-functions.pptx`](acs-user-needs-and-functions.pptx) | The deck behind the user research summary | Source deck, 2026-08-24 |
 
 Methodology notes get added here as they develop.

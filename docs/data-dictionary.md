@@ -79,6 +79,47 @@ Profile entries stay below as privacy-noise report evidence, not score inputs.)
   allocation rate** — across eight defensible denominators, income sources
   rank anywhere from 1st to 6th.
 
+
+### ACS 5-year: US county dashboard tables (added 2026-09-14)
+
+- **What:** The ACS tables behind `Streamlit/app_US_v2.py`, pulled for every US
+  state and county. Original set: B01001 (sex by age), B17001 (poverty by age),
+  B19013 (median household income), B19001 (income brackets), B27001 (health
+  insurance), B25064 (median gross rent), B25071 (median rent burden), B25003
+  (tenure), C16002 (limited-English households), B08201 (vehicles). Added under
+  scope decision #18: C17002 (ratio of income to poverty), B23025 (employment
+  status), B25070 (rent burden brackets), B25077 (median home value), B15003
+  (educational attainment), B18101 (disability).
+- **Geographies:** 50 states plus DC (51 rows) and 3,144 counties. Puerto Rico is
+  dropped at download (1 state row, 78 municipios): USDA's rural-urban codes, which
+  the app filters by, do not cover it.
+- **Uncertainty shipped:** MOE at 90% confidence on every cell. Cards that sum cells
+  use root-sum-of-squares with the handbook zero-cell rule (`analysis.acs.aggregate_moe`);
+  rates use the ACS proportion formula (`analysis.dashboard.proportion_rate`). The
+  state-rate benchmark on count cards is our own derived figure
+  (`analysis.dashboard.expected_at_rate`; see the glossary).
+- **Access:** [`ingestion/pull_usdash.py`](../ingestion/pull_usdash.py), 399 variables,
+  writes `data/raw/acs5_2024_usdash_{state,county}.parquet` (gitignored, regenerable),
+  plus an ACS 1-year county file whose row set is the exact list of counties with 1-year
+  data (850 in 2024).
+- **Landmines:**
+  - **B25070_011 "Not computed"** (renters with no household income or no cash rent)
+    is a real share of renters: median 13.3% of a county's renters, 90th percentile
+    29.6%, maximum 89.0% (EDA 14's 2024 county pull). The dashboard leaves it out of
+    the rent-burden base, as the Bureau's DP04 profile does. Counting it would drop the
+    median county from 44.7% to 38.0% cost-burdened, and move 2,601 counties by more
+    than 3 points.
+  - **B25077 median home value** is unpublished in 5 counties (estimate `-666666666`,
+    MOE `-222222222`, insufficient sample). It is not top-coded at county scale in
+    2024: the highest county value is 1,633,900 (Teton County, WY).
+  - **B23025:** use `B23025_003` (civilian labor force) as the unemployment
+    denominator, not `002`, which includes the Armed Forces.
+  - **B01001_001 total population** has a controlled MOE (`-555555555`, annotation
+    `*****`) in 3,014 of 3,144 counties and all 51 states. It arrives as NaN and the
+    dashboard map colors it like missing data.
+  - **The pull fails intermittently** while looking up variable metadata, on a
+    different variable each attempt. Re-run it; see HANDOFF data landmines.
+
 ## Cartographic boundary files (vintage 2024)
 
 - **What:** Generalized TIGER/Line-derived boundaries for mapping.

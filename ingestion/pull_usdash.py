@@ -15,7 +15,10 @@ already reads via analysis/dashboard.py.
 USDASH_EXTRA_VARS adds five more table families, US-app-only: B27001
 (health insurance), B25064/B25071/B25003 (rent, rent burden, tenure),
 C16002 (limited-English households), B08201 (vehicles available), B19001
-(income brackets). These are NOT added to the shared ACS_DOWNLOAD_VARS
+(income brackets). Scope expansion (lead decision, 2026-09-14) adds six
+more: C17002 (income-to-poverty ratio), B23025 (employment status), B25070
+(rent burden brackets), B25077 (median home value), B15003 (educational
+attainment), B18101 (disability). These are NOT added to the shared ACS_DOWNLOAD_VARS
 (imported below from pull_trenton_dashboard) -- that list is also used by
 the Trenton (place/tract) and NJ pulls, and a variable not published at
 place or tract level errors the entire query for that geography (the same
@@ -96,7 +99,24 @@ _LANGUAGE_VARS = [f"C16002_{n}" for n in ("001", "004", "007", "010", "013")]
 _VEHICLE_VARS = ["B08201_001", "B08201_002"]
 _INCOME_BRACKET_VARS = ["B19001_001"] + [f"B19001_{n:03d}" for n in range(2, 18)]
 
-USDASH_EXTRA_VARS = _UNINSURED_VARS + _RENT_VARS + _LANGUAGE_VARS + _VEHICLE_VARS + _INCOME_BRACKET_VARS
+# Scope expansion (lead decision, 2026-09-14): Tier A and B measures. Each list
+# carries its universe cell, plus any mirror cells the sanity checks below
+# need to test an exact partition. Cell choices are documented beside the
+# matching cell lists in analysis/dashboard.py.
+_LOW_INCOME_VARS = [f"C17002_{n:03d}" for n in range(1, 9)]        # all 8, for the partition check
+_EMPLOYMENT_VARS = ["B23025_003", "B23025_004", "B23025_005"]       # civilian LF, employed, unemployed
+_RENT_BURDEN_BRACKET_VARS = [f"B25070_{n:03d}" for n in range(1, 12)]  # all 11, for the partition check
+_HOME_VALUE_VARS = ["B25077_001"]
+_EDUCATION_VARS = [f"B15003_{n:03d}" for n in range(1, 17)]         # universe + 15 no-diploma cells
+_DISABILITY_VARS = ["B18101_001"] + [f"B18101_{n}" for n in (
+    "004", "007", "010", "013", "016", "019", "023", "026", "029", "032", "035", "038",
+)]
+
+USDASH_EXTRA_VARS = (
+    _UNINSURED_VARS + _RENT_VARS + _LANGUAGE_VARS + _VEHICLE_VARS + _INCOME_BRACKET_VARS
+    + _LOW_INCOME_VARS + _EMPLOYMENT_VARS + _RENT_BURDEN_BRACKET_VARS + _HOME_VALUE_VARS
+    + _EDUCATION_VARS + _DISABILITY_VARS
+)
 
 
 def _e_m_pairs(codes: list[str]) -> list[str]:
@@ -163,6 +183,37 @@ def extra_measures_sanity(df: pd.DataFrame, level: str, checks: list[str]) -> No
     bad = int(((renter > occupied) & occupied.notna() & renter.notna()).sum())
     checks.append(f"{'PASS' if bad == 0 else 'FAIL'} [{level}] B25003 renter-occupied <= "
                   f"total occupied: {bad} violation(s)")
+
+    # Scope expansion (2026-09-14). Exact partitions where every component
+    # cell is downloaded; bound checks where only the needed cells are.
+    for table, first, last in (("C17002", 2, 8), ("B25070", 2, 11)):
+        parts = sum(numeric(f"{table}_{n:03d}E") for n in range(first, last + 1))
+        total = numeric(f"{table}_001E")
+        bad = int((((parts - total).abs() > 1) & total.notna() & parts.notna()).sum())
+        checks.append(f"{'PASS' if bad == 0 else 'FAIL'} [{level}] {table} cells "
+                      f"{first:03d}-{last:03d} sum to total (tolerance 1): {bad} mismatch(es)")
+
+    clf = numeric("B23025_003E")
+    parts = numeric("B23025_004E") + numeric("B23025_005E")
+    bad = int((((parts - clf).abs() > 1) & clf.notna() & parts.notna()).sum())
+    checks.append(f"{'PASS' if bad == 0 else 'FAIL'} [{level}] B23025 employed + unemployed = "
+                  f"civilian labor force (tolerance 1): {bad} mismatch(es)")
+
+    for table, cells, what in (
+        ("B15003", range(2, 17), "no-diploma"),
+        ("B18101", (4, 7, 10, 13, 16, 19, 23, 26, 29, 32, 35, 38), "with-disability"),
+    ):
+        part = sum(numeric(f"{table}_{n:03d}E") for n in cells)
+        universe = numeric(f"{table}_001E")
+        bad = int(((part > universe) & universe.notna() & part.notna()).sum())
+        checks.append(f"{'PASS' if bad == 0 else 'FAIL'} [{level}] {table} {what} <= "
+                      f"universe: {bad} violation(s)")
+
+    value = numeric("B25077_001E")
+    bad = int(((value <= 0) & value.notna()).sum())
+    checks.append(f"{'PASS' if bad == 0 else 'FAIL'} [{level}] B25077 median home value "
+                  f"positive where published: {bad} violation(s), "
+                  f"{int(value.isna().sum())} unpublished")
 
 
 def drop_puerto_rico(df: pd.DataFrame, level: str, checks: list[str]) -> pd.DataFrame:

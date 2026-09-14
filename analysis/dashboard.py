@@ -136,13 +136,17 @@ def _join_key_cols(df: pd.DataFrame, cols: tuple[str, ...]) -> pd.Series:
 
 # Every ACS table this project's loaders know how to coerce to numeric --
 # shared by load_level_data() and load_us_acs1_county() so a new table only
-# needs to be added here once (variable expansion, 2026-08-30). The last six
-# prefixes are US-app-only (see ingestion/pull_usdash.py); NJ/Trenton parquet
-# files simply have no columns matching them, so sharing this list with
-# load_level_data() (used by both apps) is harmless.
+# needs to be added here once (variable expansion, 2026-08-30). Everything after
+# the first three prefixes is US-app-only (see ingestion/pull_usdash.py);
+# NJ/Trenton parquet files simply have no columns matching them, so sharing
+# this list with load_level_data() (used by both apps) is harmless. A table
+# missing from this list is NOT coerced to numeric, and nothing errors to
+# say so -- add new tables here in the same change that pulls them.
 VALUE_COL_PREFIXES = (
     "B01001_", "B17001_", "B19013_",
     "B27001_", "B25064_", "B25071_", "B25003_", "C16002_", "B08201_", "B19001_",
+    # Scope expansion (lead decision, 2026-09-14).
+    "C17002_", "B23025_", "B25070_", "B25077_", "B15003_", "B18101_",
 )
 
 
@@ -506,6 +510,131 @@ def acs_renter_occupied(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
 
 
 # ---------------------------------------------------------------------------
+# Scope expansion measures (lead decision, 2026-09-14): widen the dashboard
+# beyond income and poverty to what the user-segment research supports.
+# Tiers A and B of docs/dashboard-variable-shortlist.md, each traceable to a
+# named federal program. Every cell list below was checked against its
+# published label in the 2024 acs/acs5 variable manifest, not inferred from
+# line numbers, and ScopeExpansionLabelsTest re-checks that on every run.
+# County/state only, pulled by ingestion/pull_usdash.py.
+# ---------------------------------------------------------------------------
+
+# C17002 ratio of income to poverty level. 002-007 run from "Under .50" to
+# "1.85 to 1.99": everyone below 200% of the poverty line, the low-income
+# line used by CDBG low/moderate-income and EJScreen. 008 is "2.00 and over".
+# Universe C17002_001, the population for whom poverty status is determined.
+_LOW_INCOME_CELLS = ["002", "003", "004", "005", "006", "007"]
+
+# B25070 gross rent as a percentage of household income. 007-010 run from
+# "30.0 to 34.9 percent" to "50.0 percent or more"; 010 alone is 50%+.
+_RENT_BURDENED_CELLS = ["007", "008", "009", "010"]
+_RENT_SEVERELY_BURDENED_CELLS = ["010"]
+# The rate universe is renters whose burden CAN be computed: brackets 002-010,
+# leaving out 011 "Not computed" (no household income, or no cash rent). This
+# is the Census Bureau's own convention: DP04 reports GRAPI percentages of
+# "Occupied units paying rent (excluding units where GRAPI cannot be
+# computed)" (2024 DP04 group metadata). Built as a SUM of the brackets, not
+# 001 minus 011, because subtracting a subset from its own total with the
+# independent-difference MOE formula would overstate the error. The choice
+# moves the answer: in EDA 14's 2024 county data the median county has 13.3%
+# of renters not computed, and counting them in the base would drop the
+# median county's burdened share from 44.7% to 38.0%.
+_RENT_COMPUTED_CELLS = [f"{n:03d}" for n in range(2, 11)]
+
+# B15003 educational attainment, population 25 and over. 002-016 run from
+# "No schooling completed" to "12th grade, no diploma"; 017 is "Regular high
+# school diploma". Universe B15003_001.
+_NO_DIPLOMA_CELLS = [f"{n:03d}" for n in range(2, 17)]
+
+# B18101 sex by age by disability status. The twelve "With a disability"
+# cells, one per sex and age band, each directly under its age-band header
+# (male headers 003-018 and female 022-037, in steps of 3). Universe
+# B18101_001, the civilian noninstitutionalized population.
+_DISABILITY_CELLS = ["004", "007", "010", "013", "016", "019",
+                     "023", "026", "029", "032", "035", "038"]
+
+
+def acs_low_income(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """(estimate, moe) for people below 200% of the poverty line -- C17002."""
+    codes = [f"C17002_{n}" for n in _LOW_INCOME_CELLS]
+    return aggregate_estimate(df, codes), aggregate_moe(df, codes)
+
+
+def acs_poverty_ratio_universe(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """(estimate, moe) for C17002_001, the population for whom poverty status
+    is determined -- the universe acs_low_income() is a share of."""
+    return df["C17002_001E"].astype(float), df["C17002_001M"].astype(float)
+
+
+def acs_unemployed(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """(estimate, moe) for the unemployed civilian population 16 and over --
+    B23025_005, a single published cell."""
+    return df["B23025_005E"].astype(float), df["B23025_005M"].astype(float)
+
+
+def acs_civilian_labor_force(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """(estimate, moe) for the civilian labor force -- B23025_003, the
+    denominator of the standard unemployment rate. Deliberately not the whole
+    labor force (B23025_002), which also counts the Armed Forces."""
+    return df["B23025_003E"].astype(float), df["B23025_003M"].astype(float)
+
+
+def acs_rent_burdened(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """(estimate, moe) for renter households paying 30% or more of income in
+    gross rent -- B25070 brackets 007-010."""
+    codes = [f"B25070_{n}" for n in _RENT_BURDENED_CELLS]
+    return aggregate_estimate(df, codes), aggregate_moe(df, codes)
+
+
+def acs_rent_severely_burdened(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """(estimate, moe) for renter households paying 50% or more of income in
+    gross rent -- B25070_010, a single published cell."""
+    return df["B25070_010E"].astype(float), df["B25070_010M"].astype(float)
+
+
+def acs_rent_computed_universe(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """(estimate, moe) for renter households whose rent burden can be computed
+    -- the sum of B25070 brackets 002-010, excluding 011 "Not computed". The
+    universe for both burden measures; see _RENT_COMPUTED_CELLS for why."""
+    codes = [f"B25070_{n}" for n in _RENT_COMPUTED_CELLS]
+    return aggregate_estimate(df, codes), aggregate_moe(df, codes)
+
+
+def acs_median_home_value(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """(estimate, moe) for median value of owner-occupied housing units --
+    B25077, a single published cell. Not top-coded at county scale in 2024:
+    the highest county value in EDA 14's pull is 1,633,900 (Teton County, WY).
+    Five counties publish no estimate for insufficient sample, which the
+    card's existing suppressed-estimate branch already handles."""
+    return df["B25077_001E"].astype(float), df["B25077_001M"].astype(float)
+
+
+def acs_no_diploma(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """(estimate, moe) for adults 25 and over without a high school diploma or
+    equivalent -- B15003 cells 002-016."""
+    codes = [f"B15003_{n}" for n in _NO_DIPLOMA_CELLS]
+    return aggregate_estimate(df, codes), aggregate_moe(df, codes)
+
+
+def acs_education_universe(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """(estimate, moe) for B15003_001, the population 25 and over."""
+    return df["B15003_001E"].astype(float), df["B15003_001M"].astype(float)
+
+
+def acs_disability(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """(estimate, moe) for the civilian noninstitutionalized population with a
+    disability, all ages and both sexes -- the twelve B18101 cells."""
+    codes = [f"B18101_{n}" for n in _DISABILITY_CELLS]
+    return aggregate_estimate(df, codes), aggregate_moe(df, codes)
+
+
+def acs_disability_universe(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """(estimate, moe) for B18101_001, the civilian noninstitutionalized
+    population."""
+    return df["B18101_001E"].astype(float), df["B18101_001M"].astype(float)
+
+
+# ---------------------------------------------------------------------------
 # Loading
 # ---------------------------------------------------------------------------
 
@@ -736,6 +865,60 @@ def poverty_rate(
 # dashboard's new rate-bearing measures (uninsured, limited English,
 # no vehicle), where "poverty" would be the wrong word for the numerator.
 proportion_rate = poverty_rate
+
+
+def expected_at_rate(
+    state_est: float, state_moe: float,
+    state_universe_est: float, state_universe_moe: float,
+    county_universe_est: float, county_universe_moe: float,
+) -> tuple[float, float]:
+    """How large a county COUNT would be if the county matched the state's
+    rate for that measure, and the MOE of that figure.
+
+    OUR METHODOLOGY, not a Census Bureau publication (card redesign,
+    2026-09-08). Motivation: a county count and a state count are not on the
+    same scale -- Albany County, WY has 2,779 uninsured against Wyoming's
+    64,627 -- so the raw state figure cannot be drawn as a reference marker
+    on a county's axis without destroying it. The state RATE applied to the
+    county's own universe does land on the county's scale, and answers the
+    question a user actually has: what would this number be if this county
+    looked like the state?
+
+    Two published formulas, composed:
+    1. The state rate p and its SE come from the ACS proportion-MOE formula
+       already implemented above as poverty_rate()/proportion_rate().
+    2. expected = p * county_universe is a PRODUCT of two estimates, so
+       MOE(A*B) = sqrt(A^2 * MOE(B)^2 + B^2 * MOE(A)^2). Source: U.S. Census
+       Bureau, "Understanding and Using American Community Survey Data: What
+       All Data Users Need to Know," the derived-estimates appendix that also
+       supplies the proportion formula cited in poverty_rate().
+
+    Assumptions this makes, which any caller must disclose to the reader:
+    - It treats the state rate and the county universe as INDEPENDENT. They
+      are not: the county is part of the state. As with the county-vs-state
+      significance test elsewhere in this app, that makes the resulting
+      interval conservative (too wide) rather than too narrow.
+    - It is a modelled expectation, never a measurement. It must never be
+      presented in the same visual language as a published Bureau figure.
+
+    Returns (nan, nan) when either universe is missing or non-positive.
+    """
+    if (not np.isfinite(state_universe_est) or state_universe_est <= 0
+            or not np.isfinite(county_universe_est) or county_universe_est <= 0
+            or not np.isfinite(state_est)):
+        return float("nan"), float("nan")
+
+    pct, pct_moe = proportion_rate(
+        state_est, state_moe, state_universe_est, state_universe_moe
+    )
+    if not np.isfinite(pct):
+        return float("nan"), float("nan")
+
+    p, p_moe = pct / 100.0, pct_moe / 100.0
+    expected = p * county_universe_est
+    moe = ((p ** 2) * (county_universe_moe ** 2)
+           + (county_universe_est ** 2) * (p_moe ** 2)) ** 0.5
+    return expected, moe
 
 
 # ---------------------------------------------------------------------------

@@ -1,4 +1,75 @@
-# Trenton Grant Data Prototype — a learning instrument, not the MVP
+# /Streamlit: dashboard apps
+
+| File | What it is | Status |
+|---|---|---|
+| [`app_US_v2.py`](app_US_v2.py) | US county dashboard, version 2: every US county, 26 measures across 10 topics | **Current.** Use this one |
+| [`app_US_v1.2.py`](app_US_v1.2.py) | Katie Christiansen's redesigned welcome page on top of v1.1 | Superseded by v2, which includes its welcome page verbatim |
+| [`app_US_v1.1.py`](app_US_v1.1.py) | Justus Long's nationwide county explorer | Superseded by v2 |
+| [`app.py`](app.py) | Trenton grant data prototype, NJ tracts | A learning instrument, not the deliverable (below) |
+
+## US county dashboard (v2)
+
+**Run it** from the repo root:
+
+```bash
+streamlit run Streamlit/app_US_v2.py
+```
+
+**Data it needs.** Run these four pulls first, in any order. Each prints its own sanity checks; outputs land in `data/raw/`.
+
+```bash
+python ingestion/pull_usdash.py
+python ingestion/pull_us_geometry.py
+python ingestion/pull_usdash_alloc.py
+python ingestion/pull_rucc.py
+```
+
+`pull_usdash.py` requests 399 variables and can fail partway with "Unable to get metadata on the variable ...". That is an intermittent API failure, not a bad variable (see HANDOFF data landmines); run it again. If your local data is older than the code, the app does not crash: measures it cannot draw are hidden from the map and peers lists, and their cards say to re-run the pull.
+
+### What is on it
+
+- **Map.** Click a state, then a county. The map colors each county by the coefficient of variation (CV, the margin of error as a share of the estimate) of the measure you choose.
+- **Cards.** Every card shows the estimate, its CV, and its 90% interval on a zero-anchored axis, so a wide margin of error visibly takes up more of the bar. Cards in the four-across grid use a narrower drawing so their text stays readable.
+- **State reference markers.** 25 of 26 measures carry one. Medians and percentages show the state's own published value. Counts show what the county's number would be at the state's rate, because a state count is not on a county's scale; that marker is our calculation, carries a shaded margin of error, and is labelled on the card. Total population has no marker.
+- **Statistical peers.** Counties whose estimate is statistically indistinguishable from the selected one at 90% confidence.
+
+### The 26 measures
+
+| Topic | Measures |
+|---|---|
+| Population | Total population; Under 5, 5-17, 18-64, 65+ |
+| Poverty | Below poverty by the same four age bands; low income (below 200% of poverty) |
+| Income | Median household income; households earning under $25k, $25k-$50k, $50k-$100k, $100k+ |
+| Employment | Unemployed |
+| Education | No high school diploma (age 25+) |
+| Housing | Median gross rent; rent burden (median); cost-burdened renters (30%+); severely cost-burdened renters (50%+); median home value |
+| Health | Uninsured |
+| Disability | With a disability |
+| Language | Limited English speaking households |
+| Transportation | Households with no vehicle available |
+
+The last seven additions follow scope decision #18 (2026-09-14); `docs/dashboard-variable-shortlist.md` records why each was chosen and which were held back.
+
+### Adding a measure
+
+Three lists in the code fail silently if you miss them: nothing errors, the measure just does not work.
+
+1. Add its cells to the pull in `ingestion/pull_usdash.py`, with a sanity check.
+2. Add its table prefix to `VALUE_COL_PREFIXES` in `analysis/dashboard.py`, or its columns are never converted to numbers.
+3. Add accessor functions in `analysis/dashboard.py` and tests in `analysis/test_dashboard.py`, checking cell numbers against the published labels.
+4. Add a `Measure` to `_build_measures()` in `app_US_v2.py`.
+5. If its topic is new, add it to `TOPIC_ORDER`, or its card never appears.
+6. If it is a median, add it to `_PEER_MEDIANS`, or the peers panel treats it as a count.
+7. Re-run the pull, then **restart** the server. Streamlit's Rerun button does not reload changed `analysis/` modules.
+
+### Known issues
+
+- The welcome page is out of date in places: it says other cards do not compare to the state, and cites about 20 figures and seven topics. Its CV example drops two dollar signs, because Streamlit reads a pair of `$` as math.
+- The default map (total population) is mostly grey. Total population is a controlled estimate with no published margin of error in most counties, and the map colors that the same as missing data.
+- The bar fill is nearly white around CV 25%.
+- A card can read "CV percentile rank: 39th of 23 counties", which joins a percentile to a county count.
+
+## Trenton Grant Data Prototype — a learning instrument, not the MVP
 
 **Run it:**
 ```bash
@@ -7,7 +78,7 @@ streamlit run Streamlit/app.py
 Needs `data/raw/{acs5_2024_trenton,dhc_2020_trenton,trenton_tracts}*.parquet` —
 regenerate with `python ingestion/pull_trenton_dashboard.py`.
 
-## What this is
+### What this is
 
 The EDA suite (`notebooks/01–10`) has produced metrics and charts, but nobody on the
 team had yet sat in the seat of the person who actually *uses* this data. This app
@@ -25,7 +96,7 @@ This is **not** the Executive Dashboard deliverable. It exists to teach the team
 give the mentors something concrete to react to for the Weeks 4–6 "dashboard
 wireframe" exit criterion) — not to be shipped, hardened, or deployed.
 
-## How it's organized
+### How it's organized
 
 Three tabs, one geography picker in the sidebar (Trenton citywide, Mercer County, or
 any of the 25 Mercer tracts that make up Trenton — Trenton is exactly
@@ -47,7 +118,7 @@ tract-coextensive, confirmed live against the API):
   geography; DHC's modeled error is comparatively flat because it's built from an
   aggregate proxy, not a band-specific measurement).
 
-## Two methodology choices baked into `analysis/dashboard.py`
+### Two methodology choices baked into `analysis/dashboard.py`
 
 1. **Tiers** (Solid ≤ 0.12 CV, Use with care ≤ 0.30, Too risky above) reuse the
    ESRI/NCHS conventions already cited in `analysis/viz.py`. They are **our proposed
@@ -71,7 +142,7 @@ tract-coextensive, confirmed live against the API):
    same rate, with a tooltip line, is available on the map for any "Poverty: *band*"
    selection.
 
-## A real bug the stakeholder test caught
+### A real bug the stakeholder test caught
 
 Early testing showed the poverty/Under-5 card at Mercer Tract 1 rendering a range of
 **"-34 to 402"** — a negative count of children, because the true MOE exceeds the
@@ -89,7 +160,7 @@ which is what it has shown all along. The underlying tables (B01001, P12) do
 carry the male/female split if a future pass wants to surface it (a bigger UI
 decision, deliberately not made here — see WORKLOG).
 
-## The map
+### The map
 
 Each product tab ends in an interactive tract choropleth (pydeck `GeoJsonLayer` over
 a CARTO basemap, `st.pydeck_chart`) — hover any of the 25 tracts for its tier, range,
@@ -103,7 +174,7 @@ fully replaced). When the sidebar geography is a single tract, the map shows **o
 that tract, zoomed in tight — the all-25 view is reserved for the citywide/county
 selections, where cross-tract comparison is the point.
 
-## Neighborhood names
+### Neighborhood names
 
 The sidebar and map tooltips show `Tract N — Neighborhood` (e.g. "Tract 3 —
 Chambersburg"). **No official Census or City of Trenton neighborhood-boundary file
@@ -118,7 +189,7 @@ an open question for mentors (README.md): is showing an approximate, crowdsource
 neighborhood name an acceptable stakeholder-facing convenience, or does an unofficial
 label risk undermining trust in the (correct) statistics next to it?
 
-## What's deliberately not here
+### What's deliberately not here
 
 DP1 (adds a third caveat with no new capability at tract level — it stops at tract
 and duplicates DHC's population), block-group drilldown, any composite score

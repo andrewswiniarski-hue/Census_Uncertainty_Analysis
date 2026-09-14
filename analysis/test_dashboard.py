@@ -7,7 +7,9 @@ need the data on disk.
 
 from __future__ import annotations
 
+import math
 import unittest
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -24,6 +26,24 @@ from analysis.dashboard import (
     _POVERTY_CELLS,
     _SEXAGE_CELLS,
     _UNINSURED_CELLS,
+    _DISABILITY_CELLS,
+    _LOW_INCOME_CELLS,
+    _NO_DIPLOMA_CELLS,
+    _RENT_BURDENED_CELLS,
+    _RENT_COMPUTED_CELLS,
+    _RENT_SEVERELY_BURDENED_CELLS,
+    acs_civilian_labor_force,
+    acs_disability,
+    acs_disability_universe,
+    acs_education_universe,
+    acs_low_income,
+    acs_median_home_value,
+    acs_no_diploma,
+    acs_poverty_ratio_universe,
+    acs_rent_burdened,
+    acs_rent_computed_universe,
+    acs_rent_severely_burdened,
+    acs_unemployed,
     acs_income_bracket,
     acs_insurance_universe,
     acs_language_universe,
@@ -41,6 +61,7 @@ from analysis.dashboard import (
     children_of,
     cv_from_range,
     difference_is_significant,
+    expected_at_rate,
     geo_key,
     load_acs,
     load_level_data,
@@ -235,6 +256,138 @@ class NewMeasuresTest(unittest.TestCase):
         # Generic alias, not a reimplementation -- same object, so every
         # rate-bearing new measure gets poverty_rate's existing coverage.
         self.assertIs(proportion_rate, poverty_rate)
+
+    def test_expected_at_rate_matches_hand_calculation(self) -> None:
+        # Albany County, WY uninsured against Wyoming, 2024 ACS 5-year,
+        # every figure straight from data/raw/acs5_2024_usdash_*.parquet:
+        # WY 64,627 +/- 2,044 uninsured in a universe of 572,011 +/- 486
+        # (an 11.30% rate); Albany's own universe is 37,842 +/- 189. At the
+        # state rate Albany would have 4,275 uninsured; it actually reports
+        # 2,779, a 7.34% rate, so the county is better insured than the
+        # state. The raw state count is 23x Albany's, which is exactly why
+        # it cannot be drawn on Albany's axis.
+        exp, moe = expected_at_rate(64627, 2044, 572011, 486, 37842, 189)
+        self.assertAlmostEqual(exp, 4275.5, delta=1.0)
+        self.assertAlmostEqual(moe, 136.9, delta=1.0)
+        self.assertLess(moe, exp)  # a usable benchmark, not noise
+
+    def test_expected_at_rate_scales_with_county_universe(self) -> None:
+        # Same state rate, twice the county universe -> twice the expectation.
+        a, _ = expected_at_rate(1000, 50, 10000, 100, 500, 10)
+        b, _ = expected_at_rate(1000, 50, 10000, 100, 1000, 20)
+        self.assertAlmostEqual(a, 50.0, places=6)
+        self.assertAlmostEqual(b, 100.0, places=6)
+
+    def test_expected_at_rate_guards_bad_universes(self) -> None:
+        for args in [(100, 10, 0, 0, 500, 10),      # state universe zero
+                     (100, 10, 1000, 10, 0, 0),     # county universe zero
+                     (100, 10, -5, 0, 500, 10)]:    # negative universe
+            exp, moe = expected_at_rate(*args)
+            self.assertTrue(math.isnan(exp), args)
+            self.assertTrue(math.isnan(moe), args)
+
+
+def _frame(table: str, values: dict[str, float], moe: float = 1.0) -> pd.DataFrame:
+    """One-row wide frame: {"002": 5.0} -> columns TABLE_002E / TABLE_002M."""
+    cols = {}
+    for n, v in values.items():
+        cols[f"{table}_{n}E"] = [float(v)]
+        cols[f"{table}_{n}M"] = [float(moe)]
+    return pd.DataFrame(cols)
+
+
+class ScopeExpansionMeasuresTest(unittest.TestCase):
+    """Scope expansion (lead decision, 2026-09-14): Tier A and B measures.
+    Fabricated frames, same style as NewMeasuresTest."""
+
+    def test_low_income_is_everyone_below_200_percent(self) -> None:
+        self.assertEqual(_LOW_INCOME_CELLS, ["002", "003", "004", "005", "006", "007"])
+        df = _frame("C17002", {**{n: 10 for n in _LOW_INCOME_CELLS}, "008": 999, "001": 1059})
+        est, _ = acs_low_income(df)
+        self.assertEqual(float(est.iloc[0]), 60.0)          # 008 ("2.00 and over") excluded
+        self.assertEqual(float(acs_poverty_ratio_universe(df)[0].iloc[0]), 1059.0)
+
+    def test_unemployment_rate_uses_civilian_labor_force(self) -> None:
+        df = _frame("B23025", {"002": 1100, "003": 1000, "004": 950, "005": 50, "006": 100})
+        self.assertEqual(float(acs_unemployed(df)[0].iloc[0]), 50.0)
+        self.assertEqual(float(acs_civilian_labor_force(df)[0].iloc[0]), 1000.0)  # not 002
+        rate, _ = proportion_rate(50.0, 5.0, 1000.0, 10.0)
+        self.assertAlmostEqual(rate, 5.0)
+
+    def test_rent_burden_universe_excludes_not_computed(self) -> None:
+        self.assertEqual(_RENT_COMPUTED_CELLS, [f"{n:03d}" for n in range(2, 11)])
+        df = _frame("B25070", {**{f"{n:03d}": 10 for n in range(2, 11)}, "011": 999, "001": 1089})
+        self.assertEqual(float(acs_rent_computed_universe(df)[0].iloc[0]), 90.0)
+        self.assertEqual(float(acs_rent_burdened(df)[0].iloc[0]), 40.0)     # 007-010
+        self.assertEqual(float(acs_rent_severely_burdened(df)[0].iloc[0]), 10.0)
+
+    def test_severe_burden_is_a_subset_of_burden(self) -> None:
+        self.assertTrue(set(_RENT_SEVERELY_BURDENED_CELLS) <= set(_RENT_BURDENED_CELLS))
+        self.assertTrue(set(_RENT_BURDENED_CELLS) <= set(_RENT_COMPUTED_CELLS))
+
+    def test_no_diploma_stops_before_regular_diploma(self) -> None:
+        self.assertEqual(_NO_DIPLOMA_CELLS, [f"{n:03d}" for n in range(2, 17)])
+        df = _frame("B15003", {**{n: 1 for n in _NO_DIPLOMA_CELLS}, "017": 500, "001": 600})
+        self.assertEqual(float(acs_no_diploma(df)[0].iloc[0]), 15.0)
+        self.assertEqual(float(acs_education_universe(df)[0].iloc[0]), 600.0)
+
+    def test_disability_cells_sit_under_each_age_header(self) -> None:
+        headers = list(range(3, 19, 3)) + list(range(22, 38, 3))
+        self.assertEqual(_DISABILITY_CELLS, [f"{h + 1:03d}" for h in headers])
+        df = _frame("B18101", {**{n: 2 for n in _DISABILITY_CELLS}, "001": 1000})
+        self.assertEqual(float(acs_disability(df)[0].iloc[0]), 24.0)
+        self.assertEqual(float(acs_disability_universe(df)[0].iloc[0]), 1000.0)
+
+    def test_median_home_value_is_a_single_published_cell(self) -> None:
+        df = _frame("B25077", {"001": 250000}, moe=9000)
+        est, moe = acs_median_home_value(df)
+        self.assertEqual((float(est.iloc[0]), float(moe.iloc[0])), (250000.0, 9000.0))
+
+
+_MANIFEST = Path(__file__).resolve().parents[1] / "data" / "raw" / "acswide_2024_variable_manifest.parquet"
+
+
+@unittest.skipUnless(_MANIFEST.exists(), "EDA 14 variable manifest not pulled")
+class ScopeExpansionLabelsTest(unittest.TestCase):
+    """Every scope-expansion cell list checked against the Census Bureau's own
+    published label, so a wrong cell number fails here rather than silently
+    putting the wrong people on a card. Regenerate the manifest with
+    ingestion/pull_acs_wide_us_county.py --plan-only."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        m = pd.read_parquet(_MANIFEST)
+        cls.label = dict(zip(m["name"].str[:-1], m["label_raw"]))
+
+    def ends(self, code: str, text: str) -> None:
+        self.assertTrue(self.label[code].endswith(text), f"{code}: {self.label[code]!r}")
+
+    def test_low_income_cells(self) -> None:
+        self.ends("C17002_002", "Under .50")
+        self.ends("C17002_007", "1.85 to 1.99")
+        self.ends("C17002_008", "2.00 and over")
+
+    def test_employment_cells(self) -> None:
+        self.ends("B23025_003", "Civilian labor force:")
+        self.ends("B23025_005", "Unemployed")
+
+    def test_rent_burden_cells(self) -> None:
+        self.ends("B25070_007", "30.0 to 34.9 percent")
+        self.ends("B25070_010", "50.0 percent or more")
+        self.ends("B25070_011", "Not computed")
+
+    def test_education_cells(self) -> None:
+        self.ends("B15003_002", "No schooling completed")
+        self.ends("B15003_016", "12th grade, no diploma")
+        self.ends("B15003_017", "Regular high school diploma")
+
+    def test_disability_cells(self) -> None:
+        for n in _DISABILITY_CELLS:
+            self.ends(f"B18101_{n}", "With a disability")
+            self.ends(f"B18101_{int(n) + 1:03d}", "No disability")
+
+    def test_home_value_cell(self) -> None:
+        self.ends("B25077_001", "Median value (dollars)")
 
 
 class StatisticalPeersTest(unittest.TestCase):
