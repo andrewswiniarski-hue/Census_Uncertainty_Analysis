@@ -74,7 +74,7 @@ import time
 import censusdis.data as ced
 import pandas as pd
 
-from _common import OUT_DIR, REPO_ROOT, load_api_key
+from _common import OUT_DIR, REPO_ROOT, download_with_retry, load_api_key
 from pull_trenton_dashboard import ACS_DOWNLOAD_VARS, acs_sanity
 
 STATE_PR = "72"  # excluded -- see module docstring
@@ -249,8 +249,10 @@ def pull_level(
 
     print(f"\nDownloading {level_label} ...")
     try:
-        df = ced.download(
-            dataset, vintage, download_variables=download_vars,
+        # Retried: censusdis's per-variable metadata lookup fails intermittently
+        # (see _common.download_with_retry).
+        df = download_with_retry(
+            ced.download, dataset, vintage, download_variables=download_vars,
             api_key=api_key, **geo_kwargs,
         )
     except Exception as exc:

@@ -12,13 +12,14 @@ specific to its dataset -- only the mechanics live here.
 What it needs
 -------------
 CENSUS_API_KEY in the repo-root .env file for load_api_key(); internet
-access for fetch_official_labels().
+access for fetch_official_labels() and download_with_retry().
 """
 
 from __future__ import annotations
 
 import os
 import sys
+import time
 from pathlib import Path
 
 import pandas as pd
@@ -49,6 +50,41 @@ def load_api_key() -> str:
             "root and paste in your key (see README 'Getting Started')."
         )
     return key
+
+
+
+def download_with_retry(download, *args, attempts: int = 5, base_delay: float = 2.0,
+                        sleep=time.sleep, log=print, **kwargs):
+    """Call `download(*args, **kwargs)`, retrying on failure with doubling delays.
+
+    Why: censusdis looks up metadata for every requested variable before it
+    downloads anything, one HTTP request per variable with no retry of its own
+    (`censusdis.data._prefetch_variable_types`). Across hundreds of variables a
+    single dropped request aborts the whole pull, and the failure lands on a
+    different variable each attempt (observed 2026-09-08: B01001_015M,
+    B01001_033M, B27001_014E), so it is not a bad variable name.
+
+    A plain retry of the whole call is enough, because censusdis keeps looked-up
+    metadata in a module-level cache (`censusdis.data.variables`) that persists
+    across calls. Each retry skips what already succeeded and resumes near where
+    the last attempt failed.
+
+    The final failure is re-raised unchanged, so a genuinely wrong request still
+    fails loudly. `sleep` and `log` are parameters so tests run instantly.
+    """
+    if attempts < 1:
+        raise ValueError("attempts must be at least 1")
+    for attempt in range(1, attempts + 1):
+        try:
+            return download(*args, **kwargs)
+        except Exception as exc:
+            if attempt == attempts:
+                raise
+            delay = base_delay * 2 ** (attempt - 1)
+            first_line = (str(exc).splitlines() or [""])[0][:160]
+            log(f"  download attempt {attempt} of {attempts} failed ({first_line}); "
+                f"retrying in {delay:.0f}s")
+            sleep(delay)
 
 
 def fetch_official_labels(dataset: str, vintage: int, codes: list[str]) -> dict[str, str]:

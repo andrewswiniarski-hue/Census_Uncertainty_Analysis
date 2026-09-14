@@ -12,5 +12,10 @@
 | [`dashboard-variable-shortlist.md`](dashboard-variable-shortlist.md) | Which variables the dashboard carries, for which audiences, and why | Adopted in part by decision #18, 2026-09-14; includes a correction to its table-level CVs |
 | [`user-segments-and-needs.md`](user-segments-and-needs.md) | Garrett Spangler's user research: who needs ACS uncertainty help and for which decisions | Research summary, 2026-08-24; basis for decision #18 |
 | [`acs-user-needs-and-functions.pptx`](acs-user-needs-and-functions.pptx) | The deck behind the user research summary | Source deck, 2026-08-24 |
+| [`dashboard-variable-shortlist.pptx`](dashboard-variable-shortlist.pptx) | Slide version of the dashboard variable shortlist | Made 2026-09-01, before decision #18; the markdown version is current |
+| [`team-recap-2026-07-12.pptx`](team-recap-2026-07-12.pptx) | Team recap deck, 2026-07-12 | Committed 2026-09-14; the team design system reference named in CLAUDE.md (navy 1E2761, ice CADCFC, coral E8604C, Calibri Light) |
+| [`imputation-slide-talk-track.md`](imputation-slide-talk-track.md) | 60 to 90 second talk track for the imputation slide: imputation is invisible to the MOE and independent of it | Written 2026-08-10; committed 2026-09-14 |
+| [`eda14-acs-wide-survey-slide.pptx`](eda14-acs-wide-survey-slide.pptx) | Slide on EDA 14, the ACS-wide error-bar survey | Made 2026-08-19; committed 2026-09-14 |
+| [`eda14-expansion-preview-slide.pptx`](eda14-expansion-preview-slide.pptx) | Slide previewing the scope expansion EDA 14 supported | Made 2026-08-19; committed 2026-09-14 |
 
 Methodology notes get added here as they develop.

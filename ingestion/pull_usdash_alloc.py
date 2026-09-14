@@ -39,7 +39,10 @@ import time
 import censusdis.data as ced
 import pandas as pd
 
-from _common import OUT_DIR, REPO_ROOT, annotation_mask, fetch_official_labels, load_api_key, sanity_report
+from _common import (
+    OUT_DIR, REPO_ROOT, annotation_mask, download_with_retry, fetch_official_labels,
+    load_api_key, sanity_report,
+)
 from pull_acs_alloc_nj import VARIABLES, percent_range_check
 from pull_usdash import drop_puerto_rico
 
@@ -79,8 +82,8 @@ def main() -> None:
             print(f"  {'':<12}-> we call it: {VARIABLES[code[:-1]]}")
 
         print("\nDownloading county level ...")
-        df = ced.download(
-            DATASET, VINTAGE, download_variables=DOWNLOAD_VARS,
+        df = download_with_retry(  # see _common.download_with_retry
+            ced.download, DATASET, VINTAGE, download_variables=DOWNLOAD_VARS,
             api_key=api_key, state="*", county="*",
         )
         df = drop_puerto_rico(df, "county", checks)

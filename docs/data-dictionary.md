@@ -115,10 +115,12 @@ Profile entries stay below as privacy-noise report evidence, not score inputs.)
   - **B23025:** use `B23025_003` (civilian labor force) as the unemployment
     denominator, not `002`, which includes the Armed Forces.
   - **B01001_001 total population** has a controlled MOE (`-555555555`, annotation
-    `*****`) in 3,014 of 3,144 counties and all 51 states. It arrives as NaN and the
-    dashboard map colors it like missing data.
-  - **The pull fails intermittently** while looking up variable metadata, on a
-    different variable each attempt. Re-run it; see HANDOFF data landmines.
+    `*****`) in 3,014 of 3,144 counties and all 51 states. It arrives as NaN; the
+    v2 dashboard gives it its own map color, a convention verified against the API
+    annotation on 2026-09-14.
+  - **The Census API intermittently drops a metadata lookup**, on a different
+    variable each attempt. The pull retries automatically
+    (`ingestion/_common.py::download_with_retry`); see HANDOFF data landmines.
 
 ## Cartographic boundary files (vintage 2024)
 

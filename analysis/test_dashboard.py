@@ -15,6 +15,10 @@ import numpy as np
 import pandas as pd
 
 from analysis.dashboard import (
+    CV_COLOR_CONTROLLED,
+    CV_COLOR_NO_DATA,
+    CV_SEQ_STOPS,
+    cv_color_sequential,
     BANDS,
     RAW_DIR,
     TIER_CARE,
@@ -388,6 +392,46 @@ class ScopeExpansionLabelsTest(unittest.TestCase):
 
     def test_home_value_cell(self) -> None:
         self.ends("B25077_001", "Median value (dollars)")
+
+
+def _luminance(rgb) -> float:
+    """WCAG relative luminance of an (r, g, b) triple."""
+    def ch(v: float) -> float:
+        v = v / 255
+        return v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4
+    r, g, b = (ch(x) for x in rgb[:3])
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+class CvColorSequentialTest(unittest.TestCase):
+    """The v2 dashboard's CV ramp (2026-09-14): a magnitude takes one hue, light to dark."""
+
+    def test_darker_means_higher_cv(self) -> None:
+        lums = [_luminance(cv_color_sequential(cv)) for cv in np.linspace(0, 0.5, 26)]
+        self.assertTrue(all(a > b for a, b in zip(lums, lums[1:])), lums)
+
+    def test_endpoints_are_the_first_and_last_stops(self) -> None:
+        self.assertEqual(cv_color_sequential(0.0)[:3], list(CV_SEQ_STOPS[0]))
+        self.assertEqual(cv_color_sequential(0.5)[:3], list(CV_SEQ_STOPS[-1]))
+        self.assertEqual(cv_color_sequential(3.0)[:3], list(CV_SEQ_STOPS[-1]))   # capped
+        self.assertEqual(cv_color_sequential(-0.2)[:3], list(CV_SEQ_STOPS[0]))   # clamped
+
+    def test_no_step_disappears_on_a_white_card(self) -> None:
+        # The old diverging ramp hit near-white at CV 25%. Every step here must
+        # stay at least ~2:1 against white, the lightest step's design contrast.
+        worst = min((1.05) / (_luminance(cv_color_sequential(cv)) + 0.05)
+                    for cv in np.linspace(0, 0.5, 51))
+        self.assertGreaterEqual(worst, 1.95)
+
+    def test_missing_cv_is_no_data_and_alpha_passes_through(self) -> None:
+        self.assertEqual(cv_color_sequential(float("nan")), list(CV_COLOR_NO_DATA) + [200])
+        self.assertEqual(cv_color_sequential(None, alpha=255)[3], 255)
+
+    def test_controlled_color_is_distinct_from_no_data_and_the_ramp(self) -> None:
+        self.assertNotEqual(tuple(CV_COLOR_CONTROLLED), tuple(CV_COLOR_NO_DATA))
+        gap = abs(_luminance(CV_COLOR_CONTROLLED) - _luminance(CV_COLOR_NO_DATA))
+        self.assertGreater(gap, 0.1)
+        self.assertNotIn(tuple(CV_COLOR_CONTROLLED), {tuple(s) for s in CV_SEQ_STOPS})
 
 
 class StatisticalPeersTest(unittest.TestCase):

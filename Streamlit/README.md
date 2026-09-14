@@ -24,11 +24,11 @@ python ingestion/pull_usdash_alloc.py
 python ingestion/pull_rucc.py
 ```
 
-`pull_usdash.py` requests 399 variables and can fail partway with "Unable to get metadata on the variable ...". That is an intermittent API failure, not a bad variable (see HANDOFF data landmines); run it again. If your local data is older than the code, the app does not crash: measures it cannot draw are hidden from the map and peers lists, and their cards say to re-run the pull.
+`pull_usdash.py` requests 399 variables. The Census API sometimes drops one of the metadata lookups that run before a download; the dashboard pulls retry automatically (`ingestion/_common.py::download_with_retry`), so a transient failure costs seconds rather than the whole pull. If your local data is older than the code, the app does not crash: measures it cannot draw are hidden from the map and peers lists, and their cards say to re-run the pull.
 
 ### What is on it
 
-- **Map.** Click a state, then a county. The map colors each county by the coefficient of variation (CV, the margin of error as a share of the estimate) of the measure you choose.
+- **Map.** Click a state, then a county. The map colors each county by the coefficient of variation (CV, the margin of error as a share of the estimate) of the measure you choose, on a single blue scale where darker means a larger margin of error. It opens on median household income. Total population is a controlled estimate in most counties, with no sampling error, and gets its own color and legend entry.
 - **Cards.** Every card shows the estimate, its CV, and its 90% interval on a zero-anchored axis, so a wide margin of error visibly takes up more of the bar. Cards in the four-across grid use a narrower drawing so their text stays readable.
 - **State reference markers.** 25 of 26 measures carry one. Medians and percentages show the state's own published value. Counts show what the county's number would be at the state's rate, because a state count is not on a county's scale; that marker is our calculation, carries a shaded margin of error, and is labelled on the card. Total population has no marker.
 - **Statistical peers.** Counties whose estimate is statistically indistinguishable from the selected one at 90% confidence.
@@ -61,13 +61,13 @@ Three lists in the code fail silently if you miss them: nothing errors, the meas
 5. If its topic is new, add it to `TOPIC_ORDER`, or its card never appears.
 6. If it is a median, add it to `_PEER_MEDIANS`, or the peers panel treats it as a count.
 7. Re-run the pull, then **restart** the server. Streamlit's Rerun button does not reload changed `analysis/` modules.
+8. Set `controlled_when_moe_missing=True` only after confirming against the API that every missing margin of error for that measure carries the controlled-estimate annotation (`*****`).
 
-### Known issues
+### Known limits
 
-- The welcome page is out of date in places: it says other cards do not compare to the state, and cites about 20 figures and seven topics. Its CV example drops two dollar signs, because Streamlit reads a pair of `$` as math.
-- The default map (total population) is mostly grey. Total population is a controlled estimate with no published margin of error in most counties, and the map colors that the same as missing data.
-- The bar fill is nearly white around CV 25%.
-- A card can read "CV percentile rank: 39th of 23 counties", which joins a percentile to a county count.
+- Comments carried over from v1.1 still name `app_NJ.py` and `app_US.py`; the module docstring explains they mean `app.py` and `app_US_v1.1.py`.
+- Only total population is treated as a controlled estimate, because that convention has only been verified for it. Any other measure with no published margin of error is shown as "no margin of error published".
+- The state-rate benchmark on count cards treats the state rate and the county's universe as independent. That slightly overstates its margin of error, since the county is part of the state.
 
 ## Trenton Grant Data Prototype — a learning instrument, not the MVP
 

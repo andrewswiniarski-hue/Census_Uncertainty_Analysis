@@ -1028,6 +1028,40 @@ def cv_color(cv: float, *, cv_cap: float = 0.5, alpha: int = 200) -> list[int]:
     return rgb + [alpha]
 
 
+
+# Sequential CV ramp for Streamlit/app_US_v2.py (2026-09-14). A coefficient of
+# variation is a magnitude: it starts at zero and has no meaningful centre, so it
+# takes a single-hue ramp, light to dark, where darker simply means a larger margin
+# of error relative to the estimate. cv_color() above is a diverging ramp whose
+# midpoint its own comment calls "not a meaningful value", and around CV 25% its
+# fill is near-white, which disappears on a white card. cv_color() is left
+# unchanged because app_US_v1.1.py and app_US_v1.2.py still use it.
+# Stops are steps 250, 400, 550 and 700 of the reference blue ramp in the team's
+# dataviz guidance. Step 250 (#86b6ef) is the lightest step that still clears
+# roughly 2:1 contrast on a white surface, so a low-CV bar stays visible on a card.
+CV_SEQ_STOPS = ((0x86, 0xB6, 0xEF), (0x39, 0x87, 0xE5), (0x1C, 0x5C, 0xAB), (0x0D, 0x36, 0x6B))
+# Controlled estimates (API annotation "*****") carry no sampling error. They get
+# their own color so the map stops drawing the most certain figures in the grey
+# used for missing data. Distinct from CV_COLOR_NO_DATA in both hue and lightness.
+CV_COLOR_CONTROLLED = (233, 220, 192)
+
+
+def cv_color_sequential(cv: float, *, cv_cap: float = 0.5, alpha: int = 200) -> list[int]:
+    """RGBA on a single-hue light-to-dark blue ramp for a coefficient of variation.
+
+    Same contract as cv_color(): NaN returns CV_COLOR_NO_DATA, values at or above
+    `cv_cap` render as the darkest step (a scale, not a verdict: there is no
+    off-scale color), and negative values clamp to the lightest step.
+    """
+    if cv is None or np.isnan(cv):
+        return list(CV_COLOR_NO_DATA) + [alpha]
+    t = min(max(float(cv), 0.0), cv_cap) / cv_cap
+    seg = t * (len(CV_SEQ_STOPS) - 1)
+    i = min(int(seg), len(CV_SEQ_STOPS) - 2)
+    lo, hi, local_t = CV_SEQ_STOPS[i], CV_SEQ_STOPS[i + 1], seg - i
+    return [int(round(lo[c] + local_t * (hi[c] - lo[c]))) for c in range(3)] + [alpha]
+
+
 def difference_is_significant(est1: float, moe1: float, est2: float, moe2: float) -> float:
     """Whether two ACS estimates differ at 90% confidence (Census Bureau's
     own two-sample difference test -- "Understanding and Using American

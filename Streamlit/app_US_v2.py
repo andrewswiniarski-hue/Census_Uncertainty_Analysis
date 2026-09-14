@@ -11,8 +11,12 @@ neither teammate's version is edited in place:
   state-rate benchmark for counts, seven measures added under scope
   decision #18, and a guard that keeps the page usable when local data
   predates the code (_unavailable_measures).
-See WORKLOG.md 2026-09-08 and 2026-09-14 and Streamlit/README.md. The
-history notes below are v1.1's and still refer to app_NJ.py/app_US.py.
+See WORKLOG.md 2026-09-08 and 2026-09-14 and Streamlit/README.md.
+
+The history notes below are v1.1's. Where they say app_NJ.py they mean
+Streamlit/app.py (a planned rename that never landed), and app_US.py
+means app_US_v1.1.py. Point 3's blue-to-orange cv_color() is replaced in
+this file by cv_color_sequential(), a single-hue ramp (2026-09-14).
 
 Map-first, same interaction model as Streamlit/app_NJ.py: click a state to
 see its counties, click a county (or search the filter panel at the top of
@@ -132,6 +136,9 @@ from analysis.dashboard import (
     census_region,
     children_of,
     cv_color,
+    cv_color_sequential,
+    CV_COLOR_CONTROLLED,
+    CV_COLOR_NO_DATA,
     cv_from_range,
     difference_is_significant,
     expected_at_rate,
@@ -212,6 +219,12 @@ class Measure:
     # The age bands need one (their universe is total population) but must
     # not gain `universe`, which would switch on a rate line they never had.
     reference_universe: Callable[[pd.DataFrame], tuple[pd.Series, pd.Series]] | None = None
+    # True where a published estimate with no margin of error means a CONTROLLED
+    # estimate (no sampling error), not missing data. Set only where verified:
+    # for total population, 2024 5-year, every one of the 3,014 counties and 51
+    # states without a numeric MOE carries the API annotation "*****"; none of
+    # the 130 counties with a numeric MOE does (live API check, 2026-09-14).
+    controlled_when_moe_missing: bool = False
 
     @property
     def reference_mode(self) -> str:
@@ -282,7 +295,7 @@ def _build_measures() -> dict[str, Measure]:
     registry: dict[str, Measure] = {
         "Total population": Measure(
             label="Total population", topic="Population", table_id="B01001",
-            values=_total_population_values,
+            values=_total_population_values, controlled_when_moe_missing=True,
         ),
         "Median household income": Measure(
             label="Median household income", topic="Income", table_id="B19013",
@@ -397,6 +410,11 @@ def _build_measures() -> dict[str, Measure]:
 MEASURES = _build_measures()
 MEASURE_OPTIONS = list(MEASURES) + [IMPUTATION_INCOME]
 DEFAULT_CARD_LABELS = ("Total population", "Median household income")
+# The map opens on median household income, the anchor measure, which has a
+# published margin of error in all but one county. Total population, the old
+# default, is a controlled estimate in 96% of counties, so it opened as a
+# nearly single-color map that taught the user nothing about reliability.
+DEFAULT_MAP_MEASURE = "Median household income"
 
 
 def _unavailable_measures(data: dict) -> set[str]:
@@ -911,7 +929,7 @@ def _interval_svg(
     ax.axis("off"), which hid the zero, the ticks and the units that make
     that width legible. They are now drawn.
 
-    Fill colour is still cv_color(), the same ramp the map uses, so a
+    Fill colour comes from cv_color_sequential(), the same ramp the map uses, so a
     saturated bar here means what a saturated county means there.
 
     `reference`: (value, label, moe) for a comparison marker. Two kinds,
@@ -974,7 +992,7 @@ def _interval_svg(
     def clamp(px: float, pad: float) -> float:
         return max(PADL + pad, min(W - PADR - pad, px))
 
-    r, g, b = cv_color(cv)[:3]
+    r, g, b = cv_color_sequential(cv)[:3]
     bx, bw = x(display_low), max(2.0, x(high) - x(display_low))
     p = [f'<svg viewBox="0 0 {W:.0f} {H:.0f}" width="100%" height="auto" '
          f'style="display:block;overflow:visible" role="img" '
@@ -1185,7 +1203,7 @@ def render_card(
     # means the same thing everywhere in the app, not a new signal.
     cv_badge = ""
     if not np.isnan(cv):
-        r, g, b, _ = cv_color(cv, alpha=255)
+        r, g, b, _ = cv_color_sequential(cv, alpha=255)
         cv_badge = (
             f"<span class='card-cv-badge' style='background: rgba({r},{g},{b},0.16); "
             f"border-left: 3px solid rgb({r},{g},{b});'>CV {cv * 100:.1f}%</span>"
@@ -1216,11 +1234,13 @@ def render_card(
                 f"the true lower bound is {low:,.0f}{unit_suffix}, shown here as 0 since a "
                 f"negative count cannot be cited."
             )
-        if percentile_rank is not None and filter_n:
+        if percentile_rank is not None and filter_n and not np.isnan(percentile_rank):
+            # Worded as a percentile of a group, not "Nth of M counties", which
+            # read as an impossible rank (e.g. "39th of 23 counties").
             st.markdown(
-                f"<div class='card-rank'>CV percentile rank: {_ordinal(percentile_rank)} of "
-                f"{filter_n:,} counties in the current filter selection "
-                f"(higher percentile = higher CV)</div>",
+                f"<div class='card-rank'>This county's CV is in the {_ordinal(percentile_rank)} "
+                f"percentile of the {filter_n:,} counties in the current filter selection "
+                f"(a higher percentile means a higher CV)</div>",
                 unsafe_allow_html=True,
             )
         if state_compare is not None:
@@ -1319,6 +1339,18 @@ PEER_BORDER_COLOR = [136, 34, 196, 255]  # saturated violet -- outside the blue/
                                           # peer counties, 2026-08-30)
 
 
+def _controlled_keys(df: pd.DataFrame, measure: str) -> set[str]:
+    """Keys whose estimate for `measure` is controlled: published, with no margin
+    of error, for a measure verified to use that convention
+    (Measure.controlled_when_moe_missing). Empty for every other measure."""
+    m = MEASURES.get(measure)
+    if m is None or not m.controlled_when_moe_missing or not len(df):
+        return set()
+    est, moe = m.values(df)
+    mask = est.notna().to_numpy() & moe.isna().to_numpy()
+    return set(df["_key"].to_numpy()[mask])
+
+
 def render_map(
     level: str, keys_in_scope: list[str], cv_by_key: dict, title: str, *,
     selected_key: str | None = None,
@@ -1326,6 +1358,7 @@ def render_map(
     color_map: dict[str, str] | None = None,
     legend_order: tuple[str, ...] | None = None,
     peer_keys: set[str] | None = None,
+    controlled_keys: set[str] | None = None,
     view_state: pdk.ViewState,
 ) -> str | None:
     """GeoJsonLayer choropleth, pickable directly (no separate click grid
@@ -1342,6 +1375,7 @@ def render_map(
     key_col = "county_key" if level == "county" else "state_key"
     scope_set = set(keys_in_scope)
     peer_keys = peer_keys or set()
+    controlled = controlled_keys or set()
     features = []
     for feat in _base_geojson(level):
         key = feat["properties"][key_col]
@@ -1351,8 +1385,10 @@ def render_map(
         if quadrant_by_key is not None:
             label = quadrant_by_key.get(key, "No data")
             rgba = _hex_to_rgba(color_map.get(label, color_map["No data"]))
+        elif key in controlled:
+            rgba = list(CV_COLOR_CONTROLLED) + [200]
         else:
-            rgba = cv_color(cv_by_key.get(key, float("nan")))
+            rgba = cv_color_sequential(cv_by_key.get(key, float("nan")))
         feat["properties"]["fill_color"] = rgba
         if key == selected_key:
             feat["properties"]["border_width"] = 3
@@ -1409,15 +1445,31 @@ def render_map(
         swatches = "".join(
             f"<span style='display:inline-block;width:14px;height:11px;"
             f"background:rgba({r},{g},{b},{a});'></span>"
-            for r, g, b, a in [cv_color(t) for t in np.linspace(0, 0.5, 12)]
+            for r, g, b, a in [cv_color_sequential(t) for t in np.linspace(0, 0.5, 12)]
         )
         st.markdown(
-            f"<div>{swatches}</div><span class='legend-label'>CV 0% "
-            f"&nbsp;&mdash;&nbsp; scale &nbsp;&mdash;&nbsp; CV 50%+ "
-            f"(blue = lower CV, orange = higher CV, i.e. a larger margin of error "
-            f"relative to the estimate)</span>",
+            f"<div>{swatches}</div><span class='legend-label'>CV 0% to 50%+, a continuous "
+            f"scale: lighter blue is a lower CV, darker blue a higher CV (a larger margin of "
+            f"error relative to the estimate)</span>",
             unsafe_allow_html=True,
         )
+        # Explain every non-ramp color actually on the map, and only those.
+        extra = []
+        if any(k in controlled for k in keys_in_scope):
+            extra.append((CV_COLOR_CONTROLLED, "controlled estimate: no sampling error"))
+        if any(k not in controlled and not np.isfinite(cv_by_key.get(k, float("nan")))
+               for k in keys_in_scope):
+            extra.append((CV_COLOR_NO_DATA, "no margin of error published"))
+        if extra:
+            st.markdown(
+                " &nbsp;&nbsp; ".join(
+                    f"<span style='display:inline-block;width:14px;height:11px;"
+                    f"background:rgb({c[0]},{c[1]},{c[2]});'></span> "
+                    f"<span class='legend-label'>{label}</span>"
+                    for c, label in extra
+                ),
+                unsafe_allow_html=True,
+            )
         if peer_keys:
             r, g, b, _ = PEER_BORDER_COLOR
             st.markdown(
@@ -1556,8 +1608,8 @@ def render_welcome() -> None:
         with st.container(border=True):
             st.markdown("**2. Choose your data**")
             st.markdown(
-                "Start with population and income, then add poverty, housing, "
-                "health, language, or transportation measures."
+                "Start with population and income, then add poverty, employment, "
+                "education, housing, health, disability, language, or transportation measures."
             )
 
     with c3:
@@ -1589,7 +1641,7 @@ def render_welcome() -> None:
         st.markdown(
             "A **wide** margin of error means more uncertainty; a **narrow** margin "
             "means less uncertainty. This uncertainty comes from the Census Bureau's "
-            "published data—it is not added by this app."
+            "published data. It is not added by this app."
         )
 
     st.markdown("#### What can I do in the explorer?")
@@ -1605,9 +1657,9 @@ def render_welcome() -> None:
     with st.expander("Choose the figures you need", expanded=False):
         st.markdown(
             "The explorer starts with **total population** and **median household income** "
-            "so the page does not become overwhelming. You can add measures across about "
-            "20 figures and seven topics, including income brackets, poverty, health insurance, "
-            "language, housing costs, and transportation."
+            "so the page does not become overwhelming. You can add any of 26 figures across "
+            "ten topics, including poverty, employment, education, income brackets, housing costs, "
+            "health insurance, disability, language, and transportation."
         )
         st.markdown(
             "Each card shows the estimate first. Open **Show me the statistics** for the "
@@ -1621,11 +1673,26 @@ def render_welcome() -> None:
             "confidence interval. Open **Show me the statistics** for a copyable citation sentence."
         )
 
+    with st.expander("Is this number too imprecise to use?"):
+        st.markdown(
+            "Check the CV and the confidence interval before you cite a number. A wide interval "
+            "relative to the estimate is a real signal from the Census Bureau, not a flaw in this "
+            "tool. For reference, HUD accepts an ACS median only when its margin of error is under "
+            "half the estimate, which works out to a CV of about 30%."
+        )
+
     with st.expander("Does my county really differ from the state?"):
         st.markdown(
-            "The **Total population** and **Median household income** cards include a "
-            "county-vs-state comparison automatically. Other cards do not currently provide "
-            "this comparison."
+            "Every card except **Total population** draws a state reference marker on its chart. "
+            "For medians and percentages, the marker is the state's published figure. For counts, "
+            "it is what your county's number would be at the state's rate, because a state count "
+            "is not on a county's scale. That marker is a calculation by this tool, not a Census "
+            "Bureau figure, and its shaded band is the calculation's own margin of error."
+        )
+        st.markdown(
+            "The **Total population** and **Median household income** cards also say whether "
+            "your county's estimate differs from the state's at 90% confidence, when both have a "
+            "published margin of error."
         )
 
     with st.expander("Which counties are statistically similar to mine?"):
@@ -1634,17 +1701,22 @@ def render_welcome() -> None:
             "estimates are statistically indistinguishable from yours at 90% confidence. "
             "It does not rank them, because the margin of error does not support a precise ranking."
         )
+        st.markdown(
+            "The size of that group is itself a reliability signal. A small group means the measure "
+            "is precise enough to set your county apart from similar ones; a large group means it "
+            "cannot, at this county's size. That describes the measure, not a flaw in this tool."
+        )
 
     st.markdown("#### How should I read uncertainty?")
     with st.expander("Coefficient of variation (CV)", expanded=False):
         st.markdown(
             "The **coefficient of variation (CV)** describes the margin of error relative to "
-            "the estimate itself. For example, the same $500 margin of error means something "
-            "very different for a $10,000 estimate than for a $500,000 estimate."
+            "the estimate itself. For example, the same \\$500 margin of error means something "
+            "very different for a \\$10,000 estimate than for a \\$500,000 estimate."
         )
         st.markdown(
-            "**Blue = lower CV / more certain**  \n"
-            "**Orange = higher CV / less certain**"
+            "**Lighter blue = lower CV / more certain**  \n"
+            "**Darker blue = higher CV / less certain**"
         )
         st.caption(
             "The color scale is continuous, not a pass/fail grade. There is no "
@@ -1664,15 +1736,22 @@ def render_welcome() -> None:
             "with counties in the current filter selection. A higher percentile means a higher CV.\n"
             "- **Share imputed (allocated):** shows the portion of a figure filled in by the "
             "Census Bureau when a household did not report it. This is separate from sampling uncertainty.\n"
-            "- **Derived rates:** poverty, uninsured, limited-English, no-vehicle, and income "
-            "bracket cards may show a percentage calculated from Census counts and their universe. "
-            "The rate has its own margin of error.\n"
+            "- **Derived rates:** poverty, low income, unemployment, renter cost burden, education, "
+            "disability, uninsured, limited-English, no-vehicle, and income bracket cards show a "
+            "percentage calculated from Census counts and their universe. The rate has its own "
+            "margin of error, and is not automatically as precise as the count it came from.\n"
+            "- **State reference marker:** the vertical line on a card's chart. For counts it is "
+            "this tool's calculation, the state's rate applied to your county, with a shaded band "
+            "for its own margin of error.\n"
+            "- **Controlled estimate:** in most counties total population has no margin of error, "
+            "because the Census Bureau pins it to its official population estimates. It is the most "
+            "reliable kind of ACS figure, and the map shows it in its own color.\n"
             "- **Rent burden:** this is a Census Bureau published rate, not a rate created by "
             "dividing median rent by median income."
         )
 
     st.markdown("#### Know the limits")
-    with st.expander("What this explorer does—and does not—show"):
+    with st.expander("What this explorer does and does not show"):
         st.markdown(
             "- The explorer stops at the **county** level; it cannot answer neighborhood-scale questions.\n"
             "- Figures are **2020–2024, 5-year ACS estimates**; this is not a year-over-year trend tool.\n"
@@ -1871,6 +1950,7 @@ def render_explorer(data: dict) -> None:
         del st.session_state["acs_map_measure"]
     measure = st.selectbox(
         "Color the map by", map_options, key="acs_map_measure",
+        index=map_options.index(DEFAULT_MAP_MEASURE) if DEFAULT_MAP_MEASURE in map_options else 0,
         format_func=_measure_display,
     )
     if unavailable:
@@ -1901,7 +1981,7 @@ def render_explorer(data: dict) -> None:
             level, geo_df["_key"].tolist(), cv_by_key, title,
             selected_key=geo["code"], quadrant_by_key=quadrant_by_key,
             color_map=color_map, legend_order=legend_order, view_state=view,
-            peer_keys=peer_keys,
+            peer_keys=peer_keys, controlled_keys=_controlled_keys(geo_df, measure),
         )
     else:
         st.info("No geographies match the current filter selection. Loosen a filter in the panel above.")
@@ -2094,8 +2174,9 @@ def render_explorer(data: dict) -> None:
                         st.markdown("**Total population**")
                         st.markdown(f"<div class='card-range'>{pop_est:,.0f}</div>", unsafe_allow_html=True)
                         st.caption(
-                            "The Census Bureau published no margin of error for this figure -- this "
-                            "usually means the estimate is calibrated to independent population controls."
+                            "No margin of error, by design: the Census Bureau controls this estimate "
+                            "to its official population estimates, so it has no sampling error. It is "
+                            "the most reliable kind of ACS figure."
                         )
                 else:
                     pop_low, pop_high = acs_range(pop_est, pop_moe)
