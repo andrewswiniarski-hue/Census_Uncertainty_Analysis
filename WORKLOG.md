@@ -29,6 +29,12 @@ Ground rules:
 
 ## Log
 
+### 2026-09-14 — Andrew Swiniarski — Housekeeping: four presentation files committed
+- **Area:** docs / project management
+- **What was done:** Committed four presentation files that had sat untracked in the working tree, per the 2026-07-18 lead decision that presentation deliverables live in the repo: the 2026-07-12 team recap deck (the design system reference named in CLAUDE.md), the imputation slide talk track (2026-08-10), and the two EDA 14 slides (2026-08-19). Indexed them in `docs/README.md` and cleared HANDOFF's note that the recap deck was still untracked. The same four files are also committed on the `card-error-bar-redesign` branch, byte-identical, so the two lines merge cleanly.
+- **Findings / decisions:** None.
+- **Files:** docs/team-recap-2026-07-12.pptx, docs/imputation-slide-talk-track.md, docs/eda14-acs-wide-survey-slide.pptx, docs/eda14-expansion-preview-slide.pptx, docs/README.md, HANDOFF.md, WORKLOG.md
+
 ### 2026-08-30 — Garrett Spangler (research) / Andrew Swiniarski (repo intake) — User-segment research lands in the repo: who the dashboard is for and what they need
 - **Area:** docs / project management
 - **What was done:** Brought Garrett's ACS user-needs research into the repo. The work is his: two research passes (2026-08-19 and 2026-08-24, ACS only) producing a 15-slide deck ranking eleven user segments by *documented* uncertainty need, with function ideas for each. It had been circulated on SharePoint only, so its ~30 citations and segment rankings were not greppable, reviewable, or traceable from any deliverable. Committed the deck as [docs/acs-user-needs-and-functions.pptx](docs/acs-user-needs-and-functions.pptx) (per the 2026-07-18 lead decision that presentation deliverables live in the repo) and wrote [docs/user-segments-and-needs.md](docs/user-segments-and-needs.md), a markdown companion carrying the segment table, the four universal needs, the three-wave function list, the full source list, and a new section reconciling the research against our own EDA findings. **This is the project's first demand-side research** — distinct from Garrett's Product Scope Tracker (2026-07-25/26), which is supply-side; the two should not be cited interchangeably.
