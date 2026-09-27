@@ -23,14 +23,20 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-APP_PATH = REPO_ROOT / "Streamlit" / "app_US_v2.py"
+# v2 is the snapshot before the reliability score; v3 is current. Both carry
+# the same state-row drawing, so both are tested.
+APP_PATHS = {
+    "v2": REPO_ROOT / "Streamlit" / "app_US_v2.py",
+    "v3": REPO_ROOT / "Streamlit" / "app_US_v3.py",
+}
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 
-@pytest.fixture(scope="module")
-def app():
-    spec = importlib.util.spec_from_file_location("app_us_v2_under_test", APP_PATH)
+@pytest.fixture(scope="module", params=sorted(APP_PATHS))
+def app(request):
+    spec = importlib.util.spec_from_file_location(
+        f"app_us_{request.param}_under_test", APP_PATHS[request.param])
     mod = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = mod  # dataclasses needs the module registered
     spec.loader.exec_module(mod)

@@ -82,7 +82,7 @@ Profile entries stay below as privacy-noise report evidence, not score inputs.)
 
 ### ACS 5-year: US county dashboard tables (added 2026-09-14)
 
-- **What:** The ACS tables behind `Streamlit/app_US_v2.py`, pulled for every US
+- **What:** The ACS tables behind `Streamlit/app_US_v2.py` and `app_US_v3.py`, pulled for every US
   state and county. Original set: B01001 (sex by age), B17001 (poverty by age),
   B19013 (median household income), B19001 (income brackets), B27001 (health
   insurance), B25064 (median gross rent), B25071 (median rent burden), B25003

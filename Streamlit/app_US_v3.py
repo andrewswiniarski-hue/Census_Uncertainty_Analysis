@@ -1,5 +1,12 @@
 """Nationwide county demographic explorer -- state-first drill-down.
 
+Version 3 (2026-09-27): version 2 (app_US_v2.py, kept unchanged as the
+snapshot before this) plus the card reliability score, lead decision #19:
+a band strip on every scored card and a sub-score breakdown in "Show me the
+statistics" (score_for, _score_strip_html, _score_note_html,
+_score_breakdown_html; scoring rules in analysis/composite.py). See
+WORKLOG.md 2026-09-27 and point 6 below.
+
 Version 2 (2026-09-14). Combines three lines of work into one file, so
 neither teammate's version is edited in place:
 - app_US_v1.1.py (Justus Long): the nationwide explorer this file is built on.
@@ -46,9 +53,11 @@ What changed from app_NJ.py, and why
    3,144 counties at once is never rendered; the county view is always
    scoped to one selected state (62 median, 254 max in Texas).
 3. Neutral federal-statistical-agency voice (sponsor direction,
-   2026-08-12, see WORKLOG and README's "Composite tier philosophy" open
-   question): no TIER_SOLID/CARE/RISKY verdict chip, no "safe to cite" /
-   "too risky" language. The map colors on CV directly via a continuous
+   2026-08-12, see README's "Composite tier philosophy" open question):
+   no TIER_SOLID/CARE/RISKY verdict chip, no "safe to cite" / "too risky"
+   language. The card reliability score (point 6) therefore uses
+   descriptive bands, "Higher / Moderate / Lower reliability", which
+   describe the score and give no advice. The map colors on CV directly via a continuous
    blue-to-orange ramp (cv_color(), see analysis/dashboard.py for the
    colorblind-safety rationale); cards show the CV as a number, the CI
    bounds explicitly labeled 90%, and a dot-plot-plus-gradient-band
@@ -66,16 +75,17 @@ What changed from app_NJ.py, and why
    explicit 90%-CI bounds, a percentile-rank-within-the-current-filter
    line, a county-vs-state significant-difference check, and (where
    available) an ACS 1-year vs 5-year precision comparison.
-6. The composite score question (README "Composite tier philosophy",
-   still open for mentors) is NOT resolved by this app. The two competing
-   candidate formulas in analysis.composite (equal_weight_score,
-   worst_component_score) remain available there for the notebooks, but
-   this app no longer surfaces either on its cards (2026-08-18) -- the one
-   unambiguous number (a measure's own CV percentile rank within the
-   current filter set) is what drives sorting/filtering here instead.
+6. Card reliability score (lead decision #19, 2026-09-27): an equal-weight
+   average of a sampling sub-score (from the CV, anchored to the ESRI 0.12
+   and NCHS 0.30 lines) and, for income and poverty figures, an imputation
+   sub-score relative to all US counties, with the band capped at the CV's
+   own band. Built by analysis.composite.reliability_score(); spec in
+   docs/superpowers/specs/2026-09-27-composite-reliability-score-cards-design.md.
+   The composite tier question stays open for mentors; this is our
+   methodology, not a Census Bureau product.
 
 Run from the repo root:
-    streamlit run Streamlit/app_US_v2.py
+    streamlit run Streamlit/app_US_v3.py
 
 Needs data/raw/{acs5_2024_usdash,acs1_2024_usdash,geo_2024_usdash,
 acs5_2024_usdash_alloc,rucc_2023}_* -- regenerate with:
@@ -185,6 +195,26 @@ QUADRANT_ORDER = tuple(QUADRANT_COLOR)
 IMPUTATION_INCOME = "Imputation: household income"
 
 
+class ImputationSource(NamedTuple):
+    """An ACS allocation (imputation) table a card's score can draw on."""
+    column: str      # column in data["alloc_county"]
+    label: str       # shown in the statistics panel
+    is_proxy: bool   # True when the table does not measure the card's own item
+
+
+# Card reliability score (lead decision #19, 2026-09-27). Only these two
+# tables pair with dashboard measures; every other measure is scored on
+# sampling alone and says imputation is not part of its score. Age bands are
+# deliberately sampling only: age imputation is 1.1% at the median county,
+# too small for a relative scale to mean anything.
+IMPUTATION_SOURCES: dict[str, ImputationSource] = {
+    "income": ImputationSource("income_alloc", "household income, Table B99192", False),
+    "family_poverty": ImputationSource(
+        "fam_pov_alloc", "family poverty status, Table B99172", True,
+    ),
+}
+
+
 @dataclass(frozen=True)
 class Measure:
     """One card-and-map-able ACS measure (variable expansion, 2026-08-30).
@@ -227,6 +257,8 @@ class Measure:
     # states without a numeric MOE carries the API annotation "*****"; none of
     # the 130 counties with a numeric MOE does (live API check, 2026-09-14).
     controlled_when_moe_missing: bool = False
+    # Key into IMPUTATION_SOURCES, or None for a sampling-only score.
+    imputation: str | None = None
 
     @property
     def reference_mode(self) -> str:
@@ -301,7 +333,7 @@ def _build_measures() -> dict[str, Measure]:
         ),
         "Median household income": Measure(
             label="Median household income", topic="Income", table_id="B19013",
-            values=_income_values, state_reference=True,
+            values=_income_values, state_reference=True, imputation="income",
         ),
         "Median gross rent": Measure(
             label="Median gross rent", topic="Housing", table_id="B25064",
@@ -335,6 +367,7 @@ def _build_measures() -> dict[str, Measure]:
             values=acs_low_income, universe=acs_poverty_ratio_universe,
             rate_label="of people below 200% of the poverty line",
             measure_label="population below 200% of the poverty line",
+            imputation="family_poverty",
         ),
         "Unemployed": Measure(
             label="Unemployed", topic="Employment", table_id="B23025",
@@ -395,6 +428,7 @@ def _build_measures() -> dict[str, Measure]:
             universe=partial(acs_poverty_universe, band=band, sex="both"),
             rate_label=f"of {band} residents in poverty",
             measure_label=f"{band} population in poverty",
+            imputation="family_poverty",
         )
 
     for band in INCOME_BANDS:
@@ -404,6 +438,7 @@ def _build_measures() -> dict[str, Measure]:
             values=partial(acs_income_bracket, band=band),
             universe=acs_income_bracket_universe,
             rate_label=f"of households earning {band}",
+            imputation="income",
         )
 
     return registry
@@ -532,6 +567,22 @@ a:hover { color: #0D54B0; }
                  margin-right: 4px; vertical-align: middle; }
 .legend-label  { font-size: 0.78rem; color: #5A5A5A; }
 .filter-count  { color: #5A5A5A; font-size: 0.8rem; }
+.score-strip { display: flex; justify-content: space-between; align-items: baseline;
+               flex-wrap: wrap; gap: 2px 8px; padding-top: 6px; margin-bottom: 4px;
+               font-size: 0.8rem; }
+.score-band  { font-weight: 700; }
+.score-num   { color: #5A5A5A; white-space: nowrap; }
+.score-num b { color: #131313; }
+.score-bar-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px;
+                 align-items: center; padding: 5px 2px; font-size: 0.85rem;
+                 border-bottom: 1px solid #E6E6E6; }
+.score-bar-row .label { color: #5A5A5A; }
+.score-bar-row .value { text-align: right; font-weight: 600; color: #222;
+                        font-variant-numeric: tabular-nums; }
+.score-bar { display: block; position: relative; height: 6px; background: #EEEEEE;
+             border-radius: 3px; }
+.score-bar > span { position: absolute; left: 0; top: 0; height: 6px;
+                    background: #5A6672; border-radius: 3px; }
 </style>
 """
 
@@ -577,7 +628,14 @@ def _load_all() -> dict:
         pop_bin=population_size_bin(county_df["B01001_001E"].astype(float)),
     ).merge(rucc[["_key", "RUCC_2023", "RUCC_METRO"]], on="_key", how="left")
 
+    alloc_by_key = alloc_county.set_index("_key")
+    imputation_subs = {
+        name: composite.imputation_subscores(alloc_by_key[src.column])
+        for name, src in IMPUTATION_SOURCES.items()
+    }
+
     return {
+        "imputation_subs": imputation_subs,
         "state_df": state_df,
         "county_df": county_df,
         "state_geo": state_geo,
@@ -1157,6 +1215,79 @@ def _rent_context_panel(row: pd.DataFrame) -> None:
         )
 
 
+# Band colors reuse the Trenton prototype's tier colors (Streamlit/app.py
+# TIER_COLOR), per the lead (2026-09-27). Label text uses a darker shade of
+# each so it passes WCAG AA (4.5:1) on white; the bar keeps the brand color.
+BAND_COLOR = {composite.BAND_HIGHER: "#0072B2", composite.BAND_MODERATE: "#E69F00",
+              composite.BAND_LOWER: "#D55E00"}
+BAND_TEXT = {composite.BAND_HIGHER: "#005A8C", composite.BAND_MODERATE: "#8A5A00",
+             composite.BAND_LOWER: "#A34700"}
+BAND_ICON = {composite.BAND_HIGHER: "●", composite.BAND_MODERATE: "▲",
+             composite.BAND_LOWER: "■"}
+
+
+def score_for(measure_key: str, code: str, cv: float,
+              imputation_subs: dict[str, pd.Series]) -> composite.ReliabilityScore | None:
+    """The card score for one measure in one county (None when CV is NaN)."""
+    measure = MEASURES[measure_key]
+    if measure.imputation is None:
+        return composite.reliability_score(cv, note="not scored")
+    src = IMPUTATION_SOURCES[measure.imputation]
+    sub = imputation_subs[measure.imputation].get(code, float("nan"))
+    if pd.isna(sub):
+        return composite.reliability_score(cv, note="not available for this county")
+    return composite.reliability_score(cv, float(sub), source=src.label, is_proxy=src.is_proxy)
+
+
+def _score_strip_html(rs: composite.ReliabilityScore, compact: bool = False) -> str:
+    """Band strip for the top of a card: colored bar, band label, score."""
+    number = f"<b>{rs.score:.0f}</b> / 100"
+    right = number if compact else f"Reliability score {number}"
+    return (
+        f"<div class='score-strip' style='border-top: 4px solid {BAND_COLOR[rs.band]};'>"
+        f"<span class='score-band' style='color: {BAND_TEXT[rs.band]};'>"
+        f"<span aria-hidden='true'>{BAND_ICON[rs.band]}</span> {rs.band}</span>"
+        f"<span class='score-num'>{right}</span></div>"
+    )
+
+
+def _score_note_html(rs: composite.ReliabilityScore) -> str:
+    """One neutral line under the card's dashed divider."""
+    if rs.imputation_sub is not None:
+        text = f"Sampling {rs.sampling_sub:.0f}, imputation {rs.imputation_sub:.0f}, averaged."
+    elif rs.imputation_note == "not available for this county":
+        text = "Sampling only: imputation rate not available for this county."
+    else:
+        text = "Sampling only: imputation is not part of this figure's score."
+    return f"<div class='card-alloc'>{text}</div>"
+
+
+def _score_breakdown_html(rs: composite.ReliabilityScore) -> str:
+    """Sub-score bars and facts for 'Show me the statistics'."""
+    def bar(label: str, value: float | None, missing: str) -> str:
+        if value is None:
+            return (f"<div class='score-bar-row'><span class='label'>{label}</span>"
+                    f"<span></span><span class='value'>{missing}</span></div>")
+        return (f"<div class='score-bar-row'><span class='label'>{label}</span>"
+                f"<span class='score-bar'><span style='width: {value:.0f}%;'></span></span>"
+                f"<span class='value'>{value:.0f}</span></div>")
+
+    missing = rs.imputation_note or "not scored"
+    band = rs.band + (" (capped by the CV)" if rs.capped_by_cv else "")
+    source = "none used" if rs.imputation_source is None else (
+        rs.imputation_source + (" [proxy]" if rs.imputation_is_proxy else ""))
+    return (
+        f"<div class='stat-row'><span class='label'>Reliability score</span>"
+        f"<span class='value'>{rs.score:.0f} / 100</span></div>"
+        f"<div class='stat-row'><span class='label'>Band</span>"
+        f"<span class='value'>{band}</span></div>"
+        + bar("Sampling", rs.sampling_sub, "")
+        + bar("Imputation", rs.imputation_sub, missing)
+        + f"<div class='stat-row'><span class='label'>Imputation source</span>"
+        f"<span class='value'>{source}</span></div>"
+    )
+
+
 def render_card(
     title: str, est: float, low: float, high: float, *,
     caveat: str | None = None,
@@ -1173,6 +1304,7 @@ def render_card(
     geo_label: str | None = None, table_id: str | None = None,
     measure_label: str | None = None, unit_suffix: str = "",
     compact: bool = False,
+    reliability: composite.ReliabilityScore | None = None,
 ) -> None:
     """Neutral-voice card: publishes the estimate, MOE, and CV; never
     recommends. See app_US.py's module docstring, point 3, for the
@@ -1207,6 +1339,9 @@ def render_card(
     `compact`: set by callers rendering into the four-across topic grid,
     where the interval graphic needs its own narrower geometry to keep
     its type legible. See _interval_svg's `compact` note.
+    `reliability`: the card's score (lead decision #19); when given, a band
+    strip opens the card, a one-line note follows the interval graphic, and
+    the breakdown joins "Show me the statistics".
     `acs1_compare`: (acs1_est, acs1_moe), if given and this county has
     ACS 1-year data for this measure, adds a 1-year-vs-5-year precision
     comparison line.
@@ -1268,6 +1403,8 @@ def render_card(
             f"border-left: 3px solid rgb({r},{g},{b});'>CV {cv * 100:.1f}%</span>"
         )
     with st.container(border=True):
+        if reliability is not None:
+            st.markdown(_score_strip_html(reliability, compact=compact), unsafe_allow_html=True)
         st.markdown(f"**{title}**")
         st.markdown(
             f"<div class='card-main-row'>"
@@ -1293,6 +1430,8 @@ def render_card(
             )
             if reference_note and show_state:
                 st.caption(reference_note)
+        if reliability is not None:
+            st.markdown(_score_note_html(reliability), unsafe_allow_html=True)
         if caveat:
             st.caption(caveat)
         if low < 0:
@@ -1382,7 +1521,19 @@ def render_card(
                     " Allocation is a separate signal from CV -- a county can have a low "
                     "CV and still have most of this figure imputed."
                 )
+            if reliability is not None:
+                note += (
+                    " Reliability score (our methodology, pending mentor review): the average "
+                    "of a sampling sub-score set from the CV (100 at 0, 75 at 0.12, the ESRI "
+                    "high-reliability line, 50 at 0.30, the NCHS caution line, and 0 where the "
+                    "margin of error equals the estimate) and, for income and poverty figures, "
+                    "an imputation sub-score comparing this "
+                    "county with all US counties (100 at or below the national median, 50 at "
+                    "the 75th percentile). The band is never higher than the CV alone gives."
+                )
             _stats_panel(rows, note)
+            if reliability is not None:
+                st.markdown(_score_breakdown_html(reliability), unsafe_allow_html=True)
 
             if geo_label:
                 sentence = (
@@ -2211,6 +2362,8 @@ def render_explorer(data: dict) -> None:
             geo_label=label, table_id=measure.table_id,
             measure_label=measure.measure_label, unit_suffix=measure.unit_suffix,
             compact=True,
+            reliability=score_for(measure_label, code, cv_from_range(e, *acs_range(e, m)),
+                                  data["imputation_subs"]),
         )
 
     # Card checklist (variable expansion, 2026-08-30 -- MSBA capstone) --
@@ -2305,6 +2458,11 @@ def render_explorer(data: dict) -> None:
                         toggle_key="Median household income",
                         acs1_compare=acs1_income,
                         geo_label=label, table_id="B19013",
+                        reliability=score_for(
+                            "Median household income", code,
+                            cv_from_range(income_est, *acs_range(income_est, income_moe)),
+                            data["imputation_subs"],
+                        ),
                     )
 
     # Every other selected measure, grouped by topic and chunked into

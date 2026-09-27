@@ -2,17 +2,18 @@
 
 | File | What it is | Status |
 |---|---|---|
-| [`app_US_v2.py`](app_US_v2.py) | US county dashboard, version 2: every US county, 26 measures across 10 topics | **Current.** Use this one |
+| [`app_US_v3.py`](app_US_v3.py) | US county dashboard, version 3: version 2 plus the card reliability score (2026-09-27) | **Current.** Use this one |
+| [`app_US_v2.py`](app_US_v2.py) | US county dashboard, version 2: every US county, 26 measures across 10 topics | Superseded by v3; kept as the snapshot before the reliability score |
 | [`app_US_v1.2.py`](app_US_v1.2.py) | Katie Christiansen's redesigned welcome page on top of v1.1 | Superseded by v2, which includes its welcome page verbatim |
 | [`app_US_v1.1.py`](app_US_v1.1.py) | Justus Long's nationwide county explorer | Superseded by v2 |
 | [`app.py`](app.py) | Trenton grant data prototype, NJ tracts | A learning instrument, not the deliverable (below) |
 
-## US county dashboard (v2)
+## US county dashboard (v3)
 
 **Run it** from the repo root:
 
 ```bash
-streamlit run Streamlit/app_US_v2.py
+streamlit run Streamlit/app_US_v3.py
 ```
 
 **Data it needs.** Run these four pulls first, in any order. Each prints its own sanity checks; outputs land in `data/raw/`.
@@ -31,7 +32,7 @@ python ingestion/pull_rucc.py
 - **Map.** Click a state, then a county. The map colors each county by the coefficient of variation (CV, the margin of error as a share of the estimate) of the measure you choose, on a continuous scale from blue (lower CV) through purple to orange (higher CV, a larger margin of error). The blue and orange ends are the Okabe-Ito colorblind-safe pair; the purple midpoint replaced the original near-white midpoint, which made card bars near CV 25% invisible (2026-09-16). It opens on median household income. Total population is a controlled estimate in most counties, with no sampling error, and gets its own color and legend entry.
 - **Cards.** Every card shows the estimate, its CV, and its 90% interval on a zero-anchored axis, so a wide margin of error visibly takes up more of the bar. Cards in the four-across grid use a narrower drawing so their text stays readable.
 - **State comparison (per-card toggle).** 25 of 26 cards have a "Compare to state" switch, off by default, so each card opens showing the county alone with its axis fitted to the county (2026-09-27, after Census Bureau feedback that county and state on one bar was hard to read). Switched on, the state appears as its own grey row under the county bar, on the same axis. Medians and percentages show the state's own published value as a solid bar over its published margin of error. Counts show what the county's number would be at the state's rate, because a state count is not on a county's scale; that row is our calculation, drawn lighter with a dashed outline, and the card says so. The switch also governs the income card's county-vs-state significance line. Each card remembers its setting as you move between counties. Total population has no state comparison.
-- **Reliability score (2026-09-27).** A strip across the top of each card gives a band (Higher, Moderate or Lower reliability) and a 0 to 100 score: the average of a sampling sub-score from the CV and, for income and poverty figures, an imputation sub-score comparing the county with all US counties. The band is never better than the CV alone gives. "Show me the statistics" shows both sub-scores. Total population has no score. Our methodology, pending mentor review (HANDOFF decision #19).
+- **Reliability score (v3, 2026-09-27).** A strip across the top of each card gives a band (Higher, Moderate or Lower reliability) and a 0 to 100 score: the average of a sampling sub-score from the CV and, for income and poverty figures, an imputation sub-score comparing the county with all US counties. The band is never better than the CV alone gives. "Show me the statistics" shows both sub-scores. Total population has no score. Our methodology, pending mentor review (HANDOFF decision #19).
 - **Statistical peers.** Counties whose estimate is statistically indistinguishable from the selected one at 90% confidence.
 
 ### The 26 measures
@@ -58,7 +59,7 @@ Three lists in the code fail silently if you miss them: nothing errors, the meas
 1. Add its cells to the pull in `ingestion/pull_usdash.py`, with a sanity check.
 2. Add its table prefix to `VALUE_COL_PREFIXES` in `analysis/dashboard.py`, or its columns are never converted to numbers.
 3. Add accessor functions in `analysis/dashboard.py` and tests in `analysis/test_dashboard.py`, checking cell numbers against the published labels.
-4. Add a `Measure` to `_build_measures()` in `app_US_v2.py`.
+4. Add a `Measure` to `_build_measures()` in `app_US_v3.py`.
 5. If its topic is new, add it to `TOPIC_ORDER`, or its card never appears.
 6. If it is a median, add it to `_PEER_MEDIANS`, or the peers panel treats it as a count.
 7. If the Census Bureau publishes an allocation table for the measure's item, add it to `IMPUTATION_SOURCES` (and to the allocation pull) and set `Measure.imputation`; otherwise the card is scored on sampling only and says so.

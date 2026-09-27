@@ -1,7 +1,7 @@
-"""Tests for the US dashboard v2 reliability score wiring and card HTML.
+"""Tests for the US dashboard v3 reliability score wiring and card HTML.
 
 Run:
-    python -m pytest tests/test_us_v2_score.py -v
+    python -m pytest tests/test_us_v3_score.py -v
 
 Spec: docs/superpowers/specs/2026-09-27-composite-reliability-score-cards-design.md
 Synthetic values except the one real-data test, which is skipped when
@@ -18,7 +18,7 @@ import pandas as pd
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-APP_PATH = REPO_ROOT / "Streamlit" / "app_US_v2.py"
+APP_PATH = REPO_ROOT / "Streamlit" / "app_US_v3.py"
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
@@ -30,7 +30,7 @@ ADVICE_WORDS = ("risky", "safe", "cite", "use with care", "too imprecise", "reli
 
 @pytest.fixture(scope="module")
 def app():
-    spec = importlib.util.spec_from_file_location("app_us_v2_score_under_test", APP_PATH)
+    spec = importlib.util.spec_from_file_location("app_us_v3_score_under_test", APP_PATH)
     mod = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = mod  # dataclasses needs the module registered
     spec.loader.exec_module(mod)

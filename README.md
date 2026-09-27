@@ -37,7 +37,7 @@ Request one at <https://api.census.gov/data/key_signup.html> — it arrives by e
 
 Raw data is never committed — scripts rebuild it identically on any machine. Run the two scripts in [`/ingestion`](ingestion), in order: `pull_acs_nj.py` (ACS estimates + margins of error), then `pull_nj_geometry.py` (matching boundaries + join verification). Each prints its own sanity checks; outputs land in `data/raw/`. *(See [NEXT_ACTIONS.md](NEXT_ACTIONS.md) for the setup runbook and [WORKLOG.md](WORKLOG.md) for live project status.)*
 
-**To run the US county dashboard,** run its four pulls (`pull_usdash.py`, `pull_us_geometry.py`, `pull_usdash_alloc.py`, `pull_rucc.py`), then `streamlit run Streamlit/app_US_v2.py`. It covers every US county and 26 measures; see [`Streamlit/README.md`](Streamlit/README.md) for what is on it, how to add a measure, and known issues.
+**To run the US county dashboard,** run its four pulls (`pull_usdash.py`, `pull_us_geometry.py`, `pull_usdash_alloc.py`, `pull_rucc.py`), then `streamlit run Streamlit/app_US_v3.py` (version 3, with the card reliability score). It covers every US county and 26 measures; see [`Streamlit/README.md`](Streamlit/README.md) for what is on it, how to add a measure, and known issues.
 
 **4. Find your way around**
 
