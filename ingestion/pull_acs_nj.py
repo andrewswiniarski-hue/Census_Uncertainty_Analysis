@@ -40,15 +40,18 @@ Run from the repo root:
 
 from __future__ import annotations
 
-import os
 import sys
 import time
-from pathlib import Path
 
 import censusdis.data as ced
-import pandas as pd
-import requests
-from dotenv import load_dotenv
+
+from _common import (
+    OUT_DIR,
+    REPO_ROOT,
+    fetch_official_labels,
+    load_api_key,
+    sanity_report,
+)
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -57,9 +60,6 @@ from dotenv import load_dotenv
 DATASET = "acs/acs5"  # ACS 5-year detailed tables
 VINTAGE = 2024        # 2020-2024 release; newest available (checked 2026-07-09)
 STATE_NJ = "34"       # FIPS code for New Jersey
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
-OUT_DIR = REPO_ROOT / "data" / "raw"
 
 # Estimate variables. The API serves each as <code>E (estimate) and
 # <code>M (margin of error); we pull both.
@@ -92,89 +92,6 @@ GEO_LEVELS = {
 
 EXPECTED_NJ_COUNTIES = 21  # fixed fact -- any other count means a bad query
 
-# ACS "annotation" codes: giant negative numbers the API returns in place
-# of real values (e.g. estimate suppressed, or MOE not applicable).
-# They must be treated as missing, never as data.
-# Reference: "Notes on ACS Estimate and Annotation Values" (census.gov).
-KNOWN_ANNOTATIONS = {
-    -555555555: "controlled estimate -- no sampling-error MOE published",
-    -666666666: "estimate not computed (insufficient sample observations)",
-}
-ANNOTATION_CUTOFF = -111111111  # anything at or below this is an annotation
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def load_api_key() -> str:
-    """Read CENSUS_API_KEY from the repo-root .env (never from git)."""
-    load_dotenv(REPO_ROOT / ".env")
-    key = os.getenv("CENSUS_API_KEY")
-    if not key or key == "paste_your_key_here":
-        sys.exit(
-            "CENSUS_API_KEY is missing. Copy .env.example to .env in the repo "
-            "root and paste in your key (see README 'Getting Started')."
-        )
-    return key
-
-
-def fetch_official_labels() -> dict[str, str]:
-    """Ask the API for each variable's official label.
-
-    This is a guard against a wrong variable code: the label is printed at
-    run time so a mismatch is caught by eyeball instead of trusted silently.
-    (The variables endpoint needs no API key.)
-    """
-    labels: dict[str, str] = {}
-    for code in ESTIMATE_COLS:
-        url = f"https://api.census.gov/data/{VINTAGE}/{DATASET}/variables/{code}.json"
-        try:
-            meta = requests.get(url, timeout=30).json()
-            labels[code] = meta.get("label", "<no label in response>")
-        except requests.RequestException as exc:
-            labels[code] = f"<label fetch failed: {exc}>"
-    return labels
-
-
-def annotation_mask(s: pd.Series) -> pd.Series:
-    """True where a value is an ACS annotation code rather than real data."""
-    return s.notna() & (s <= ANNOTATION_CUTOFF)
-
-
-def sanity_report(df: pd.DataFrame, level: str) -> None:
-    """Print per-column checks: nulls, annotation codes, clean value range."""
-    print(f"\n  Sanity checks -- {level}: {len(df):,} rows x {len(df.columns)} columns")
-    print(f"  {'column':<15} {'nulls':>12} {'annotations':>12}   clean min / max")
-    codes_seen: dict[int, int] = {}
-    for col in DOWNLOAD_VARS:
-        if col == "NAME":
-            continue
-        if col not in df.columns:
-            print(f"  {col:<15} MISSING FROM API RESPONSE")
-            continue
-        s = pd.to_numeric(df[col], errors="coerce")
-        n = len(s)
-        nulls = int(s.isna().sum())
-        ann = annotation_mask(s)
-        for val, cnt in s[ann].value_counts().items():
-            codes_seen[int(val)] = codes_seen.get(int(val), 0) + int(cnt)
-        clean = s[s.notna() & ~ann]
-        rng = (
-            f"{clean.min():>14,.0f} / {clean.max():<14,.0f}"
-            if len(clean)
-            else "   (no clean values)"
-        )
-        print(
-            f"  {col:<15} {nulls:>5} ({nulls / n:5.1%}) {int(ann.sum()):>5} "
-            f"({ann.sum() / n:5.1%})   {rng}"
-        )
-    if codes_seen:
-        print("  Annotation codes present in this file:")
-        for val, cnt in sorted(codes_seen.items()):
-            meaning = KNOWN_ANNOTATIONS.get(val, "look up in ACS annotation docs")
-            print(f"    {val}: {cnt:,} cells -- {meaning}")
-
 
 # ---------------------------------------------------------------------------
 # Main
@@ -187,7 +104,7 @@ def main() -> None:
 
     print(f"ACS 5-year, vintage {VINTAGE} (2020-2024), New Jersey (FIPS {STATE_NJ})")
     print("\nOfficial variable labels from the API -- verify they match intent:")
-    for code, label in fetch_official_labels().items():
+    for code, label in fetch_official_labels(DATASET, VINTAGE, ESTIMATE_COLS).items():
         print(f"  {code}  {label}")
         print(f"  {'':<12}-> we call it: {VARIABLES[code[:-1]]}")
 
@@ -215,7 +132,7 @@ def main() -> None:
 
         out_path = OUT_DIR / f"acs5_{VINTAGE}_nj_{level}.parquet"
         df.to_parquet(out_path, index=False)
-        sanity_report(df, level)
+        sanity_report(df, level, DOWNLOAD_VARS)
         print(f"  Saved {out_path.relative_to(REPO_ROOT)} "
               f"({out_path.stat().st_size / 1024:,.0f} KB)")
 

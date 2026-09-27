@@ -3,10 +3,13 @@
 Catalog of every statistical product this project uses: what it is, which
 geographies it covers, **what uncertainty measure ships with it**, how we access
 it, and the landmines we've hit. One entry per product; newest additions at the
-bottom. (README Phase 1, Step 4 — living document. Scoped income & poverty
-set completed 2026-08-01 — SAIPE, PUMS, and Variance Replicate Tables added
-per the product-shortlist sprint; DHC and Demographic Profile entries deferred
-unless mentors want the wider catalog documented.)
+bottom. (README Phase 1, Step 4 — living document. Product shortlist confirmed
+2026-07-22 (ACS 5-year + DHC + Demographic Profile — HANDOFF.md decision #12);
+DHC production and Demographic Profile were pulled 2026-07-31, Phase B —
+entries below. Scoped income & poverty set completed 2026-08-01 — SAIPE, PUMS,
+and Variance Replicate Tables added per the product-shortlist sprint. Phase 2
+(2026-08-01) narrowed the product to income & poverty; DHC and Demographic
+Profile entries stay below as privacy-noise report evidence, not score inputs.)
 
 ---
 
@@ -70,11 +73,54 @@ unless mentors want the wider catalog documented.)
   exist — B99191/B99192/B99193/B99194/B99201, 8 cells each
   (percent-of-income-allocated bins, split by **universe rather than income
   source**) — discovered by concept filter and geography-probed at
-  county/tract/BG on `origin/garrett/financial-eda-imputation`
-  (`docs/api-surface-verified.md`, pending merge). Same E-only rule applies.
+  county/tract/BG on Garrett's `financial-eda-imputation` branch, merged
+  2026-08-01 (`docs/api-surface-verified.md`). Same E-only rule applies.
   Companion decision from that branch's EDA 08: **never quote a bare
   allocation rate** — across eight defensible denominators, income sources
   rank anywhere from 1st to 6th.
+
+
+### ACS 5-year: US county dashboard tables (added 2026-09-14)
+
+- **What:** The ACS tables behind `Streamlit/app_US_v2.py` and `app_US_v3.py`, pulled for every US
+  state and county. Original set: B01001 (sex by age), B17001 (poverty by age),
+  B19013 (median household income), B19001 (income brackets), B27001 (health
+  insurance), B25064 (median gross rent), B25071 (median rent burden), B25003
+  (tenure), C16002 (limited-English households), B08201 (vehicles). Added under
+  scope decision #18: C17002 (ratio of income to poverty), B23025 (employment
+  status), B25070 (rent burden brackets), B25077 (median home value), B15003
+  (educational attainment), B18101 (disability).
+- **Geographies:** 50 states plus DC (51 rows) and 3,144 counties. Puerto Rico is
+  dropped at download (1 state row, 78 municipios): USDA's rural-urban codes, which
+  the app filters by, do not cover it.
+- **Uncertainty shipped:** MOE at 90% confidence on every cell. Cards that sum cells
+  use root-sum-of-squares with the handbook zero-cell rule (`analysis.acs.aggregate_moe`);
+  rates use the ACS proportion formula (`analysis.dashboard.proportion_rate`). The
+  state-rate benchmark on count cards is our own derived figure
+  (`analysis.dashboard.expected_at_rate`; see the glossary).
+- **Access:** [`ingestion/pull_usdash.py`](../ingestion/pull_usdash.py), 399 variables,
+  writes `data/raw/acs5_2024_usdash_{state,county}.parquet` (gitignored, regenerable),
+  plus an ACS 1-year county file whose row set is the exact list of counties with 1-year
+  data (850 in 2024).
+- **Landmines:**
+  - **B25070_011 "Not computed"** (renters with no household income or no cash rent)
+    is a real share of renters: median 13.3% of a county's renters, 90th percentile
+    29.6%, maximum 89.0% (EDA 14's 2024 county pull). The dashboard leaves it out of
+    the rent-burden base, as the Bureau's DP04 profile does. Counting it would drop the
+    median county from 44.7% to 38.0% cost-burdened, and move 2,601 counties by more
+    than 3 points.
+  - **B25077 median home value** is unpublished in 5 counties (estimate `-666666666`,
+    MOE `-222222222`, insufficient sample). It is not top-coded at county scale in
+    2024: the highest county value is 1,633,900 (Teton County, WY).
+  - **B23025:** use `B23025_003` (civilian labor force) as the unemployment
+    denominator, not `002`, which includes the Armed Forces.
+  - **B01001_001 total population** has a controlled MOE (`-555555555`, annotation
+    `*****`) in 3,014 of 3,144 counties and all 51 states. It arrives as NaN; the
+    v2 dashboard gives it its own map color, a convention verified against the API
+    annotation on 2026-09-14.
+  - **The Census API intermittently drops a metadata lookup**, on a different
+    variable each attempt. The pull retries automatically
+    (`ingestion/_common.py::download_with_retry`); see HANDOFF data landmines.
 
 ## Cartographic boundary files (vintage 2024)
 
@@ -165,6 +211,63 @@ unless mentors want the wider catalog documented.)
   and is a *different* table); 30% of NJ blocks have zero published population,
   so relative-error metrics must exclude/report them separately.
 
+## 2020 Census DHC (Demographic and Housing Characteristics) — production release
+
+- **What:** The real, published 2020 Decennial product (not a demonstration
+  file) — full-count total population and demographic tables, protected by
+  the 2020 Disclosure Avoidance System (TopDown Algorithm) at production
+  settings. Phase B's primary product, alongside DP1 below.
+- **Geographies used:** NJ state (1) / county (21) / tract (2,181) / block
+  group (6,599) / block (137,972) — all five levels, confirmed live against
+  the API (2026-07-31); a single statewide wildcard query works at every
+  level (no per-county looping needed, unlike the 2010 SF1 pull).
+- **Uncertainty shipped:** **none per cell** — like SF1, this is a full count.
+  The privacy noise is *in* the numbers; this project's only signal on its
+  size is the modeled estimate in `analysis/noise_model.py` (see EDA 04,
+  the 2010-demonstration-derived proxy — production noise is NOT separately
+  measured here, only estimated from the 2010 demonstration release).
+- **Variables pulled:** total population (`P1_001N`) and the twelve sex×age
+  cells making up "Black or African American alone, 65+" (table `P12B`,
+  `P12B_020N`–`025N` male, `P12B_044N`–`049N` female) — same subgroup as the
+  ACS and 2010 SF1 pulls, for a like-for-like contrast. Variable codes
+  verified live against the API, 2026-07-31.
+- **Access:** Census API dataset `dec/dhc`, vintage 2020, via censusdis —
+  [`ingestion/pull_dhc_nj.py`](../ingestion/pull_dhc_nj.py); loaders in
+  [`analysis/decennial.py`](../analysis/decennial.py). Raw parquet in
+  `data/raw/dhc_2020_nj_*.parquet` (gitignored, regenerable).
+- **Landmines:** total population is an exact hierarchical invariant — every
+  level's `P1_001N` sums to NJ's published 9,288,994 exactly (verified at
+  ingestion, all 5 levels); **not comparable to 2010 SF1 row-for-row**
+  (2,181 tracts in 2020 vs. 2,010 in 2010 — boundaries changed) — never
+  row-join `dhc_2020_*` to `sf1_2010_*`; 18% of NJ's 137,972 blocks have
+  zero published 2020 population (vs. 30% of 2010 blocks — different vintage,
+  not directly comparable).
+
+## 2020 Demographic Profile (DP1)
+
+- **What:** A simpler, general-purpose 2020 Decennial summary product,
+  published alongside DHC — same underlying protected data, packaged with
+  fewer geography levels and no race×age crosstabs.
+- **Geographies used:** NJ county (21) / tract (2,181) only — **DP1 has no
+  block group or block level** (confirmed against the live API, 2026-07-31),
+  unlike DHC's full five levels. Affects any dashboard spec calling for
+  micro-maps at block group/block — DP1 cannot populate those.
+- **Uncertainty shipped:** none per cell (full count, same as DHC).
+- **Variables pulled:** total population (`DP1_0001C`) and total Black-alone
+  population (`DP1_0079C`, **not age-restricted** — DP1 has no equivalent of
+  DHC's Black 65+ table, confirmed against the live variable list). This is
+  DP1's only usable "small subgroup" contrast, and it is coarser than DHC's.
+- **Access:** Census API dataset `dec/dp`, vintage 2020, via censusdis —
+  [`ingestion/pull_dp_nj.py`](../ingestion/pull_dp_nj.py); loaders in
+  [`analysis/decennial.py`](../analysis/decennial.py). Raw parquet in
+  `data/raw/dp1_2020_nj_*.parquet` (gitignored, regenerable).
+- **Landmines:** `DP1_0001C` is **verified identical to DHC's `P1_001N`**
+  for every NJ county and tract (checked at ingestion and re-verified in
+  EDA 08) — DP1's population is the same protected count repackaged, not an
+  independent re-noised tabulation, so `analysis/noise_model.py`'s
+  population model applies unchanged to DP1; EDA 04 never measured noise for
+  `DP1_0079C` (Black alone), so this project has no noise estimate for it.
+
 ## SAIPE — Small Area Income & Poverty Estimates (API years 2019–2024) — *scoped-stack comparator* (added 2026-08-01)
 
 - **What:** The Bureau's **model-based** annual estimates of median household
@@ -185,10 +288,11 @@ unless mentors want the wider catalog documented.)
   10.0 ± 1.5%. Published MOE equals `(UB90−LB90)/2` exactly in the receipt.
 - **Update cadence:** annual single-year estimates; the API `time=` parameter
   serves 2019–2024; older years in bulk files.
-- **Access:** API, key optional for light use. No pull script on `main` yet —
-  `ingestion/pull_saipe_counties.py` exists on
-  `origin/garrett/financial-eda-imputation` (all US counties × 2019–2024,
-  pending merge). Bulk: `www2.census.gov/programs-surveys/saipe/datasets/`.
+- **Access:** API, key optional for light use.
+  [`ingestion/pull_saipe_counties.py`](../ingestion/pull_saipe_counties.py)
+  (all US counties × 2019–2024, merged from Garrett's
+  `financial-eda-imputation` branch, 2026-08-01). Bulk:
+  `www2.census.gov/programs-surveys/saipe/datasets/`.
 - **Landmines:** SAIPE 2024 is a **single-year model estimate**; ACS 5-year
   vintage 2024 is a 2020–2024 average centered ~2022 — the same-named years
   describe different windows, so compare uncertainty *styles*, never join as
@@ -219,8 +323,9 @@ unless mentors want the wider catalog documented.)
   160 verified present in `variables.json` 2026-08-01** (521 variables
   total). SE by successive difference replication:
   `Var = (4/80)·Σ(θ_r − θ)²`, `MOE = 1.645·SE` (the 4/80 constant is
-  ACS-design-specific). Implementation: `analysis/replicate.py` on Garrett's
-  branch (pending merge).
+  ACS-design-specific). Implementation:
+  [`analysis/replicate.py`](../analysis/replicate.py) (merged from Garrett's
+  `financial-eda-imputation` branch, 2026-08-01).
 - **Update cadence:** annual 1-year and 5-year releases.
 - **Access:** API `acs/acs5/pums` (≤50 variables per query — the 80 replicate
   weights need chunked pulls, as the branch script's `--replicates` mode

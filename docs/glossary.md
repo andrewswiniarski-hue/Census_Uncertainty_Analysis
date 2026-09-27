@@ -85,6 +85,41 @@ describes data completeness, a dimension the MOE cannot see. EDA 05 measured
 prevalence (income ~39% of households at the median NJ tract; sex ~0.05%) and
 showed allocation rates are statistically independent of CVs once geography
 size is controlled — the empirical basis for a multi-component composite score.
+Reusable rate formulas live in [`analysis/alloc.py`](../analysis/alloc.py).
+
+**Composite reliability matrix (ACS prototype)** — An exploratory two-axis view
+that keeps **sampling CV** and **item allocation rate** visible as separate
+coordinates instead of immediately collapsing them into one number. EDA 06's
+headline case is median household income at NJ tracts. Provisional flags:
+CV ≤ 0.30 (ACS quality-standard convention) and allocation above the sample
+75th percentile (exploratory NJ flag, not an official Census cutoff). Helpers
+live in [`analysis/composite.py`](../analysis/composite.py).
+
+**Reliability blind spot** — Tracts (or other geographies) where sampling CV
+looks acceptable but the matching allocation rate is high. In EDA 06's income
+headline, about **23%** of classified NJ tracts sat in the low-CV / high-
+allocation quadrant — CV alone would miss their imputation burden.
+
+**Percentile-risk score (sensitivity)** — Within-variable empirical percentile
+ranks of CV and allocation (higher = riskier), combined either as an
+**equal-weight mean** or a **worst-component maximum**. Used in EDA 06 only to
+measure how much top-risk membership changes under different combination rules;
+not a finalized dashboard score.
+
+**Place population vs estimate size** — Two different “size” ideas in ACS
+reliability work. *Place population* is how many people live in the geography
+(`B01003_001`). *Estimate size* is how large the published estimate is (a count),
+or — for median household income — the **household universe** behind the median,
+not the dollar value. EDA 07 showed pooled `log(CV) ~ log(place population)`
+fails (R² ≈ 0.005) while `log(CV) ~ log(estimate size)` explains most pooled
+variation (R² ≈ 0.67) once variable types are included in one frame. Helpers in
+[`analysis/cv_model.py`](../analysis/cv_model.py).
+
+**Residual CV risk (`cv_residual_high`)** — Flag for rows whose CV is worse than
+predicted from estimate size (`log(CV) ~ log(estimate_size)` residual at/above
+a sample percentile). Composite V2 tooltip seed on the sampling axis; works best
+for count estimates. For income medians the size model is weak (R² ≈ 0.01), so
+the flag mostly tracks raw high CV.
 
 **Disclosure avoidance / DAS** — Methods that prevent identifying individual people
 from published tables. The 2020 **Disclosure Avoidance System (DAS)** deliberately
@@ -190,6 +225,16 @@ populated; a *vanished* place is the reverse. EDA 04 found 807 ghost blocks
 in NJ. For block-level uses this flips places between "inhabited" and "empty" —
 it is not adequately described as ±noise, so we report it as its own class.
 
+**Reliability tier (Solid / Use with care / Too risky)** — The plain-language
+labels the Trenton dashboard prototype (`Streamlit/app.py`, see
+`Streamlit/README.md`) attaches to every figure, built on a CV threshold:
+**Solid** (CV ≤ 0.12, the ESRI "high reliability" convention), **Use with care**
+(0.12 < CV ≤ 0.30, the NCHS "flag/caution" convention), **Too risky** (CV > 0.30).
+These are *our proposed tiers*, built on conventions already cited in
+`analysis/viz.py::CV_REFERENCE_LINES` — not adopted Census Bureau thresholds
+(see HANDOFF.md decision #8; confirming or revising them with mentors is still
+an open Weeks 4–6 item).
+
 **Confidence interval (CI)** — A range built so that, across repeated sampling
 (or repeated model estimation), a stated share of such ranges would contain the
 true value. "90% CI $119,323–$124,465" means: build intervals this way many
@@ -227,7 +272,8 @@ difference replication; the 4/80 constant is specific to the ACS design). This
 is the exact-SE path for custom estimates — **including medians**, which the
 Variance Replicate Tables do not cover. *Source: "PUMS Accuracy of the Data"
 (per-vintage PDFs under census.gov tech_docs).* Implemented in
-`analysis/replicate.py` (teammate branch, pending merge).
+`analysis/replicate.py` (merged from Garrett's `financial-eda-imputation`
+branch, 2026-08-01).
 
 **Variance Replicate Estimate Tables (VRTs)** — Pre-computed 80-replicate
 versions of selected ACS detailed tables, distributed as bulk CSVs **outside
@@ -244,3 +290,72 @@ census.gov/programs-surveys/acs/data/variance-tables.html.*
 for approximating a standard error from a generalized formula when replicate
 weights aren't used — the quick-but-approximate path, versus the exact
 replicate-weight computation. *Source: "PUMS Accuracy of the Data".*
+
+---
+
+## Dashboard measures (added 2026-09-14)
+
+**Universe:** The group of people or housing units an ACS table counts. Each table
+states its own: B23025 covers the population 16 and over, B25070 covers
+renter-occupied housing units. A rate divides a count by the universe of the same
+table, never by total population, because the two can differ (group quarters
+residents, for example, are left out of poverty status).
+
+**Low income (below 200% of poverty):** People whose household income is less than
+twice the federal poverty line for their household size, from table C17002 (ratio of
+income to poverty level). Many programs set their low-income line here rather than
+at the poverty line itself, including CDBG low-and-moderate income and EJScreen.
+
+**Unemployment rate:** Unemployed people as a share of the **civilian labor force**:
+people 16 and over who are working or looking for work, excluding the Armed Forces.
+People not looking for work are not in the labor force, so they are in neither the
+numerator nor the denominator. From table B23025.
+
+**Rent burden: cost-burdened and severely cost-burdened:** A renter household is
+cost-burdened when gross rent takes a large share of household income: 30% or more
+here, and severely cost-burdened at 50% or more, from table B25070. HUD's CHAS data
+describe cost burden as more than 30%; the ACS brackets start at 30.0%, so the two
+can differ slightly. Households whose burden cannot be computed (no household
+income, or no cash rent) are left out of the base, as the Census Bureau does in its
+DP04 profile. The **rent burden** card is different again: it is the Bureau's own
+median of that ratio (B25071).
+
+**State-rate benchmark (expected at the state rate):** **Our methodology**, not a
+Census Bureau figure. The state comparison row on a count card, shown when the card's
+"Compare to state" switch is on and drawn with a dashed outline to mark it as modelled:
+what the county's count would be if the county matched its state's rate for that measure. It is the state's
+rate multiplied by the county's own universe. Needed because a raw state count is 10
+to 25 times a county's and cannot share its axis. Its margin of error combines the
+ACS proportion formula (for the rate) with the product formula
+MOE(A x B) = sqrt(A^2 x MOE(B)^2 + B^2 x MOE(A)^2) from the ACS handbook. It treats
+the state rate and county universe as independent, which overstates the margin,
+since the county is part of the state. Implemented as
+`analysis.dashboard.expected_at_rate`.
+
+**Suppressed estimate:** An estimate the Census Bureau does not publish for a
+geography, usually because too few sampled households fall in the category. Five US
+counties publish no median home value in the 2020-2024 ACS 5-year data. Different
+from a zero, which is a published count of none.
+
+
+**Reliability score (dashboard card):** **Our methodology**, not a Census Bureau
+product. A 0 to 100 score for one figure in one county, shown in a band strip at the
+top of each card on the US county dashboard: the average of its sampling sub-score
+and, for income and poverty figures, its imputation sub-score. Higher means more
+reliable. The score is rounded to a whole number and the band is read from that
+rounded score. Bands: Higher reliability (75 and above),
+Moderate reliability (50 to below 75), Lower reliability (below 50), and a band is
+never better than the CV alone would give it. Implemented as
+`analysis.composite.reliability_score` (HANDOFF decision #19).
+
+**Sampling sub-score:** The CV mapped onto 0 to 100 through fixed anchors: 100 at a
+CV of 0, 75 at 0.12 (the ESRI high-reliability line), 50 at 0.30 (the NCHS caution
+line), and 0 at 1/1.645 (about 0.61), where the margin of error equals the estimate
+and the 90% interval reaches zero. Straight lines in between.
+
+**Imputation sub-score:** How a county's imputation (allocation) rate for an item
+compares with every US county on the same allocation table: 100 at or below the
+national median, 50 at the national 75th percentile, 0 for the most imputed county.
+Relative rather than absolute because no published standard says how much imputation
+is too much, and rates depend mostly on the question asked (the median county imputes
+38% of household incomes but about 1% of ages).

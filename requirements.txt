@@ -13,4 +13,9 @@ censusdis         # Census API client: pulls estimates, MOEs, and boundaries in 
 python-dotenv     # loads CENSUS_API_KEY from the local .env file
 jupyter           # notebooks for exploratory analysis
 pyarrow           # fast, compact parquet file storage
+streamlit         # Trenton dashboard prototype (Streamlit/app.py)
+pydeck            # interactive tract choropleth in the Trenton dashboard
 openpyxl          # .xlsx read/write (tools/product_scope.py --export xlsx)
+topojson          # shared-border-aware geometry simplification (nationwide county app) --
+                   # shapely.simplify preserves each polygon's own validity but not shared
+                   # borders with its neighbors, which creates slivers at national tolerances

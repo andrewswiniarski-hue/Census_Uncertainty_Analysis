@@ -10,3 +10,8 @@ Scripts print sanity checks on completion (row counts vs. known totals, null rat
 value ranges) — review those before analyzing the data.
 
 **No manual downloads where avoidable:** if it can be pulled by script, it is.
+
+[`_common.py`](_common.py) holds the mechanics every script needs (API key
+loading, official-label fetching, the ACS annotation-code sanity report) —
+scripts import it, they don't re-implement it. Each script still owns its
+own variable list, geography levels, and any dataset-specific checks.

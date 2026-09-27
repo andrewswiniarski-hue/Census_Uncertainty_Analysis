@@ -52,15 +52,13 @@ Run from the repo root:
 
 from __future__ import annotations
 
-import os
 import sys
 import time
-from pathlib import Path
 
 import censusdis.data as ced
 import pandas as pd
-import requests
-from dotenv import load_dotenv
+
+from _common import OUT_DIR, REPO_ROOT, fetch_official_labels, load_api_key
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -69,9 +67,6 @@ from dotenv import load_dotenv
 DATASET = "dec/sf1"  # 2010 Census Summary File 1
 VINTAGE = 2010
 STATE_NJ = "34"      # FIPS code for New Jersey
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
-OUT_DIR = REPO_ROOT / "data" / "raw"
 
 # Variable codes verified against the live API on 2026-07-16
 # (https://api.census.gov/data/2010/dec/sf1/variables/<code>.json);
@@ -132,36 +127,6 @@ GEO_LEVELS_PER_COUNTY = {
 # Helpers
 # ---------------------------------------------------------------------------
 
-def load_api_key() -> str:
-    """Read CENSUS_API_KEY from the repo-root .env (never from git)."""
-    load_dotenv(REPO_ROOT / ".env")
-    key = os.getenv("CENSUS_API_KEY")
-    if not key or key == "paste_your_key_here":
-        sys.exit(
-            "CENSUS_API_KEY is missing. Copy .env.example to .env in the repo "
-            "root and paste in your key (see README 'Getting Started')."
-        )
-    return key
-
-
-def fetch_official_labels() -> dict[str, str]:
-    """Ask the API for each variable's official label.
-
-    Guard against a wrong variable code: the label is printed at run time
-    so a mismatch is caught by eyeball instead of trusted silently.
-    (The variables endpoint needs no API key.)
-    """
-    labels: dict[str, str] = {}
-    for code in VARIABLE_COLS:
-        url = f"https://api.census.gov/data/{VINTAGE}/{DATASET}/variables/{code}.json"
-        try:
-            meta = requests.get(url, timeout=30).json()
-            labels[code] = meta.get("label", "<no label in response>")
-        except requests.RequestException as exc:
-            labels[code] = f"<label fetch failed: {exc}>"
-    return labels
-
-
 def sanity_report(df: pd.DataFrame, level: str, checks: list[str]) -> None:
     """Print per-column checks plus level-level PASS/FAIL lines.
 
@@ -212,7 +177,7 @@ def main() -> None:
 
     print(f"2010 Census SF1 (published baseline), New Jersey (FIPS {STATE_NJ})")
     print("\nOfficial variable labels from the API -- verify they match intent:")
-    for code, label in fetch_official_labels().items():
+    for code, label in fetch_official_labels(DATASET, VINTAGE, VARIABLE_COLS).items():
         print(f"  {code}  {label}")
         print(f"  {'':<9}-> we call it: {VARIABLES[code]}")
 
