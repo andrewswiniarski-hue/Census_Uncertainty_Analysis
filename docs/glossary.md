@@ -337,3 +337,24 @@ geography, usually because too few sampled households fall in the category. Five
 counties publish no median home value in the 2020-2024 ACS 5-year data. Different
 from a zero, which is a published count of none.
 
+
+**Reliability score (dashboard card):** **Our methodology**, not a Census Bureau
+product. A 0 to 100 score for one figure in one county, shown in a band strip at the
+top of each card on the US county dashboard: the average of its sampling sub-score
+and, where the Bureau publishes an imputation table for that item, its imputation
+sub-score. Higher means more reliable. Bands: Higher reliability (75 and above),
+Moderate reliability (50 to below 75), Lower reliability (below 50), and a band is
+never better than the CV alone would give it. Implemented as
+`analysis.composite.reliability_score` (HANDOFF decision #19).
+
+**Sampling sub-score:** The CV mapped onto 0 to 100 through fixed anchors: 100 at a
+CV of 0, 75 at 0.12 (the ESRI high-reliability line), 50 at 0.30 (the NCHS caution
+line), and 0 at 1/1.645 (about 0.61), where the margin of error equals the estimate
+and the 90% interval reaches zero. Straight lines in between.
+
+**Imputation sub-score:** How a county's imputation (allocation) rate for an item
+compares with every US county on the same allocation table: 100 at or below the
+national median, 50 at the national 75th percentile, 0 for the most imputed county.
+Relative rather than absolute because no published standard says how much imputation
+is too much, and rates depend mostly on the question asked (the median county imputes
+38% of household incomes but about 1% of ages).
