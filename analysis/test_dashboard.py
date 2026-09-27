@@ -17,7 +17,9 @@ import pandas as pd
 from analysis.dashboard import (
     CV_COLOR_CONTROLLED,
     CV_COLOR_NO_DATA,
+    CV_BLUE_ORANGE_STOPS,
     CV_SEQ_STOPS,
+    cv_color_blue_orange,
     cv_color_sequential,
     BANDS,
     RAW_DIR,
@@ -403,8 +405,58 @@ def _luminance(rgb) -> float:
     return 0.2126 * r + 0.7152 * g + 0.0722 * b
 
 
+def _oklab(rgb) -> np.ndarray:
+    """OKLab coordinates of an (r, g, b) triple (Ottosson 2020); Euclidean
+    distance between two of these approximates how different they look."""
+    def lin(v: float) -> float:
+        v = v / 255
+        return v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4
+    r, g, b = (lin(x) for x in rgb[:3])
+    lms = np.cbrt([0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b,
+                   0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b,
+                   0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b])
+    return np.array([[0.2104542553, 0.7936177850, -0.0040720468],
+                     [1.9779984951, -2.4285922050, 0.4505937099],
+                     [0.0259040371, 0.7827717662, -0.8086757660]]) @ lms
+
+
+class CvColorBlueOrangeTest(unittest.TestCase):
+    """The v2 dashboard's CV ramp (2026-09-16): blue to purple to orange, with no
+    near-white midpoint for a card bar to vanish into."""
+
+    RAMP = [cv_color_blue_orange(cv) for cv in np.linspace(0, 0.5, 51)]
+
+    def test_endpoints_and_midpoint_are_the_stops(self) -> None:
+        self.assertEqual(cv_color_blue_orange(0.0)[:3], list(CV_BLUE_ORANGE_STOPS[0]))
+        self.assertEqual(cv_color_blue_orange(0.25)[:3], list(CV_BLUE_ORANGE_STOPS[1]))
+        self.assertEqual(cv_color_blue_orange(0.5)[:3], list(CV_BLUE_ORANGE_STOPS[-1]))
+        self.assertEqual(cv_color_blue_orange(3.0)[:3], list(CV_BLUE_ORANGE_STOPS[-1]))   # capped
+        self.assertEqual(cv_color_blue_orange(-0.2)[:3], list(CV_BLUE_ORANGE_STOPS[0]))   # clamped
+
+    def test_no_step_disappears_on_a_white_card(self) -> None:
+        # cv_color()'s near-white midpoint measured 1.07:1; this ramp's lowest is 2.25:1.
+        worst = min(1.05 / (_luminance(c) + 0.05) for c in self.RAMP)
+        self.assertGreaterEqual(worst, 2.2)
+
+    def test_lightness_rises_steadily_so_grayscale_keeps_the_order(self) -> None:
+        lums = [_luminance(c) for c in self.RAMP]
+        self.assertTrue(all(a < b for a, b in zip(lums, lums[1:])), lums)
+
+    def test_no_step_looks_like_controlled_or_no_data(self) -> None:
+        # Every ramp step must sit at least twice as far from the two map-only
+        # colors as those two sit from each other.
+        special = [_oklab(CV_COLOR_CONTROLLED), _oklab(CV_COLOR_NO_DATA)]
+        floor = 2 * np.linalg.norm(special[0] - special[1])
+        nearest = min(np.linalg.norm(_oklab(c) - s) for c in self.RAMP for s in special)
+        self.assertGreaterEqual(nearest, floor)
+
+    def test_missing_cv_is_no_data_and_alpha_passes_through(self) -> None:
+        self.assertEqual(cv_color_blue_orange(float("nan")), list(CV_COLOR_NO_DATA) + [200])
+        self.assertEqual(cv_color_blue_orange(None, alpha=255)[3], 255)
+
+
 class CvColorSequentialTest(unittest.TestCase):
-    """The v2 dashboard's CV ramp (2026-09-14): a magnitude takes one hue, light to dark."""
+    """The single-hue CV ramp v2 used from 2026-09-14 to 2026-09-16, kept for reference."""
 
     def test_darker_means_higher_cv(self) -> None:
         lums = [_luminance(cv_color_sequential(cv)) for cv in np.linspace(0, 0.5, 26)]

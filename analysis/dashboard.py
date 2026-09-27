@@ -1053,12 +1053,44 @@ def cv_color_sequential(cv: float, *, cv_cap: float = 0.5, alpha: int = 200) -> 
     `cv_cap` render as the darkest step (a scale, not a verdict: there is no
     off-scale color), and negative values clamp to the lightest step.
     """
+    return _ramp_color(cv, CV_SEQ_STOPS, cv_cap, alpha)
+
+
+# Blue-orange CV ramp for Streamlit/app_US_v2.py (lead decision, 2026-09-16), which
+# replaces cv_color_sequential() there. It restores cv_color()'s Okabe-Ito blue
+# (low CV) and orange (high CV) ends, which the lead prefers because the two ends
+# read apart faster than two shades of blue. cv_color()'s near-white midpoint is
+# not restored: it measured 1.07:1 contrast on white, so card bars near CV 25%
+# vanished. The midpoint here is Okabe-Ito's reddish purple (#CC79A7), from the same
+# colorblind-safe palette as the ends (Okabe and Ito, "Color Universal Design",
+# 2008). Measured along the whole ramp (2026-09-16): every step is at least 2.25:1
+# on white; lightness rises steadily from blue to orange, so the order survives in
+# grayscale (unlike cv_color()); and every step is at least twice as far, in OKLab
+# distance, from CV_COLOR_CONTROLLED and CV_COLOR_NO_DATA as those two colors are
+# from each other. Trade-off: the high-CV end is the lighter end, the reverse of
+# cv_color_sequential(), so the map legend carries the reading direction.
+# cv_color_sequential() is kept for reference and its tests; v2 no longer calls it.
+CV_BLUE_ORANGE_STOPS = ((0, 114, 178), (204, 121, 167), (230, 159, 0))
+
+
+def cv_color_blue_orange(cv: float, *, cv_cap: float = 0.5, alpha: int = 200) -> list[int]:
+    """RGBA on a blue (low CV) to purple to orange (high CV) ramp.
+
+    Same contract as cv_color(): NaN returns CV_COLOR_NO_DATA, values at or above
+    `cv_cap` render as the full orange (a scale, not a verdict), and negative
+    values clamp to the blue end.
+    """
+    return _ramp_color(cv, CV_BLUE_ORANGE_STOPS, cv_cap, alpha)
+
+
+def _ramp_color(cv, stops, cv_cap: float, alpha: int) -> list[int]:
+    """Piecewise-linear RGB interpolation across evenly spaced `stops`."""
     if cv is None or np.isnan(cv):
         return list(CV_COLOR_NO_DATA) + [alpha]
     t = min(max(float(cv), 0.0), cv_cap) / cv_cap
-    seg = t * (len(CV_SEQ_STOPS) - 1)
-    i = min(int(seg), len(CV_SEQ_STOPS) - 2)
-    lo, hi, local_t = CV_SEQ_STOPS[i], CV_SEQ_STOPS[i + 1], seg - i
+    seg = t * (len(stops) - 1)
+    i = min(int(seg), len(stops) - 2)
+    lo, hi, local_t = stops[i], stops[i + 1], seg - i
     return [int(round(lo[c] + local_t * (hi[c] - lo[c]))) for c in range(3)] + [alpha]
 
 

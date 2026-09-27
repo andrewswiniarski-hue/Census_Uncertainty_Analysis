@@ -15,8 +15,10 @@ See WORKLOG.md 2026-09-08 and 2026-09-14 and Streamlit/README.md.
 
 The history notes below are v1.1's. Where they say app_NJ.py they mean
 Streamlit/app.py (a planned rename that never landed), and app_US.py
-means app_US_v1.1.py. Point 3's blue-to-orange cv_color() is replaced in
-this file by cv_color_sequential(), a single-hue ramp (2026-09-14).
+means app_US_v1.1.py. Point 3's cv_color() is replaced in this file by
+cv_color_blue_orange() (2026-09-16): the same blue and orange ends with a
+visible purple midpoint in place of near-white. A single-hue blue ramp,
+cv_color_sequential(), was used from 2026-09-14 to 2026-09-16.
 
 Map-first, same interaction model as Streamlit/app_NJ.py: click a state to
 see its counties, click a county (or search the filter panel at the top of
@@ -136,7 +138,7 @@ from analysis.dashboard import (
     census_region,
     children_of,
     cv_color,
-    cv_color_sequential,
+    cv_color_blue_orange,
     CV_COLOR_CONTROLLED,
     CV_COLOR_NO_DATA,
     cv_from_range,
@@ -929,8 +931,8 @@ def _interval_svg(
     ax.axis("off"), which hid the zero, the ticks and the units that make
     that width legible. They are now drawn.
 
-    Fill colour comes from cv_color_sequential(), the same ramp the map uses, so a
-    saturated bar here means what a saturated county means there.
+    Fill colour comes from cv_color_blue_orange(), the same ramp the map uses, so a
+    bar's color here means what a county's color means there.
 
     `reference`: (value, label, moe) for a comparison marker. Two kinds,
     distinguished by whether `moe` is given, because they are not the same
@@ -992,7 +994,7 @@ def _interval_svg(
     def clamp(px: float, pad: float) -> float:
         return max(PADL + pad, min(W - PADR - pad, px))
 
-    r, g, b = cv_color_sequential(cv)[:3]
+    r, g, b = cv_color_blue_orange(cv)[:3]
     bx, bw = x(display_low), max(2.0, x(high) - x(display_low))
     p = [f'<svg viewBox="0 0 {W:.0f} {H:.0f}" width="100%" height="auto" '
          f'style="display:block;overflow:visible" role="img" '
@@ -1203,7 +1205,7 @@ def render_card(
     # means the same thing everywhere in the app, not a new signal.
     cv_badge = ""
     if not np.isnan(cv):
-        r, g, b, _ = cv_color_sequential(cv, alpha=255)
+        r, g, b, _ = cv_color_blue_orange(cv, alpha=255)
         cv_badge = (
             f"<span class='card-cv-badge' style='background: rgba({r},{g},{b},0.16); "
             f"border-left: 3px solid rgb({r},{g},{b});'>CV {cv * 100:.1f}%</span>"
@@ -1334,9 +1336,11 @@ def render_card(
 # Map
 # ---------------------------------------------------------------------------
 
-PEER_BORDER_COLOR = [136, 34, 196, 255]  # saturated violet -- outside the blue/orange CV ramp, so
-                                          # a peer border never reads as a CV signal (statistical
-                                          # peer counties, 2026-08-30)
+PEER_BORDER_COLOR = [136, 34, 196, 255]  # saturated violet, so a peer border never reads as a CV
+                                          # signal (statistical peer counties, 2026-08-30). The CV
+                                          # ramp now has a purple midpoint (2026-09-16); this violet
+                                          # is still at least 0.18 OKLab away from every ramp step,
+                                          # the same margin it had from the blue-only ramp.
 
 
 def _controlled_keys(df: pd.DataFrame, measure: str) -> set[str]:
@@ -1388,7 +1392,7 @@ def render_map(
         elif key in controlled:
             rgba = list(CV_COLOR_CONTROLLED) + [200]
         else:
-            rgba = cv_color_sequential(cv_by_key.get(key, float("nan")))
+            rgba = cv_color_blue_orange(cv_by_key.get(key, float("nan")))
         feat["properties"]["fill_color"] = rgba
         if key == selected_key:
             feat["properties"]["border_width"] = 3
@@ -1445,12 +1449,12 @@ def render_map(
         swatches = "".join(
             f"<span style='display:inline-block;width:14px;height:11px;"
             f"background:rgba({r},{g},{b},{a});'></span>"
-            for r, g, b, a in [cv_color_sequential(t) for t in np.linspace(0, 0.5, 12)]
+            for r, g, b, a in [cv_color_blue_orange(t) for t in np.linspace(0, 0.5, 12)]
         )
         st.markdown(
             f"<div>{swatches}</div><span class='legend-label'>CV 0% to 50%+, a continuous "
-            f"scale: lighter blue is a lower CV, darker blue a higher CV (a larger margin of "
-            f"error relative to the estimate)</span>",
+            f"scale from blue (lower CV) through purple to orange (higher CV, a larger margin "
+            f"of error relative to the estimate)</span>",
             unsafe_allow_html=True,
         )
         # Explain every non-ramp color actually on the map, and only those.
@@ -1715,8 +1719,9 @@ def render_welcome() -> None:
             "very different for a \\$10,000 estimate than for a \\$500,000 estimate."
         )
         st.markdown(
-            "**Lighter blue = lower CV / more certain**  \n"
-            "**Darker blue = higher CV / less certain**"
+            "**Blue = lower CV / more certain**  \n"
+            "**Orange = higher CV / less certain**  \n"
+            "Purple marks the middle of the scale."
         )
         st.caption(
             "The color scale is continuous, not a pass/fail grade. There is no "
