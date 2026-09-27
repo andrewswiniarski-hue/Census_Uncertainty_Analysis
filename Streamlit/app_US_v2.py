@@ -46,9 +46,11 @@ What changed from app_NJ.py, and why
    3,144 counties at once is never rendered; the county view is always
    scoped to one selected state (62 median, 254 max in Texas).
 3. Neutral federal-statistical-agency voice (sponsor direction,
-   2026-08-12, see WORKLOG and README's "Composite tier philosophy" open
-   question): no TIER_SOLID/CARE/RISKY verdict chip, no "safe to cite" /
-   "too risky" language. The map colors on CV directly via a continuous
+   2026-08-12, see README's "Composite tier philosophy" open question):
+   no TIER_SOLID/CARE/RISKY verdict chip, no "safe to cite" / "too risky"
+   language. The card reliability score (point 6) therefore uses
+   descriptive bands, "Higher / Moderate / Lower reliability", which
+   describe the score and give no advice. The map colors on CV directly via a continuous
    blue-to-orange ramp (cv_color(), see analysis/dashboard.py for the
    colorblind-safety rationale); cards show the CV as a number, the CI
    bounds explicitly labeled 90%, and a dot-plot-plus-gradient-band
@@ -66,13 +68,14 @@ What changed from app_NJ.py, and why
    explicit 90%-CI bounds, a percentile-rank-within-the-current-filter
    line, a county-vs-state significant-difference check, and (where
    available) an ACS 1-year vs 5-year precision comparison.
-6. The composite score question (README "Composite tier philosophy",
-   still open for mentors) is NOT resolved by this app. The two competing
-   candidate formulas in analysis.composite (equal_weight_score,
-   worst_component_score) remain available there for the notebooks, but
-   this app no longer surfaces either on its cards (2026-08-18) -- the one
-   unambiguous number (a measure's own CV percentile rank within the
-   current filter set) is what drives sorting/filtering here instead.
+6. Card reliability score (lead decision #19, 2026-09-27): an equal-weight
+   average of a sampling sub-score (from the CV, anchored to the ESRI 0.12
+   and NCHS 0.30 lines) and, for income and poverty figures, an imputation
+   sub-score relative to all US counties, with the band capped at the CV's
+   own band. Built by analysis.composite.reliability_score(); spec in
+   docs/superpowers/specs/2026-09-27-composite-reliability-score-cards-design.md.
+   The composite tier question stays open for mentors; this is our
+   methodology, not a Census Bureau product.
 
 Run from the repo root:
     streamlit run Streamlit/app_US_v2.py
@@ -563,7 +566,7 @@ a:hover { color: #0D54B0; }
 .score-band  { font-weight: 700; }
 .score-num   { color: #5A5A5A; white-space: nowrap; }
 .score-num b { color: #131313; }
-.score-bar-row { display: grid; grid-template-columns: 8.5rem 1fr 2.5rem; gap: 8px;
+.score-bar-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px;
                  align-items: center; padding: 5px 2px; font-size: 0.85rem;
                  border-bottom: 1px solid #E6E6E6; }
 .score-bar-row .label { color: #5A5A5A; }
@@ -1271,8 +1274,8 @@ def _score_breakdown_html(rs: composite.ReliabilityScore) -> str:
         f"<span class='value'>{rs.score:.1f} / 100</span></div>"
         f"<div class='stat-row'><span class='label'>Band</span>"
         f"<span class='value'>{band}</span></div>"
-        + bar("Sampling sub-score", rs.sampling_sub, "")
-        + bar("Imputation sub-score", rs.imputation_sub, missing)
+        + bar("Sampling", rs.sampling_sub, "")
+        + bar("Imputation", rs.imputation_sub, missing)
         + f"<div class='stat-row'><span class='label'>Imputation source</span>"
         f"<span class='value'>{source}</span></div>"
     )
@@ -1294,6 +1297,7 @@ def render_card(
     geo_label: str | None = None, table_id: str | None = None,
     measure_label: str | None = None, unit_suffix: str = "",
     compact: bool = False,
+    reliability: composite.ReliabilityScore | None = None,
 ) -> None:
     """Neutral-voice card: publishes the estimate, MOE, and CV; never
     recommends. See app_US.py's module docstring, point 3, for the
@@ -1328,6 +1332,9 @@ def render_card(
     `compact`: set by callers rendering into the four-across topic grid,
     where the interval graphic needs its own narrower geometry to keep
     its type legible. See _interval_svg's `compact` note.
+    `reliability`: the card's score (lead decision #19); when given, a band
+    strip opens the card, a one-line note follows the interval graphic, and
+    the breakdown joins "Show me the statistics".
     `acs1_compare`: (acs1_est, acs1_moe), if given and this county has
     ACS 1-year data for this measure, adds a 1-year-vs-5-year precision
     comparison line.
@@ -1389,6 +1396,8 @@ def render_card(
             f"border-left: 3px solid rgb({r},{g},{b});'>CV {cv * 100:.1f}%</span>"
         )
     with st.container(border=True):
+        if reliability is not None:
+            st.markdown(_score_strip_html(reliability, compact=compact), unsafe_allow_html=True)
         st.markdown(f"**{title}**")
         st.markdown(
             f"<div class='card-main-row'>"
@@ -1414,6 +1423,8 @@ def render_card(
             )
             if reference_note and show_state:
                 st.caption(reference_note)
+        if reliability is not None:
+            st.markdown(_score_note_html(reliability), unsafe_allow_html=True)
         if caveat:
             st.caption(caveat)
         if low < 0:
@@ -1503,7 +1514,19 @@ def render_card(
                     " Allocation is a separate signal from CV -- a county can have a low "
                     "CV and still have most of this figure imputed."
                 )
+            if reliability is not None:
+                note += (
+                    " Reliability score (our methodology, pending mentor review): the average "
+                    "of a sampling sub-score set from the CV (100 at 0, 75 at 0.12, the ESRI "
+                    "high-reliability line, 50 at 0.30, the NCHS caution line, and 0 where the "
+                    "margin of error equals the estimate) and, where the Census Bureau publishes "
+                    "an imputation table for this figure, an imputation sub-score comparing this "
+                    "county with all US counties (100 at or below the national median, 50 at "
+                    "the 75th percentile). The band is never higher than the CV alone gives."
+                )
             _stats_panel(rows, note)
+            if reliability is not None:
+                st.markdown(_score_breakdown_html(reliability), unsafe_allow_html=True)
 
             if geo_label:
                 sentence = (
@@ -2332,6 +2355,8 @@ def render_explorer(data: dict) -> None:
             geo_label=label, table_id=measure.table_id,
             measure_label=measure.measure_label, unit_suffix=measure.unit_suffix,
             compact=True,
+            reliability=score_for(measure_label, code, cv_from_range(e, *acs_range(e, m)),
+                                  data["imputation_subs"]),
         )
 
     # Card checklist (variable expansion, 2026-08-30 -- MSBA capstone) --
@@ -2426,6 +2451,11 @@ def render_explorer(data: dict) -> None:
                         toggle_key="Median household income",
                         acs1_compare=acs1_income,
                         geo_label=label, table_id="B19013",
+                        reliability=score_for(
+                            "Median household income", code,
+                            cv_from_range(income_est, *acs_range(income_est, income_moe)),
+                            data["imputation_subs"],
+                        ),
                     )
 
     # Every other selected measure, grouped by topic and chunked into
