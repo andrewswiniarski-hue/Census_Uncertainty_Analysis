@@ -302,8 +302,13 @@ def reliability_score(
 ) -> ReliabilityScore | None:
     """Equal-weight score with the CV guard on the band. None when CV is NaN.
 
+    The score is rounded half up to a whole number and the band is assigned
+    from that rounded score, so the number a card shows is the number that
+    was classified (final review, 2026-09-27: a raw 74.502 displayed as 75
+    beside "Moderate"). Sub-scores stay unrounded.
+
     A NaN `imputation_sub` is treated as absent (sampling only); pass `note`
-    to say why ("not published" or "not available for this county").
+    to say why ("not scored" or "not available for this county").
     """
     sampling = cv_subscore(cv)
     if np.isnan(sampling):
@@ -311,7 +316,8 @@ def reliability_score(
     imp = None
     if imputation_sub is not None and np.isfinite(imputation_sub):
         imp = float(imputation_sub)
-    score = sampling if imp is None else (sampling + imp) / 2
+    raw = sampling if imp is None else (sampling + imp) / 2
+    score = float(np.floor(raw + 0.5))
     by_score = _band_from_score(score)
     by_cv = _band_from_cv(cv)
     band = min(by_score, by_cv, key=BAND_ORDER.index)

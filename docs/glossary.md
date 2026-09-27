@@ -341,8 +341,9 @@ from a zero, which is a published count of none.
 **Reliability score (dashboard card):** **Our methodology**, not a Census Bureau
 product. A 0 to 100 score for one figure in one county, shown in a band strip at the
 top of each card on the US county dashboard: the average of its sampling sub-score
-and, where the Bureau publishes an imputation table for that item, its imputation
-sub-score. Higher means more reliable. Bands: Higher reliability (75 and above),
+and, for income and poverty figures, its imputation sub-score. Higher means more
+reliable. The score is rounded to a whole number and the band is read from that
+rounded score. Bands: Higher reliability (75 and above),
 Moderate reliability (50 to below 75), Lower reliability (below 50), and a band is
 never better than the CV alone would give it. Implemented as
 `analysis.composite.reliability_score` (HANDOFF decision #19).

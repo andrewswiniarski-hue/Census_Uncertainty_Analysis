@@ -126,3 +126,9 @@ The score never raises in the page: a missing CV gives no strip, and a missing a
 - `docs/glossary.md`: reliability score, sampling sub-score, imputation sub-score.
 - `Streamlit/README.md`: what the strip means and how a new measure gets an imputation source.
 - Before any of the reference values go into the findings report or a deck, they need an assert-guarded notebook (CLAUDE.md). Not part of this change.
+
+## Amendments after the final code review (2026-09-27)
+
+- **Rounding.** The score is rounded half up to a whole number and the band is assigned from that rounded score, so the number on the card is the number that was classified. Before this, 783 county figures showed a score that contradicted their band (for example Los Angeles County median income, raw 74.502, shown as 75 beside Moderate). Median household income bands become 68.09% Higher, 24.79% Moderate, 7.13% Lower.
+- **Wording for sampling-only cards.** Decision 3's "not published" is replaced on screen by "imputation is not part of this figure's score". The Census Bureau does publish age imputation (B99012); the age bands are sampling only by lead decision, so "not published" was untrue for them, and may be for other measures whose allocation tables were never checked.
+

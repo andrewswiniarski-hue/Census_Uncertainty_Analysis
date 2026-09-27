@@ -74,7 +74,17 @@ def test_score_for_sampling_only_measure(app):
     rs = app.score_for("Unemployed", "04001", 0.078, {"income": pd.Series(dtype=float),
                                                       "family_poverty": pd.Series(dtype=float)})
     assert rs.imputation_sub is None
-    assert rs.imputation_note == "not published"
+    assert rs.imputation_note == "not scored"
+
+
+def test_score_for_age_band_is_not_called_unpublished(app):
+    # Final review: the Bureau DOES publish age imputation (B99012); age bands
+    # are sampling only by lead decision, so the card must not say "not published".
+    subs = {"income": pd.Series(dtype=float), "family_poverty": pd.Series(dtype=float)}
+    rs = app.score_for("Under 5", "04001", 0.03, subs)
+    text = (app._score_note_html(rs) + app._score_breakdown_html(rs)).lower()
+    assert "not published" not in text
+    assert "not part of this figure's score" in text
 
 
 def test_score_for_county_missing_from_allocation(app):
@@ -94,6 +104,7 @@ def test_strip_shows_band_and_score(app):
     html = app._score_strip_html(rs)
     assert composite.BAND_LOWER in html
     assert "47</b> / 100" in html
+    assert "47 / 100" in app._score_breakdown_html(rs).replace("<b>", "").replace("</b>", "")
     assert app.BAND_COLOR[composite.BAND_LOWER] in html
     compact = app._score_strip_html(rs, compact=True)
     assert "Reliability score" not in compact and "47</b> / 100" in compact
@@ -101,7 +112,7 @@ def test_strip_shows_band_and_score(app):
 
 @pytest.mark.parametrize("cv,imp", [(0.02, None), (0.2, 90.0), (0.5, 10.0), (0.04, 1.7)])
 def test_no_advice_wording(app, cv, imp):
-    rs = composite.reliability_score(cv, imp, source="x", note="not published")
+    rs = composite.reliability_score(cv, imp, source="x", note="not scored")
     text = (app._score_strip_html(rs) + app._score_note_html(rs)
             + app._score_breakdown_html(rs)).lower()
     for word in ADVICE_WORDS:
@@ -111,8 +122,8 @@ def test_no_advice_wording(app, cv, imp):
 def test_note_text(app):
     two = composite.reliability_score(0.0377, 1.72, source="x")
     assert "Sampling 92, imputation 2, averaged." in app._score_note_html(two)
-    only = composite.reliability_score(0.078, note="not published")
-    assert "Sampling only: imputation not published for this figure." in app._score_note_html(only)
+    only = composite.reliability_score(0.078, note="not scored")
+    assert "Sampling only: imputation is not part of this figure's score." in app._score_note_html(only)
     missing = composite.reliability_score(0.078, note="not available for this county")
     assert "imputation rate not available for this county" in app._score_note_html(missing)
 
@@ -120,8 +131,8 @@ def test_note_text(app):
 def test_breakdown_marks_cap_and_missing_imputation(app):
     capped = composite.reliability_score(0.35, 100.0, source="x")
     assert "capped by the CV" in app._score_breakdown_html(capped)
-    only = composite.reliability_score(0.078, note="not published")
-    assert "not published" in app._score_breakdown_html(only)
+    only = composite.reliability_score(0.078, note="not scored")
+    assert "not scored" in app._score_breakdown_html(only)
 
 
 def test_band_text_colors_pass_wcag_aa(app):

@@ -182,7 +182,7 @@ class ReliabilityScoreTest(unittest.TestCase):
 
     def test_sampling_only(self) -> None:
         rs = reliability_score(0.06, note="not published")
-        self.assertAlmostEqual(rs.score, 87.5)
+        self.assertEqual(rs.score, 88)  # 87.5 rounded half up
         self.assertIsNone(rs.imputation_sub)
         self.assertIsNone(rs.imputation_source)
         self.assertEqual(rs.imputation_note, "not published")
@@ -199,7 +199,7 @@ class ReliabilityScoreTest(unittest.TestCase):
         # CV 0.35 alone is Lower; a perfect imputation sub-score lifts the
         # SCORE to about 71 (Moderate range) but must not lift the BAND.
         rs = reliability_score(0.35, 100.0, source="x")
-        self.assertAlmostEqual(rs.score, 70.94, places=2)
+        self.assertEqual(rs.score, 71)  # raw 70.94
         self.assertEqual(rs.band, BAND_LOWER)
         self.assertTrue(rs.capped_by_cv)
 
@@ -221,7 +221,20 @@ class ReliabilityScoreTest(unittest.TestCase):
                                note="not available for this county")
         self.assertIsNone(rs.imputation_sub)
         self.assertIsNone(rs.imputation_source)
-        self.assertAlmostEqual(rs.score, 87.5)
+        self.assertEqual(rs.score, 88)
+
+    def test_score_rounds_half_up_and_bands_on_the_rounded_score(self) -> None:
+        # Final review: Los Angeles median income scored 74.502, displayed
+        # as "75 / 100" beside "Moderate". The shown number is the banded one.
+        up = reliability_score(0.06, 61.7, source="x")    # raw 74.6
+        self.assertEqual(up.score, 75)
+        self.assertEqual(up.band, BAND_HIGHER)
+        down = reliability_score(0.06, 61.3, source="x")  # raw 74.4
+        self.assertEqual(down.score, 74)
+        self.assertEqual(down.band, BAND_MODERATE)
+        half = reliability_score(0.06, 12.5, source="x")  # raw 50.0 exactly
+        self.assertEqual(half.score, 50)
+        self.assertEqual(reliability_score(0.06, 11.5, source="x").score, 50)  # raw 49.5, half up
 
     def test_is_frozen(self) -> None:
         rs = reliability_score(0.1)
@@ -257,7 +270,7 @@ class ReliabilityScoreRealDataTest(unittest.TestCase):
         rs = reliability_score(float(self.cv["04001"]), float(self.imp["04001"]), source="x")
         self.assertAlmostEqual(rs.sampling_sub, 92.11, places=2)
         self.assertAlmostEqual(rs.imputation_sub, 1.72, places=2)
-        self.assertAlmostEqual(rs.score, 46.91, places=2)
+        self.assertEqual(rs.score, 47)  # raw 46.91
         self.assertEqual(rs.band, BAND_LOWER)
 
     def test_national_band_shares_median_income(self) -> None:
@@ -269,9 +282,15 @@ class ReliabilityScoreRealDataTest(unittest.TestCase):
         ]
         self.assertEqual(len(bands), 3143)
         share = pd.Series(bands).value_counts(normalize=True) * 100
-        self.assertAlmostEqual(share[BAND_HIGHER], 67.58, places=2)
-        self.assertAlmostEqual(share[BAND_MODERATE], 24.98, places=2)
-        self.assertAlmostEqual(share[BAND_LOWER], 7.45, places=2)
+        # After half-up rounding of the score (final review, 2026-09-27).
+        self.assertAlmostEqual(share[BAND_HIGHER], 68.09, places=2)
+        self.assertAlmostEqual(share[BAND_MODERATE], 24.79, places=2)
+        self.assertAlmostEqual(share[BAND_LOWER], 7.13, places=2)
+
+    def test_los_angeles_median_income_shows_the_banded_score(self) -> None:
+        rs = reliability_score(float(self.cv["06037"]), float(self.imp["06037"]), source="x")
+        self.assertEqual(rs.score, 75)  # raw 74.502
+        self.assertEqual(rs.band, BAND_HIGHER)
 
 
 if __name__ == "__main__":

@@ -197,7 +197,7 @@ class ImputationSource(NamedTuple):
 
 # Card reliability score (lead decision #19, 2026-09-27). Only these two
 # tables pair with dashboard measures; every other measure is scored on
-# sampling alone and says "imputation not published". Age bands are
+# sampling alone and says imputation is not part of its score. Age bands are
 # deliberately sampling only: age imputation is 1.1% at the median county,
 # too small for a relative scale to mean anything.
 IMPUTATION_SOURCES: dict[str, ImputationSource] = {
@@ -1224,7 +1224,7 @@ def score_for(measure_key: str, code: str, cv: float,
     """The card score for one measure in one county (None when CV is NaN)."""
     measure = MEASURES[measure_key]
     if measure.imputation is None:
-        return composite.reliability_score(cv, note="not published")
+        return composite.reliability_score(cv, note="not scored")
     src = IMPUTATION_SOURCES[measure.imputation]
     sub = imputation_subs[measure.imputation].get(code, float("nan"))
     if pd.isna(sub):
@@ -1251,7 +1251,7 @@ def _score_note_html(rs: composite.ReliabilityScore) -> str:
     elif rs.imputation_note == "not available for this county":
         text = "Sampling only: imputation rate not available for this county."
     else:
-        text = "Sampling only: imputation not published for this figure."
+        text = "Sampling only: imputation is not part of this figure's score."
     return f"<div class='card-alloc'>{text}</div>"
 
 
@@ -1265,13 +1265,13 @@ def _score_breakdown_html(rs: composite.ReliabilityScore) -> str:
                 f"<span class='score-bar'><span style='width: {value:.0f}%;'></span></span>"
                 f"<span class='value'>{value:.0f}</span></div>")
 
-    missing = rs.imputation_note or "not published"
+    missing = rs.imputation_note or "not scored"
     band = rs.band + (" (capped by the CV)" if rs.capped_by_cv else "")
-    source = "not published" if rs.imputation_source is None else (
+    source = "none used" if rs.imputation_source is None else (
         rs.imputation_source + (" [proxy]" if rs.imputation_is_proxy else ""))
     return (
         f"<div class='stat-row'><span class='label'>Reliability score</span>"
-        f"<span class='value'>{rs.score:.1f} / 100</span></div>"
+        f"<span class='value'>{rs.score:.0f} / 100</span></div>"
         f"<div class='stat-row'><span class='label'>Band</span>"
         f"<span class='value'>{band}</span></div>"
         + bar("Sampling", rs.sampling_sub, "")
@@ -1519,8 +1519,8 @@ def render_card(
                     " Reliability score (our methodology, pending mentor review): the average "
                     "of a sampling sub-score set from the CV (100 at 0, 75 at 0.12, the ESRI "
                     "high-reliability line, 50 at 0.30, the NCHS caution line, and 0 where the "
-                    "margin of error equals the estimate) and, where the Census Bureau publishes "
-                    "an imputation table for this figure, an imputation sub-score comparing this "
+                    "margin of error equals the estimate) and, for income and poverty figures, "
+                    "an imputation sub-score comparing this "
                     "county with all US counties (100 at or below the national median, 50 at "
                     "the 75th percentile). The band is never higher than the CV alone gives."
                 )
