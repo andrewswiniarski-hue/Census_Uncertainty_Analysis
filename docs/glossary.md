@@ -321,8 +321,9 @@ DP04 profile. The **rent burden** card is different again: it is the Bureau's ow
 median of that ratio (B25071).
 
 **State-rate benchmark (expected at the state rate):** **Our methodology**, not a
-Census Bureau figure. The reference marker on a count card: what the county's count
-would be if the county matched its state's rate for that measure. It is the state's
+Census Bureau figure. The state comparison row on a count card, shown when the card's
+"Compare to state" switch is on and drawn with a dashed outline to mark it as modelled:
+what the county's count would be if the county matched its state's rate for that measure. It is the state's
 rate multiplied by the county's own universe. Needed because a raw state count is 10
 to 25 times a county's and cannot share its axis. Its margin of error combines the
 ACS proportion formula (for the rate) with the product formula

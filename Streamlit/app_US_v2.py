@@ -91,7 +91,7 @@ import sys
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import Callable
+from typing import Callable, NamedTuple
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
@@ -877,6 +877,27 @@ _SVG_SURFACE = "#FFFFFF"
 # halo keeps the text readable without breaking the line beneath it.
 _SVG_HALO = (f'paint-order="stroke" stroke="{_SVG_SURFACE}" stroke-width="3.5" '
              f'stroke-linejoin="round"')
+# State comparison row. Neutral grey so the county bar keeps the only CV
+# colour on the card: the state row is context, not a second reliability
+# reading. 2.6:1 on white, enough for a non-text mark (WCAG 1.4.11 asks 3:1
+# of UI components; this is a data mark with a labelled value beside it).
+_SVG_STATE = "#9AA3AD"
+
+
+class StateReference(NamedTuple):
+    """The state comparison drawn as its own row under a card's county bar.
+
+    `modelled` separates the two kinds of claim (see Measure.reference_mode):
+    False for the state's own published value (medians, percentages), drawn
+    as a solid bar over its published MOE; True for our state-rate benchmark
+    for counts (analysis.dashboard.expected_at_rate), drawn lighter with a
+    dashed outline so a modelled figure never looks like a published one.
+    `moe` None or non-finite draws the value as a dot with no bar.
+    """
+    value: float
+    label: str
+    moe: float | None
+    modelled: bool
 
 
 def _nice_ticks(d0: float, d1: float, n: int = 4) -> list[float]:
@@ -910,7 +931,7 @@ def _fmt_tick(v: float, unit_suffix: str) -> str:
 
 def _interval_svg(
     est: float, low: float, high: float, cv: float, *,
-    reference: tuple[float, str, float | None] | None = None,
+    reference: StateReference | None = None,
     unit_suffix: str = "",
     compact: bool = False,
 ) -> str:
@@ -934,23 +955,23 @@ def _interval_svg(
     Fill colour comes from cv_color_blue_orange(), the same ramp the map uses, so a
     bar's color here means what a county's color means there.
 
-    `reference`: (value, label, moe) for a comparison marker. Two kinds,
-    distinguished by whether `moe` is given, because they are not the same
-    kind of claim (see Measure.reference_mode):
-    - A DIRECT reference is the state's own published value, drawn for
-      medians and percentages, which share a county's scale. It is a
-      published Bureau figure the reader can look up, and per the option-A
-      design it is drawn as a bare line with `moe` None.
-    - A RATE reference is the state's rate applied to this county's own
-      universe (analysis.dashboard.expected_at_rate), drawn for counts,
-      whose raw state value runs 10x to 25x a county's and would squash the
+    `reference`: the state comparison, drawn as its OWN labelled row under
+    the county bar on the shared axis (option B, lead decision 2026-09-27,
+    after Census Bureau feedback that a state line drawn across the county
+    bar was hard to read). Until then it was a vertical line over the
+    county bar. None draws the county alone and fits the axis to it, which
+    is what a card shows while its "Compare to state" toggle is off.
+    Two kinds, because they are not the same kind of claim (see
+    Measure.reference_mode and StateReference):
+    - A published state value (medians, percentages), which shares a
+      county's scale: solid grey bar over the state's own published MOE.
+    - A RATE reference, the state's rate applied to this county's own
+      universe (analysis.dashboard.expected_at_rate), for counts, whose raw
+      state value runs 10x to 25x a county's and would squash the
       zero-anchored axis to nothing. This one is OUR modelled expectation,
-      not a Bureau publication, so its propagated MOE is drawn as a band
-      behind the line. Showing a derived benchmark as a hard line would
-      assert a precision we did not measure, which is the exact failure
-      this project exists to correct. The differing treatment is the point,
-      not an inconsistency: the reader can see which marker is a
-      measurement and which is a model.
+      not a Bureau publication, so it is drawn lighter with a dashed
+      outline. The differing treatment is the point, not an inconsistency:
+      the reader can see which row is a measurement and which is a model.
 
     Still no violin or density curve: ACS margins of error come from
     successive-difference replication, which yields a variance, not a known
@@ -978,12 +999,19 @@ def _interval_svg(
     needs closing on every rerun.
     """
     display_low = max(0.0, low)
-    ref_val = reference[0] if reference is not None else None
-    upper = max(high, est, ref_val if ref_val is not None else 0.0)
+    show_ref = reference is not None and np.isfinite(reference.value)
+    ref_moe = (reference.moe if show_ref and reference.moe is not None
+               and np.isfinite(reference.moe) and reference.moe > 0 else None)
+    ref_top = (reference.value + (ref_moe or 0.0)) if show_ref else 0.0
+    upper = max(high, est, ref_top)
     if not np.isfinite(upper) or upper <= 0:
         return ""
 
-    W, H, PADL, PADR = (240.0 if compact else 560.0), 92.0, 12.0, 12.0
+    # The state row adds ROW_GAP units below the county row and pushes the
+    # axis down by the same amount; the county row's geometry is unchanged.
+    ROW_GAP = 42.0 if show_ref else 0.0
+    W, H, PADL, PADR = (240.0 if compact else 560.0), 92.0 + ROW_GAP, 12.0, 12.0
+    axis_y = 66.0 + ROW_GAP
     tick_target = 3 if compact else 4
     d1 = upper * 1.08
     span = W - PADL - PADR
@@ -994,43 +1022,61 @@ def _interval_svg(
     def clamp(px: float, pad: float) -> float:
         return max(PADL + pad, min(W - PADR - pad, px))
 
+    # Half a label's rendered width at font-size 12, estimated at 6.6 units
+    # per character (Roboto digits and lowercase average ~0.55 em), so a
+    # centred label is kept inside the card by its OWN length.
+    def label_x(px: float, text: str) -> float:
+        return clamp(px, len(text) * 3.3)
+
     r, g, b = cv_color_blue_orange(cv)[:3]
     bx, bw = x(display_low), max(2.0, x(high) - x(display_low))
     p = [f'<svg viewBox="0 0 {W:.0f} {H:.0f}" width="100%" height="auto" '
          f'style="display:block;overflow:visible" role="img" '
          f'aria-label="Estimate {est:,.0f}{unit_suffix}, '
-         f'{CONFIDENCE_LEVEL_PCT}% confidence interval {display_low:,.0f} to {high:,.0f}">']
+         f'{CONFIDENCE_LEVEL_PCT}% confidence interval {display_low:,.0f} to {high:,.0f}'
+         + (f'; {reference.label} {reference.value:,.0f}{unit_suffix}' if show_ref else '')
+         + '">']
 
-    # Reference marker first, so band and line sit UNDER the haloed labels.
-    if ref_val is not None and np.isfinite(ref_val):
-        rx = x(ref_val)
-        ref_moe = reference[2] if len(reference) > 2 else None
-        if ref_moe is not None and np.isfinite(ref_moe) and ref_moe > 0:
-            bl, bh = x(max(0.0, ref_val - ref_moe)), x(ref_val + ref_moe)
-            p.append(f'<rect x="{bl:.1f}" y="20" width="{max(1.0, bh - bl):.1f}" '
-                     f'height="40" fill="{_SVG_INK}" opacity="0.10"/>')
-        p.append(f'<line x1="{rx:.1f}" y1="20" x2="{rx:.1f}" y2="60" '
-                 f'stroke="{_SVG_INK}" stroke-width="1.5"/>')
-        p.append(f'<text x="{clamp(rx, 56):.1f}" y="14" font-size="12" '
-                 f'fill="{_SVG_INK}" text-anchor="middle" {_SVG_HALO}>'
-                 f'{reference[1]} {ref_val:,.0f}{unit_suffix}</text>')
-
-    p.append(f'<text x="{clamp(bx + bw / 2, 62):.1f}" y="33" font-size="12" '
-             f'fill="{_SVG_MUTED}" text-anchor="middle" {_SVG_HALO}>'
-             f'{display_low:,.0f}{unit_suffix} – {high:,.0f}{unit_suffix}</text>')
+    # County row. Its label gains a "County" prefix only when a state row
+    # sits under it, so the two rows can be told apart without a legend.
+    county_text = (("County " if show_ref else "")
+                   + f"{display_low:,.0f}{unit_suffix} – {high:,.0f}{unit_suffix}")
+    p.append(f'<text x="{label_x(bx + bw / 2, county_text):.1f}" y="33" '
+             f'font-size="12" fill="{_SVG_MUTED}" text-anchor="middle" {_SVG_HALO}>'
+             f'{county_text}</text>')
     p.append(f'<rect x="{bx:.1f}" y="39" width="{bw:.1f}" height="15" rx="4" '
              f'fill="rgb({r},{g},{b})"/>')
     p.append(f'<circle cx="{x(est):.1f}" cy="46.5" r="4.5" fill="{_SVG_INK}" '
              f'stroke="{_SVG_SURFACE}" stroke-width="2"/>')
 
-    p.append(f'<line x1="{PADL}" y1="66" x2="{W - PADR}" y2="66" '
+    # State row: same geometry as the county row, ROW_GAP lower.
+    if show_ref:
+        sv = reference.value
+        if ref_moe is not None:
+            sl, sh = x(max(0.0, sv - ref_moe)), x(sv + ref_moe)
+            style = (f'fill="{_SVG_STATE}" fill-opacity="0.35" stroke="{_SVG_MUTED}" '
+                     f'stroke-width="1" stroke-dasharray="3 2"' if reference.modelled
+                     else f'fill="{_SVG_STATE}"')
+            p.append(f'<rect x="{sl:.1f}" y="{39 + ROW_GAP:.0f}" width="{max(2.0, sh - sl):.1f}" '
+                     f'height="15" rx="4" {style}/>')
+        p.append(f'<circle cx="{x(sv):.1f}" cy="{46.5 + ROW_GAP:.1f}" r="4.5" '
+                 f'fill="{_SVG_INK}" stroke="{_SVG_SURFACE}" stroke-width="2"/>')
+        state_text = f"{reference.label} {sv:,.0f}{unit_suffix}"
+        if len(state_text) * 6.6 > span:
+            # Too long for this card (e.g. "at District of Columbia's rate"
+            # in a four-across card). The card's note names the state.
+            state_text = f"{'at state rate' if reference.modelled else 'State'} {sv:,.0f}{unit_suffix}"
+        p.append(f'<text x="{label_x(x(sv), state_text):.1f}" y="{33 + ROW_GAP:.0f}" font-size="12" '
+                 f'fill="{_SVG_MUTED}" text-anchor="middle" {_SVG_HALO}>{state_text}</text>')
+
+    p.append(f'<line x1="{PADL}" y1="{axis_y:.0f}" x2="{W - PADR}" y2="{axis_y:.0f}" '
              f'stroke="{_SVG_RULE}" stroke-width="1"/>')
     for t in _nice_ticks(0.0, d1, tick_target):
         px = x(t)
         anchor = "start" if px < PADL + 16 else "end" if px > W - PADR - 16 else "middle"
-        p.append(f'<line x1="{px:.1f}" y1="66" x2="{px:.1f}" y2="70" '
+        p.append(f'<line x1="{px:.1f}" y1="{axis_y:.0f}" x2="{px:.1f}" y2="{axis_y + 4:.0f}" '
                  f'stroke="{_SVG_RULE}" stroke-width="1"/>')
-        p.append(f'<text x="{px:.1f}" y="82" font-size="11" fill="{_SVG_MUTED}" '
+        p.append(f'<text x="{px:.1f}" y="{axis_y + 16:.0f}" font-size="11" fill="{_SVG_MUTED}" '
                  f'text-anchor="{anchor}">{_fmt_tick(t, unit_suffix)}</text>')
     p.append("</svg>")
     return "".join(p)
@@ -1120,8 +1166,9 @@ def render_card(
     alloc_threshold_pct: float | None = None, alloc_is_proxy: bool = False,
     percentile_rank: float | None = None, filter_n: int | None = None,
     state_compare: tuple[float, float, str] | None = None,
-    reference: tuple[float, str, float | None] | None = None,
+    reference: StateReference | None = None,
     reference_note: str | None = None,
+    toggle_key: str | None = None,
     acs1_compare: tuple[float, float] | None = None,
     geo_label: str | None = None, table_id: str | None = None,
     measure_label: str | None = None, unit_suffix: str = "",
@@ -1138,12 +1185,22 @@ def render_card(
     `state_compare`: (state_est, state_moe, state_label), if given, adds a
     county-vs-state significant-difference line (90% confidence, Census
     handbook test) with the nested-geography caveat.
-    `reference`: (value, short_label), if given, draws that value as a
-    marker on the interval graphic's axis. Separate from `state_compare`
-    on purpose: `state_compare` drives a PROSE test and is safe for any
-    measure, while a marker shares the county's axis and is therefore only
-    valid where the two sit on the same scale (medians, percentages, never
-    counts). Total population passes the former and not the latter.
+    `reference`: the state comparison row drawn under the county bar (see
+    StateReference and _interval_svg). Separate from `state_compare` on
+    purpose: `state_compare` drives a PROSE test and is safe for any
+    measure, while the row shares the county's axis and is therefore only
+    valid where the two sit on the same scale. Total population passes the
+    former and not the latter.
+    Whenever `reference` is given the card carries a "Compare to state"
+    toggle, OFF by default (lead decision 2026-09-27, after Census Bureau
+    feedback that county and state on one bar was hard to read). Off, the
+    card is county only: no state row, the axis fits the county, and the
+    reference note and the `state_compare` line are hidden too, since both
+    describe the state comparison. Cards without a reference (total
+    population) keep their `state_compare` line unconditionally.
+    `toggle_key`: unique, stable widget key for that toggle, so each card
+    remembers its own setting as the user moves between counties. Falls
+    back to `title`, which is NOT unique across the age and poverty bands.
     `reference_note`: required disclosure whenever `reference` holds a
     MODELLED value rather than a published one, so the card never presents
     our arithmetic as a Census Bureau figure.
@@ -1220,13 +1277,21 @@ def render_card(
             + rate_line + alloc_line,
             unsafe_allow_html=True,
         )
+        show_state = True
+        if reference is not None:
+            show_state = st.toggle(
+                "Compare to state", value=False, key=f"cmp_state::{toggle_key or title}",
+                help="Adds the state's figure as a grey row under this county's bar, "
+                     "on the same axis. Off shows the county alone.",
+            )
         if not np.isnan(cv):
             st.markdown(
-                _interval_svg(est, low, high, cv, reference=reference,
+                _interval_svg(est, low, high, cv,
+                              reference=reference if show_state else None,
                               unit_suffix=unit_suffix, compact=compact),
                 unsafe_allow_html=True,
             )
-            if reference_note:
+            if reference_note and show_state:
                 st.caption(reference_note)
         if caveat:
             st.caption(caveat)
@@ -1245,7 +1310,7 @@ def render_card(
                 f"(a higher percentile means a higher CV)</div>",
                 unsafe_allow_html=True,
             )
-        if state_compare is not None:
+        if state_compare is not None and show_state:
             state_est, state_moe, state_label = state_compare
             sig = difference_is_significant(est, high - est, state_est, state_moe)
             if not np.isnan(sig):
@@ -1275,10 +1340,11 @@ def render_card(
             ]
             if low < 0:
                 rows.append(("True CI lower bound (unclamped)", f"{low:,.0f}{unit_suffix} – {high:,.0f}{unit_suffix}"))
+            # Kept whatever the toggle says: this panel is the full breakdown.
             if reference is not None:
-                ref_v, ref_lbl, ref_m = reference
+                ref_v, ref_lbl, ref_m, modelled = reference
                 rows.append((
-                    "Expected at the state rate (our estimate)" if reference_note
+                    "Expected at the state rate (our estimate)" if modelled
                     else f"State value ({ref_lbl})",
                     f"{ref_v:,.0f}{unit_suffix}"
                     + (f" ± {ref_m:,.0f}{unit_suffix}" if ref_m and np.isfinite(ref_m) else ""),
@@ -1687,16 +1753,19 @@ def render_welcome() -> None:
 
     with st.expander("Does my county really differ from the state?"):
         st.markdown(
-            "Every card except **Total population** draws a state reference marker on its chart. "
-            "For medians and percentages, the marker is the state's published figure. For counts, "
-            "it is what your county's number would be at the state's rate, because a state count "
-            "is not on a county's scale. That marker is a calculation by this tool, not a Census "
-            "Bureau figure, and its shaded band is the calculation's own margin of error."
+            "Every card except **Total population** has a **Compare to state** switch. It starts "
+            "off, so the card shows your county alone. Turn it on and a grey bar for the state "
+            "appears under your county's bar, on the same scale. For medians and percentages, the "
+            "grey bar is the state's published figure and its margin of error. For counts, it is "
+            "what your county's number would be at the state's rate, because a state count is not "
+            "on a county's scale. That bar is a calculation by this tool, not a Census Bureau "
+            "figure, so it is drawn lighter with a dashed outline, and its width is the "
+            "calculation's own margin of error."
         )
         st.markdown(
-            "The **Total population** and **Median household income** cards also say whether "
-            "your county's estimate differs from the state's at 90% confidence, when both have a "
-            "published margin of error."
+            "The **Total population** card, and the **Median household income** card with the "
+            "switch on, also say whether your county's estimate differs from the state's at 90% "
+            "confidence, when both have a published margin of error."
         )
 
     with st.expander("Which counties are statistically similar to mine?"):
@@ -1745,9 +1814,9 @@ def render_welcome() -> None:
             "disability, uninsured, limited-English, no-vehicle, and income bracket cards show a "
             "percentage calculated from Census counts and their universe. The rate has its own "
             "margin of error, and is not automatically as precise as the count it came from.\n"
-            "- **State reference marker:** the vertical line on a card's chart. For counts it is "
-            "this tool's calculation, the state's rate applied to your county, with a shaded band "
-            "for its own margin of error.\n"
+            "- **State comparison:** the grey bar under your county's bar, shown when a card's "
+            "**Compare to state** switch is on. For counts it is this tool's calculation, the "
+            "state's rate applied to your county, drawn with a dashed outline.\n"
             "- **Controlled estimate:** in most counties total population has no margin of error, "
             "because the Census Bureau pins it to its official population estimates. It is the most "
             "reliable kind of ACS figure, and the map shows it in its own color.\n"
@@ -2108,9 +2177,10 @@ def render_explorer(data: dict) -> None:
         state_name = str(state_row["NAME"].iloc[0]) if len(state_row) else ""
         mode = measure.reference_mode
         if len(state_row) and mode == "direct":
-            state_est = float(measure.values(state_row)[0].iloc[0])
+            state_est, state_moe = (float(v.iloc[0]) for v in measure.values(state_row))
             if pd.notna(state_est):
-                ref = (state_est, state_name, None)
+                ref = StateReference(state_est, state_name,
+                                     state_moe if pd.notna(state_moe) else None, modelled=False)
         elif len(state_row) and mode == "rate":
             uni = measure.rate_universe
             s_est, s_moe = (float(v.iloc[0]) for v in measure.values(state_row))
@@ -2118,17 +2188,18 @@ def render_explorer(data: dict) -> None:
             cu_est, cu_moe = (float(v.iloc[0]) for v in uni(row))
             exp, exp_moe = expected_at_rate(s_est, s_moe, su_est, su_moe, cu_est, cu_moe)
             if np.isfinite(exp):
-                ref = (exp, f"at {state_name}'s rate",
-                       exp_moe if np.isfinite(exp_moe) else None)
+                ref = StateReference(exp, f"at {state_name}'s rate",
+                                     exp_moe if np.isfinite(exp_moe) else None, modelled=True)
                 pct_of_state = 100.0 * s_est / su_est if su_est else float("nan")
                 # Short on the card face, full methodology in the statistics
                 # panel: the disclosure has to be unmissable, but ten lines of
                 # it inside a four-across card buries the number it describes.
                 ref_note = (
-                    f"Marker is not a published figure: what this county would show "
-                    f"at {state_name}'s rate of {pct_of_state:.1f}%."
-                    + ("" if ref[2] is None else
-                       f" Band is that expectation's own margin of error, ±{ref[2]:,.0f}.")
+                    f"The dashed grey bar is not a published figure: it is what this county "
+                    f"would show at {state_name}'s rate of {pct_of_state:.1f}%"
+                    + (", with a dot and no bar, because its margin of error could not be computed."
+                       if ref.moe is None else
+                       f". Its width is that expectation's own margin of error, ±{ref.moe:,.0f}.")
                 )
 
         rank, n = _rank_and_n(measure_label, code)
@@ -2136,6 +2207,7 @@ def render_explorer(data: dict) -> None:
             measure.label, e, *acs_range(e, m),
             rate=rate, rate_label=measure.rate_label,
             percentile_rank=rank, filter_n=n, reference=ref, reference_note=ref_note,
+            toggle_key=measure_label,
             geo_label=label, table_id=measure.table_id,
             measure_label=measure.measure_label, unit_suffix=measure.unit_suffix,
             compact=True,
@@ -2225,8 +2297,12 @@ def render_explorer(data: dict) -> None:
                         percentile_rank=income_rank, filter_n=income_n,
                         state_compare=(float(state_income), float(state_income_moe), "the state median")
                         if state_income is not None and pd.notna(state_income_moe) and not pd.isna(income_moe) else None,
-                        reference=(float(state_income), str(state_row["NAME"].iloc[0]), None)
-                        if state_income is not None and pd.notna(state_income) else None,
+                        reference=StateReference(
+                            float(state_income), str(state_row["NAME"].iloc[0]),
+                            float(state_income_moe) if pd.notna(state_income_moe) else None,
+                            modelled=False,
+                        ) if state_income is not None and pd.notna(state_income) else None,
+                        toggle_key="Median household income",
                         acs1_compare=acs1_income,
                         geo_label=label, table_id="B19013",
                     )
