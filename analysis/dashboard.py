@@ -136,13 +136,17 @@ def _join_key_cols(df: pd.DataFrame, cols: tuple[str, ...]) -> pd.Series:
 
 # Every ACS table this project's loaders know how to coerce to numeric --
 # shared by load_level_data() and load_us_acs1_county() so a new table only
-# needs to be added here once (variable expansion, 2026-08-30). The last six
-# prefixes are US-app-only (see ingestion/pull_usdash.py); NJ/Trenton parquet
-# files simply have no columns matching them, so sharing this list with
-# load_level_data() (used by both apps) is harmless.
+# needs to be added here once (variable expansion, 2026-08-30). Everything after
+# the first three prefixes is US-app-only (see ingestion/pull_usdash.py);
+# NJ/Trenton parquet files simply have no columns matching them, so sharing
+# this list with load_level_data() (used by both apps) is harmless. A table
+# missing from this list is NOT coerced to numeric, and nothing errors to
+# say so -- add new tables here in the same change that pulls them.
 VALUE_COL_PREFIXES = (
     "B01001_", "B17001_", "B19013_",
     "B27001_", "B25064_", "B25071_", "B25003_", "C16002_", "B08201_", "B19001_",
+    # Scope expansion (lead decision, 2026-09-14).
+    "C17002_", "B23025_", "B25070_", "B25077_", "B15003_", "B18101_",
 )
 
 
@@ -506,6 +510,131 @@ def acs_renter_occupied(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
 
 
 # ---------------------------------------------------------------------------
+# Scope expansion measures (lead decision, 2026-09-14): widen the dashboard
+# beyond income and poverty to what the user-segment research supports.
+# Tiers A and B of docs/dashboard-variable-shortlist.md, each traceable to a
+# named federal program. Every cell list below was checked against its
+# published label in the 2024 acs/acs5 variable manifest, not inferred from
+# line numbers, and ScopeExpansionLabelsTest re-checks that on every run.
+# County/state only, pulled by ingestion/pull_usdash.py.
+# ---------------------------------------------------------------------------
+
+# C17002 ratio of income to poverty level. 002-007 run from "Under .50" to
+# "1.85 to 1.99": everyone below 200% of the poverty line, the low-income
+# line used by CDBG low/moderate-income and EJScreen. 008 is "2.00 and over".
+# Universe C17002_001, the population for whom poverty status is determined.
+_LOW_INCOME_CELLS = ["002", "003", "004", "005", "006", "007"]
+
+# B25070 gross rent as a percentage of household income. 007-010 run from
+# "30.0 to 34.9 percent" to "50.0 percent or more"; 010 alone is 50%+.
+_RENT_BURDENED_CELLS = ["007", "008", "009", "010"]
+_RENT_SEVERELY_BURDENED_CELLS = ["010"]
+# The rate universe is renters whose burden CAN be computed: brackets 002-010,
+# leaving out 011 "Not computed" (no household income, or no cash rent). This
+# is the Census Bureau's own convention: DP04 reports GRAPI percentages of
+# "Occupied units paying rent (excluding units where GRAPI cannot be
+# computed)" (2024 DP04 group metadata). Built as a SUM of the brackets, not
+# 001 minus 011, because subtracting a subset from its own total with the
+# independent-difference MOE formula would overstate the error. The choice
+# moves the answer: in EDA 14's 2024 county data the median county has 13.3%
+# of renters not computed, and counting them in the base would drop the
+# median county's burdened share from 44.7% to 38.0%.
+_RENT_COMPUTED_CELLS = [f"{n:03d}" for n in range(2, 11)]
+
+# B15003 educational attainment, population 25 and over. 002-016 run from
+# "No schooling completed" to "12th grade, no diploma"; 017 is "Regular high
+# school diploma". Universe B15003_001.
+_NO_DIPLOMA_CELLS = [f"{n:03d}" for n in range(2, 17)]
+
+# B18101 sex by age by disability status. The twelve "With a disability"
+# cells, one per sex and age band, each directly under its age-band header
+# (male headers 003-018 and female 022-037, in steps of 3). Universe
+# B18101_001, the civilian noninstitutionalized population.
+_DISABILITY_CELLS = ["004", "007", "010", "013", "016", "019",
+                     "023", "026", "029", "032", "035", "038"]
+
+
+def acs_low_income(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """(estimate, moe) for people below 200% of the poverty line -- C17002."""
+    codes = [f"C17002_{n}" for n in _LOW_INCOME_CELLS]
+    return aggregate_estimate(df, codes), aggregate_moe(df, codes)
+
+
+def acs_poverty_ratio_universe(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """(estimate, moe) for C17002_001, the population for whom poverty status
+    is determined -- the universe acs_low_income() is a share of."""
+    return df["C17002_001E"].astype(float), df["C17002_001M"].astype(float)
+
+
+def acs_unemployed(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """(estimate, moe) for the unemployed civilian population 16 and over --
+    B23025_005, a single published cell."""
+    return df["B23025_005E"].astype(float), df["B23025_005M"].astype(float)
+
+
+def acs_civilian_labor_force(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """(estimate, moe) for the civilian labor force -- B23025_003, the
+    denominator of the standard unemployment rate. Deliberately not the whole
+    labor force (B23025_002), which also counts the Armed Forces."""
+    return df["B23025_003E"].astype(float), df["B23025_003M"].astype(float)
+
+
+def acs_rent_burdened(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """(estimate, moe) for renter households paying 30% or more of income in
+    gross rent -- B25070 brackets 007-010."""
+    codes = [f"B25070_{n}" for n in _RENT_BURDENED_CELLS]
+    return aggregate_estimate(df, codes), aggregate_moe(df, codes)
+
+
+def acs_rent_severely_burdened(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """(estimate, moe) for renter households paying 50% or more of income in
+    gross rent -- B25070_010, a single published cell."""
+    return df["B25070_010E"].astype(float), df["B25070_010M"].astype(float)
+
+
+def acs_rent_computed_universe(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """(estimate, moe) for renter households whose rent burden can be computed
+    -- the sum of B25070 brackets 002-010, excluding 011 "Not computed". The
+    universe for both burden measures; see _RENT_COMPUTED_CELLS for why."""
+    codes = [f"B25070_{n}" for n in _RENT_COMPUTED_CELLS]
+    return aggregate_estimate(df, codes), aggregate_moe(df, codes)
+
+
+def acs_median_home_value(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """(estimate, moe) for median value of owner-occupied housing units --
+    B25077, a single published cell. Not top-coded at county scale in 2024:
+    the highest county value in EDA 14's pull is 1,633,900 (Teton County, WY).
+    Five counties publish no estimate for insufficient sample, which the
+    card's existing suppressed-estimate branch already handles."""
+    return df["B25077_001E"].astype(float), df["B25077_001M"].astype(float)
+
+
+def acs_no_diploma(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """(estimate, moe) for adults 25 and over without a high school diploma or
+    equivalent -- B15003 cells 002-016."""
+    codes = [f"B15003_{n}" for n in _NO_DIPLOMA_CELLS]
+    return aggregate_estimate(df, codes), aggregate_moe(df, codes)
+
+
+def acs_education_universe(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """(estimate, moe) for B15003_001, the population 25 and over."""
+    return df["B15003_001E"].astype(float), df["B15003_001M"].astype(float)
+
+
+def acs_disability(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """(estimate, moe) for the civilian noninstitutionalized population with a
+    disability, all ages and both sexes -- the twelve B18101 cells."""
+    codes = [f"B18101_{n}" for n in _DISABILITY_CELLS]
+    return aggregate_estimate(df, codes), aggregate_moe(df, codes)
+
+
+def acs_disability_universe(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """(estimate, moe) for B18101_001, the civilian noninstitutionalized
+    population."""
+    return df["B18101_001E"].astype(float), df["B18101_001M"].astype(float)
+
+
+# ---------------------------------------------------------------------------
 # Loading
 # ---------------------------------------------------------------------------
 
@@ -738,6 +867,89 @@ def poverty_rate(
 proportion_rate = poverty_rate
 
 
+def proportion_rate_series(
+    below_est: pd.Series,
+    below_moe: pd.Series,
+    universe_est: pd.Series,
+    universe_moe: pd.Series,
+) -> tuple[pd.Series, pd.Series]:
+    """Vectorized ACS proportion-MOE formula. Same handbook math as
+    proportion_rate() / poverty_rate(), Series in and Series out.
+    """
+    below_est = pd.to_numeric(below_est, errors="coerce")
+    below_moe = pd.to_numeric(below_moe, errors="coerce")
+    universe_est = pd.to_numeric(universe_est, errors="coerce")
+    universe_moe = pd.to_numeric(universe_moe, errors="coerce")
+    rate = pd.Series(np.nan, index=below_est.index, dtype=float)
+    moe = pd.Series(np.nan, index=below_est.index, dtype=float)
+    valid = universe_est > 0
+    if not valid.any():
+        return rate, moe
+    p = below_est[valid] / universe_est[valid]
+    se_x = below_moe[valid] / Z_90
+    se_y = universe_moe[valid] / Z_90
+    term = se_x**2 - (p**2) * se_y**2
+    term = term.where(term >= 0, se_x**2 + (p**2) * se_y**2)
+    se_p = (1 / universe_est[valid]) * np.sqrt(term)
+    rate.loc[valid] = p * 100
+    moe.loc[valid] = se_p * Z_90 * 100
+    return rate, moe
+
+
+def expected_at_rate(
+    state_est: float, state_moe: float,
+    state_universe_est: float, state_universe_moe: float,
+    county_universe_est: float, county_universe_moe: float,
+) -> tuple[float, float]:
+    """How large a county COUNT would be if the county matched the state's
+    rate for that measure, and the MOE of that figure.
+
+    OUR METHODOLOGY, not a Census Bureau publication (card redesign,
+    2026-09-08). Motivation: a county count and a state count are not on the
+    same scale -- Albany County, WY has 2,779 uninsured against Wyoming's
+    64,627 -- so the raw state figure cannot be drawn as a reference marker
+    on a county's axis without destroying it. The state RATE applied to the
+    county's own universe does land on the county's scale, and answers the
+    question a user actually has: what would this number be if this county
+    looked like the state?
+
+    Two published formulas, composed:
+    1. The state rate p and its SE come from the ACS proportion-MOE formula
+       already implemented above as poverty_rate()/proportion_rate().
+    2. expected = p * county_universe is a PRODUCT of two estimates, so
+       MOE(A*B) = sqrt(A^2 * MOE(B)^2 + B^2 * MOE(A)^2). Source: U.S. Census
+       Bureau, "Understanding and Using American Community Survey Data: What
+       All Data Users Need to Know," the derived-estimates appendix that also
+       supplies the proportion formula cited in poverty_rate().
+
+    Assumptions this makes, which any caller must disclose to the reader:
+    - It treats the state rate and the county universe as INDEPENDENT. They
+      are not: the county is part of the state. As with the county-vs-state
+      significance test elsewhere in this app, that makes the resulting
+      interval conservative (too wide) rather than too narrow.
+    - It is a modelled expectation, never a measurement. It must never be
+      presented in the same visual language as a published Bureau figure.
+
+    Returns (nan, nan) when either universe is missing or non-positive.
+    """
+    if (not np.isfinite(state_universe_est) or state_universe_est <= 0
+            or not np.isfinite(county_universe_est) or county_universe_est <= 0
+            or not np.isfinite(state_est)):
+        return float("nan"), float("nan")
+
+    pct, pct_moe = proportion_rate(
+        state_est, state_moe, state_universe_est, state_universe_moe
+    )
+    if not np.isfinite(pct):
+        return float("nan"), float("nan")
+
+    p, p_moe = pct / 100.0, pct_moe / 100.0
+    expected = p * county_universe_est
+    moe = ((p ** 2) * (county_universe_moe ** 2)
+           + (county_universe_est ** 2) * (p_moe ** 2)) ** 0.5
+    return expected, moe
+
+
 # ---------------------------------------------------------------------------
 # Reliability tier
 # ---------------------------------------------------------------------------
@@ -843,6 +1055,72 @@ def cv_color(cv: float, *, cv_cap: float = 0.5, alpha: int = 200) -> list[int]:
         lo, hi, local_t = CV_COLOR_MID, CV_COLOR_HIGH, (t - 0.5) / 0.5
     rgb = [int(lo[i] + local_t * (hi[i] - lo[i])) for i in range(3)]
     return rgb + [alpha]
+
+
+
+# Sequential CV ramp for Streamlit/app_US_v2.py (2026-09-14). A coefficient of
+# variation is a magnitude: it starts at zero and has no meaningful centre, so it
+# takes a single-hue ramp, light to dark, where darker simply means a larger margin
+# of error relative to the estimate. cv_color() above is a diverging ramp whose
+# midpoint its own comment calls "not a meaningful value", and around CV 25% its
+# fill is near-white, which disappears on a white card. cv_color() is left
+# unchanged because app_US_v1.1.py and app_US_v1.2.py still use it.
+# Stops are steps 250, 400, 550 and 700 of the reference blue ramp in the team's
+# dataviz guidance. Step 250 (#86b6ef) is the lightest step that still clears
+# roughly 2:1 contrast on a white surface, so a low-CV bar stays visible on a card.
+CV_SEQ_STOPS = ((0x86, 0xB6, 0xEF), (0x39, 0x87, 0xE5), (0x1C, 0x5C, 0xAB), (0x0D, 0x36, 0x6B))
+# Controlled estimates (API annotation "*****") carry no sampling error. They get
+# their own color so the map stops drawing the most certain figures in the grey
+# used for missing data. Distinct from CV_COLOR_NO_DATA in both hue and lightness.
+CV_COLOR_CONTROLLED = (233, 220, 192)
+
+
+def cv_color_sequential(cv: float, *, cv_cap: float = 0.5, alpha: int = 200) -> list[int]:
+    """RGBA on a single-hue light-to-dark blue ramp for a coefficient of variation.
+
+    Same contract as cv_color(): NaN returns CV_COLOR_NO_DATA, values at or above
+    `cv_cap` render as the darkest step (a scale, not a verdict: there is no
+    off-scale color), and negative values clamp to the lightest step.
+    """
+    return _ramp_color(cv, CV_SEQ_STOPS, cv_cap, alpha)
+
+
+# Blue-orange CV ramp for Streamlit/app_US_v2.py (lead decision, 2026-09-16), which
+# replaces cv_color_sequential() there. It restores cv_color()'s Okabe-Ito blue
+# (low CV) and orange (high CV) ends, which the lead prefers because the two ends
+# read apart faster than two shades of blue. cv_color()'s near-white midpoint is
+# not restored: it measured 1.07:1 contrast on white, so card bars near CV 25%
+# vanished. The midpoint here is Okabe-Ito's reddish purple (#CC79A7), from the same
+# colorblind-safe palette as the ends (Okabe and Ito, "Color Universal Design",
+# 2008). Measured along the whole ramp (2026-09-16): every step is at least 2.25:1
+# on white; lightness rises steadily from blue to orange, so the order survives in
+# grayscale (unlike cv_color()); and every step is at least twice as far, in OKLab
+# distance, from CV_COLOR_CONTROLLED and CV_COLOR_NO_DATA as those two colors are
+# from each other. Trade-off: the high-CV end is the lighter end, the reverse of
+# cv_color_sequential(), so the map legend carries the reading direction.
+# cv_color_sequential() is kept for reference and its tests; v2 no longer calls it.
+CV_BLUE_ORANGE_STOPS = ((0, 114, 178), (204, 121, 167), (230, 159, 0))
+
+
+def cv_color_blue_orange(cv: float, *, cv_cap: float = 0.5, alpha: int = 200) -> list[int]:
+    """RGBA on a blue (low CV) to purple to orange (high CV) ramp.
+
+    Same contract as cv_color(): NaN returns CV_COLOR_NO_DATA, values at or above
+    `cv_cap` render as the full orange (a scale, not a verdict), and negative
+    values clamp to the blue end.
+    """
+    return _ramp_color(cv, CV_BLUE_ORANGE_STOPS, cv_cap, alpha)
+
+
+def _ramp_color(cv, stops, cv_cap: float, alpha: int) -> list[int]:
+    """Piecewise-linear RGB interpolation across evenly spaced `stops`."""
+    if cv is None or np.isnan(cv):
+        return list(CV_COLOR_NO_DATA) + [alpha]
+    t = min(max(float(cv), 0.0), cv_cap) / cv_cap
+    seg = t * (len(stops) - 1)
+    i = min(int(seg), len(stops) - 2)
+    lo, hi, local_t = stops[i], stops[i + 1], seg - i
+    return [int(round(lo[c] + local_t * (hi[c] - lo[c]))) for c in range(3)] + [alpha]
 
 
 def difference_is_significant(est1: float, moe1: float, est2: float, moe2: float) -> float:

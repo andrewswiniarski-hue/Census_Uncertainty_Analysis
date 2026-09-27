@@ -29,8 +29,10 @@ Four quadrants from CV_ok x alloc_ok:
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Literal
 
+import numpy as np
 import pandas as pd
 
 from analysis.cv_model import (
@@ -119,7 +121,11 @@ def percentile_risk(series: pd.Series) -> pd.Series:
 
 
 def equal_weight_score(cv: pd.Series, alloc_rate: pd.Series) -> pd.Series:
-    """Mean of CV and allocation percentile ranks (sensitivity check)."""
+    """Mean of CV and allocation percentile ranks (sensitivity check).
+
+    Percentile version for the notebooks; the dashboard card score is
+    reliability_score() below.
+    """
     return (percentile_risk(cv) + percentile_risk(alloc_rate)) / 2
 
 
@@ -209,3 +215,119 @@ def attach_cv_residual_flag(
     )
     out[flag_col] = flag
     return out, meta
+
+
+# ---------------------------------------------------------------------------
+# Dashboard reliability score (lead decision #19, 2026-09-27)
+#
+# OUR methodology, not a Census Bureau product, pending mentor review (README
+# "Composite tier philosophy"). Spec:
+# docs/superpowers/specs/2026-09-27-composite-reliability-score-cards-design.md
+# ---------------------------------------------------------------------------
+
+Z_90 = 1.645
+
+# Sampling sub-score anchors (CV, sub-score), linear between, 0 above the last.
+CV_SUBSCORE_ANCHORS: tuple[tuple[float, float], ...] = (
+    (0.0, 100.0),
+    (0.12, 75.0),      # ESRI high-reliability line (analysis/viz.py CV_REFERENCE_LINES)
+    (0.30, 50.0),      # NCHS caution line; HUD's "MOE under half the estimate" rule is CV 0.304
+    (1 / Z_90, 0.0),   # MOE equals the estimate: the 90% interval reaches zero (our anchor)
+)
+
+BAND_HIGHER = "Higher reliability"
+BAND_MODERATE = "Moderate reliability"
+BAND_LOWER = "Lower reliability"
+BAND_ORDER: tuple[str, ...] = (BAND_LOWER, BAND_MODERATE, BAND_HIGHER)  # worst first
+
+SCORE_BAND_EDGES = (75.0, 50.0)  # Higher at or above the first, Moderate at or above the second
+CV_BAND_EDGES = (0.12, 0.30)     # the same lines expressed as CV, "at most" convention
+
+
+def cv_subscore(cv: float) -> float:
+    """Sampling sub-score, 0-100 (higher = more reliable). NaN in, NaN out."""
+    if cv is None or not np.isfinite(cv):
+        return float("nan")
+    xs, ys = zip(*CV_SUBSCORE_ANCHORS)
+    return float(np.interp(min(float(cv), xs[-1]), xs, ys))
+
+
+def imputation_subscores(rates: pd.Series) -> pd.Series:
+    """Imputation sub-score for every geography, relative to all of them.
+
+    100 at or below the median rate, 50 at the 75th percentile, 0 for the
+    most-imputed. Pass the full national series: ranks are never recomputed
+    for a filtered subset. NaN rates stay NaN; the index is preserved.
+    """
+    p = rates.rank(pct=True, method="average")
+    return (200.0 * (1.0 - p)).clip(upper=100.0)
+
+
+def _band_from_score(score: float) -> str:
+    if score >= SCORE_BAND_EDGES[0]:
+        return BAND_HIGHER
+    if score >= SCORE_BAND_EDGES[1]:
+        return BAND_MODERATE
+    return BAND_LOWER
+
+
+def _band_from_cv(cv: float) -> str:
+    if cv <= CV_BAND_EDGES[0]:
+        return BAND_HIGHER
+    if cv <= CV_BAND_EDGES[1]:
+        return BAND_MODERATE
+    return BAND_LOWER
+
+
+@dataclass(frozen=True)
+class ReliabilityScore:
+    """One card's score. `imputation_sub` is None when scored on sampling only."""
+    score: float
+    sampling_sub: float
+    imputation_sub: float | None
+    band: str
+    capped_by_cv: bool
+    imputation_source: str | None = None
+    imputation_is_proxy: bool = False
+    imputation_note: str | None = None
+
+
+def reliability_score(
+    cv: float,
+    imputation_sub: float | None = None,
+    *,
+    source: str | None = None,
+    is_proxy: bool = False,
+    note: str | None = None,
+) -> ReliabilityScore | None:
+    """Equal-weight score with the CV guard on the band. None when CV is NaN.
+
+    The score is rounded half up to a whole number and the band is assigned
+    from that rounded score, so the number a card shows is the number that
+    was classified (final review, 2026-09-27: a raw 74.502 displayed as 75
+    beside "Moderate"). Sub-scores stay unrounded.
+
+    A NaN `imputation_sub` is treated as absent (sampling only); pass `note`
+    to say why ("not scored" or "not available for this county").
+    """
+    sampling = cv_subscore(cv)
+    if np.isnan(sampling):
+        return None
+    imp = None
+    if imputation_sub is not None and np.isfinite(imputation_sub):
+        imp = float(imputation_sub)
+    raw = sampling if imp is None else (sampling + imp) / 2
+    score = float(np.floor(raw + 0.5))
+    by_score = _band_from_score(score)
+    by_cv = _band_from_cv(cv)
+    band = min(by_score, by_cv, key=BAND_ORDER.index)
+    return ReliabilityScore(
+        score=score,
+        sampling_sub=sampling,
+        imputation_sub=imp,
+        band=band,
+        capped_by_cv=BAND_ORDER.index(by_cv) < BAND_ORDER.index(by_score),
+        imputation_source=source if imp is not None else None,
+        imputation_is_proxy=is_proxy if imp is not None else False,
+        imputation_note=None if imp is not None else note,
+    )

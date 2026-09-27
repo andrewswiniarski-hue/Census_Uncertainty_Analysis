@@ -1,8 +1,10 @@
-# Handover: `app_US_v2.0.py` structural UI work
+# Handover: US County Demographic Explorer, structural UI work (v2.0 → v4)
 
-**Written:** 2026-09-17, end of session. **For:** a fresh chat picking this up.
+**First written:** 2026-09-17 for `app_US_v2.0.py`. **Updated:** 2026-09-27,
+end of session, for `app_US_v4.py`.
+**For:** a fresh chat picking this up.
 **Purpose of this doc:** enough context to keep making *structural UI changes*
-to `Streamlit/app_US_v2.0.py` without re-deriving the last several sessions'
+to `Streamlit/app_US_v4.py` without re-deriving the last several sessions'
 decisions. Paste this whole file as the first message in the new chat.
 
 ---
@@ -13,135 +15,136 @@ Nationwide (50 states + DC) county-level ACS demographic explorer, built for
 a Census Bureau capstone. State-first drill-down: pick/click a state → see
 its counties on a map → click/search a county → read its ACS estimates as
 cards, each with an explicit margin of error (MOE), coefficient of variation
-(CV), and a visible uncertainty interval. Neutral federal-statistical-agency
-voice by sponsor direction: no "good/bad" verdict language, no tier chips —
-the app shows the number and the uncertainty and lets the user judge it.
+(CV), a visible uncertainty interval, and (since v3) a descriptive
+reliability score band. Neutral federal-statistical-agency voice by sponsor
+direction: no "good/bad" verdict language — the app shows the number and
+the uncertainty and lets the user judge it.
 
 ## 2. File lineage — READ THIS BEFORE ASSUMING WHICH FILE IS "THE APP"
 
-`Streamlit/` currently has three versions of this app, in effect three
-branches of the same idea, **not merged**:
+**`Streamlit/app_US_v4.py` is the file to keep iterating on.** Older
+versions are kept unchanged as snapshots:
 
-| File | Author | What it uniquely has |
+| File | Where | What it uniquely has |
 |---|---|---|
-| `app_US_v1.1.py` | Justus (you) | The original nationwide explorer: filters-on-top, statistical peer counties, ACS variable-expansion checklist, blue→orange `cv_color()` ramp. Base that v2.0 is built on. |
-| `app_US_v1.2.py` | Katie Christiansen | Only difference from v1.1: a redesigned `render_welcome()`. |
-| **`app_US_v2.0.py`** | **Andrew Swiniarski's card redesign + scope expansion, layered on v1.1 + v1.2's welcome page** | The interval-bar graphic (`_interval_svg`, zero-anchored SVG axis, replaces a matplotlib figure), state-reference/modelled-rate markers on cards, 7 more measures (low income, unemployment, rent burden ×2, home value, no-diploma, disability), `_unavailable_measures()` guard for stale local data. **This is the file the user wants to keep iterating on.** |
+| `app_US_v1.1.py` | worktree | Justus's original nationwide explorer: filters, statistical peers, ACS variable-expansion checklist. |
+| `app_US_v1.2.py` | worktree | Katie Christiansen's redesigned `render_welcome()`; otherwise v1.1. |
+| `app_US_v2.0.py` | worktree (commit `ee62625`) | Andrew's card redesign (Sep 14) + Justus's Sep 17–18 work: Statistical peers tab, Census Bureau branding, map tooltips, peer-table CV column, performance work, ACS 1-year captions removed. |
+| `app_US_v2.py` / `app_US_v3.py` | **`origin/main` only** | Andrew's line. v2 adds "Compare to state" toggles, state row under the county bar, blue-purple-orange CV ramp. v3 adds the card reliability score (lead decision #19). Neither has Justus's v2.0 work. |
+| **`app_US_v4.py`** | **worktree** | **main's v3 + everything from v2.0 + this session's changes (§3).** |
 
-`app_US_v2.0.py` is **currently untracked in git** (`git status` shows `??`).
-It was assembled by hand (not a clean merge) — see its module docstring for
-the full provenance note. Do not assume `git log` history for this file
-reflects its real authorship; check the docstring instead.
+v4 was built by a file-level three-way merge (base: `2fadc2f:Streamlit/app_US_v2.py`,
+the Sep 14 version both lines started from). **The branches themselves were
+never merged**; `JL_Work_Tree` does not contain main's history. Where the two
+lines conflicted, v3's card/colour code won:
 
-Also present, not part of this thread of work: `Streamlit/app.py` (deleted
-in the working tree per `git status`, likely superseded), `Streamlit/pages/`
-(untracked), `Streamlit/Archived Models/` (untracked).
+- CV ramp is `cv_color_blue_orange()` (main), not v2.0's `cv_color()`.
+- ACS 1-year precision captions on the population/income cards are **kept**
+  in v4 (v2.0 removed them; that removal was scoped to v2.0 only).
 
-## 3. Where things stand as of this session's end
+`tests/test_us_branding.py::test_cv_color_stays_on_map_and_cards` targets
+v2.0 and asserts `cv_color(`; it would fail if pointed at v4, by design.
 
-Just completed: ACS 1-year precision captions were removed from v2.0
-(population and income cards). v1.1/v1.2 and the ACS 1-year parquet pull
-are unchanged.
+## 3. What was done in the 2026-09-27 session
 
-Previously completed: reverted `app_US_v2.0.py`'s CV color ramp from
-`cv_color_sequential()` (single-hue blue, Andrew's choice) back to
-`cv_color()` (diverging blue→orange, v1.1's original), at the user's
-request, for consistency across app versions. Four call sites changed
-(interval SVG fill, card CV badge, map choropleth fill, map legend
-swatches/caption) plus the now-unused `cv_color_sequential` import removed
-and the module docstring's provenance note updated. Verified: `py_compile`
-clean, `AppTest` smoke run (load + drill into Autauga County AL `01001`)
-raises no exception. **Not committed** — file is still untracked.
+1. Pulled main's `app_US_v3.py` plus the two analysis modules it needs
+   (`analysis/composite.py`, `analysis/dashboard.py`) into the worktree.
+   Data was already local (`data/raw/*usdash*`, `rucc_2023_county`).
+2. Restored `proportion_rate_series()` in `analysis/dashboard.py` (main's
+   version lacked it; v2.0's vectorized code and `analysis/test_dashboard.py`
+   need it). v2.0 runs again.
+3. Merged v2.0's work into v3 (now v4): peers tab + shared selection,
+   branding shell, tooltips, peer-table formatting, and the performance work
+   (tabs render only when open via `st.tabs(on_change="rerun")`, fragments,
+   GeoJSON indexed by key, vectorized rates, cached `_unavailable_measures`).
+   Also fixed one v3 string ("the Bureau's" → "the Census Bureau's") per
+   the naming rule.
+4. **Toggle/checkbox CSS fix.** The branding rule
+   `[data-testid="stCheckbox"] [data-selected] div:has(svg)` also matched
+   the *label* of `st.toggle` (its help "?" icon is an SVG) and painted the
+   "Compare to state" text azul, while the toggle track was never targeted
+   and fell back to Streamlit red whenever the repo's
+   `.streamlit/config.toml` isn't picked up (e.g. launching from inside
+   `Streamlit/`). Now: `label[data-selected] > div:has(> svg)` (checkbox box
+   only) plus an explicit rule for the switch track. Verified in a browser
+   with and without the repo config.
+5. **Card CV rank.** "This county's CV is in the Nth percentile of the M
+   counties in the current filter selection" → "This county's CV ranks Nth
+   of the M counties in <State> (1st is the lowest CV)". Pool = every county
+   in the selected county's state, independent of the explorer filters.
+   Still ranks the **CV**, not the estimate (user may later want the
+   estimate ranked instead — one-line change in `_rank_and_n`).
+6. **County explorer layout.** Filters, geography search, and "Color the map
+   by" now sit in a fixed-height bordered panel on the left
+   (`EXPLORER_PANEL_HEIGHT = 560`, matched to title caption + 520px map),
+   level with a ~2.6× wider map on the right. The filter expander and its
+   four-across row are gone.
 
-`analysis/dashboard.py` still defines BOTH `cv_color()` and
-`cv_color_sequential()` (plus `CV_SEQ_STOPS`, `CV_COLOR_CONTROLLED`) —
-untouched, so nothing was removed from the shared module, just unwired
-from this one file. `cv_color()` is what `app_US_v1.1.py`/`v1.2.py` use too.
+Verification each step: `py_compile`; `pytest analysis/test_dashboard.py
+tests/test_us_branding.py tests/test_us_peer_table.py tests/test_us_map_tooltip.py`
+(76 passed, 6 skipped); main's `tests/test_us_v3_score.py` run against the
+merged file (15 passed); AppTest smoke on all three tabs using Jefferson
+County, AL `01073` (Autauga `01001` is under the 65k ACS 1-year threshold,
+so it has no 1-year caption).
 
-### Git state to know about (as of 2026-09-17)
-```
- M HANDOFF.md, README.md, WORKLOG.md, docs/data-dictionary.md
- D Streamlit/app.py
- D notebooks/10,11,12 (dhc-* notebooks)
-M  analysis/dashboard.py, analysis/test_dashboard.py           <- staged
-M  ingestion/_common.py, pull_usdash.py, pull_usdash_alloc.py  <- staged
-?? Streamlit/app_US_v2.0.py                                    <- THIS FILE, untracked
-?? Streamlit/pages/, Streamlit/Archived Models/, notebooks/DHC Archive/
-?? ingestion/pull_acs_vrt_nj.py, ingestion/pull_njdash.py
-```
-The 5 staged files (`analysis/dashboard.py`, `analysis/test_dashboard.py`,
-`ingestion/_common.py`, `ingestion/pull_usdash.py`,
-`ingestion/pull_usdash_alloc.py`) were cherry-picked from
-`origin/card-error-bar-redesign` earlier this session specifically so
-`app_US_v2.0.py`'s imports resolve and its 7 new measures have data. **User
-said "leave them staged, don't commit/push yet."** Don't commit on their
-behalf without asking again — check whether that's changed.
-
-The rest of the modified/deleted files (`HANDOFF.md`, `README.md`,
-`WORKLOG.md`, the notebooks) came from a `git pull` bringing in teammates'
-changes — not something this session touched or fully audited. Don't assume
-they're related to the app work; `git diff` them if they become relevant.
+### Git state (2026-09-27)
+Committed and pushed to `origin/JL_Work_Tree`: `Streamlit/app_US_v4.py`,
+this handover, `analysis/composite.py`, `analysis/dashboard.py`,
+`analysis/test_dashboard.py`. `Streamlit/app_US_v3.py` was unstaged and is
+not in the worktree (it lives on main). Everything else in `git status`
+(teammates' `HANDOFF.md`/`README.md`/`WORKLOG.md`/notebook changes from an
+earlier pull, `ingestion/*` edits, untracked `pages/`, `Archived Models/`)
+was **not** touched or committed — ask before including any of it.
 
 ### Data dependency
-`data/raw/acs5_2024_usdash_{state,county}.parquet` (gitignored) were
-re-pulled this session via `python ingestion/pull_usdash.py` (~230s) to add
-the 6 new ACS tables (C17002, B23025, B25070, B25077, B15003, B18101) that
-`app_US_v2.0.py`'s new measures need. If a fresh clone/worktree is ever
-used, that pull has to be re-run before v2.0 will show all cards — it
-degrades gracefully otherwise (`_unavailable_measures()` hides cards whose
-columns are missing rather than crashing).
+Needs `data/raw/{acs5_2024_usdash,acs1_2024_usdash,geo_2024_usdash,
+acs5_2024_usdash_alloc,rucc_2023}_*` (gitignored). Regenerate with the
+ingestion scripts listed in v4's module docstring. `_unavailable_measures()`
+hides cards whose columns are missing rather than crashing.
 
-## 4. Code map (`Streamlit/app_US_v2.0.py`, ~2286 lines)
+## 4. Code map (`Streamlit/app_US_v4.py`, ~2,940 lines)
 
-- **`Measure` dataclass + `MEASURES` registry** (`_build_measures()`,
-  ~line 190-413): every card/map measure (label, accessor `Callable`,
-  universe for rate measures, table_id, unit_suffix, reference_mode
-  `"direct"|"rate"|None`, `controlled_when_moe_missing`) goes through this
-  registry. `MEASURE_OPTIONS` / `_measure_display()` drive both the map
-  dropdown and the card checklist — adding a new measure means adding one
-  entry here, not new bespoke UI code, *unless* it needs special wiring
-  like population/income do.
-- **Peer counties** (`_peer_values`, `PeerResult`, `_compute_peers`,
-  `render_peer_panel`, ~line 714-800 + 1776-1892): "statistical peers" —
-  counties tied with the selected one on the Census Bureau's two-sample
-  difference test, gated by RUCC metro/nonmetro + population bin. Renders
-  below the cards in `render_explorer`.
-- **`render_card()`** (~1115-1345): the single-measure card. Takes
-  `compact=True` from the generic path; population/income cards are
-  hand-rolled separately (see below) so they get side-by-side columns +
-  extra state/1yr/allocation panels the generic path doesn't have.
-- **`render_map()`** (~1357-1503): pydeck GeoJsonLayer choropleth, colored
-  by `cv_color()` (just reverted, see §3), with peer-county violet borders
-  and controlled-estimate tan fill as special cases layered on top of the
-  ramp.
-- **`top_filters()`** (~801-882): the top-of-page filter expander (region/
-  division filters were already removed pre-v2.0; current filters are
-  RUCC metro/nonmetro + population-size bin, cascading with N-shown).
-- **`render_welcome()`** (~1591-1776): first tab, Katie's redesign,
-  "Start here" 3-column quick links + drill-down sections.
-- **`render_explorer()`** (~1893-2266): the main tab. Order: top_filters →
-  peer pre-computation (peeks `st.session_state` for widgets not yet drawn,
-  see the big comment at line ~1900) → map → geography search → county
-  header/ACS-1yr wiring → `st.multiselect` **card checklist** (default:
-  just Total population + Median household income, everything else opt-in,
-  ~19 measures total) → population/income cards side-by-side → remaining
-  selected cards grouped by `TOPIC_ORDER` (line 2244: Population, Poverty,
-  Income, Employment, Education, Housing, Health, Disability, Language,
-  Transportation), 4-per-row → `render_peer_panel()` behind a divider.
-- **`main()`** (~2268-2283): `st.html(_CSS)` → title/caption →
-  `st.tabs(["Welcome", "County explorer"])`. **Only two tabs exist.**
-- **`_CSS`** constant (search for it near the top of the file): single
-  consolidated CSS block, Census Bureau-derived typography/color palette,
-  injected once via `st.html()`.
+- **`Measure` + `MEASURES` registry** (`_build_measures()`, ~354–473): every
+  card/map measure goes through this. `MEASURE_OPTIONS` / `_measure_display()`
+  drive the map dropdown, card checklist, and peer measure picker.
+- **Reliability score** (`ImputationSource`, ~224; `score_for`,
+  `_score_strip_html`, `_score_note_html`, `_score_breakdown_html`,
+  ~1401–1460): band strip on each card; rules in `analysis/composite.py`.
+- **`_CSS`** (~570) + `_brand_header_html()` / `_brand_footer_html()`
+  (~701–730): Census Bureau shell (navy `#112E51`, Azul `#265FCA`, teal links),
+  including the tab/checkbox/toggle overrides from §3.4.
+- **`_load_all()`** (~745) and `_load_acs1_county()` (~799): cached data;
+  geo frames carry `_key`.
+- **Map plumbing:** `_map_tooltip`, `_base_geojson`, `_base_geojson_by_key`
+  (~807–866), `_measure_layer` (~870, vectorized), `render_map` (~1745,
+  optional `map_key`, `interactive`, `click_caption`).
+- **Peers:** `_peer_values`, `PeerResult`, `_compute_peers` (~952–1030);
+  `render_peer_panel` (~2241), `_peer_geo_controls` (~2338, cascading
+  State → County writing shared `us_geo`), `render_peers_tab` (~2429, peer map
+  hidden until "Show these counties on the map", display-only).
+- **`top_filters()`** (~1033): now a vertical stack (back button, search slot,
+  RUCC, population size, count, RUCC note) for the left panel.
+- **`render_card()`** (~1463): `cv_rank`/`rank_n`/`rank_scope`,
+  `reference` + "Compare to state" toggle, `acs1_compare`, `reliability`.
+- **County explorer:** `_explorer_top_fragment` (~2511: left panel + map in
+  `st.columns([1, 2.6])`; filter/colour changes rerun only this fragment,
+  geography changes call `st.rerun()`), `_explorer_map` (~2571),
+  `_explorer_cards_fragment` (~2605: checklist + cards; CV rank pool is the
+  county's whole state), `render_explorer` (~2870).
+- **`main()`** (~2908): header → `st.tabs(["Welcome", "County explorer",
+  "Statistical peers"], on_change="rerun", key="main_tabs")`, each body
+  gated on `tab.open` → footer.
 
 ### Session state schema
-- `st.session_state["us_geo"]`: `{level: "state"|"county", code, state_scope,
-  peer_focus: bool}` — the drill-down position. `_init_geo_state()` seeds it.
-- `st.session_state["_us_geo_version"]`: incremented on every map click, used
-  to force-reset the geography-search dropdown's widget key so it doesn't
-  show a stale selection.
-- Widget keys of note: `acs_map_measure`, `card_checklist`, `peer_measure`,
-  `peer_same_rucc`, `peer_same_popbin`, `filter_rucc`, `filter_pop`.
+- `st.session_state["us_geo"]`: `{level: "state"|"county", code, state_scope}`
+  — shared by County explorer and Statistical peers. (`peer_focus` is gone.)
+- `_us_geo_version`: bumped on every map click/search/peer-dropdown change;
+  part of dropdown widget keys so they re-seed instead of fighting.
+- `peer_map_visible`: peer-tab map reveal flag.
+- Widget keys of note: `main_tabs`, `acs_map_measure`, `card_checklist`,
+  `filter_rucc`, `filter_pop`, `cmp_state::<measure>`, `peer_measure`,
+  `peer_same_rucc`, `peer_same_popbin`, `peer_tab_state_<v>`,
+  `peer_tab_county_<v>_<state>`, `peer_map_show`, `peer_map_hide`.
 
 ## 5. Conventions this project enforces (don't skip these)
 
@@ -152,59 +155,32 @@ columns are missing rather than crashing).
 - **No wholesale rewrites.** Edit surgically; don't touch data-loading or
   computation logic unless a change explicitly requires it.
 - **Dollar signs in `st.markdown`/`st.info` text must be escaped as `\\$`**
-  — Streamlit's markdown treats bare `$` as LaTeX math delimiters, which
-  silently breaks the font and drops the currency symbol on income-band
-  card titles etc. Already fixed everywhere in v2.0's ancestor files; watch
-  for regressions in new copy.
-- **`app_US_v2.0.py` has a dot in its "module name"** — `import app_US_v2`
-  doesn't work. For any scripted testing, load it with
-  `importlib.util.spec_from_file_location` + `module_from_spec`, AND
-  register it in `sys.modules[name] = mod` before executing (skipping the
-  `sys.modules` step throws a confusing `AttributeError` from `dataclasses`).
-- **PowerShell, not bash.** No `&&` chaining (use `;` or separate calls), no
-  heredocs (`<<'EOF'` fails) — write multi-line scripts/commit messages to a
-  temp file and run/`git commit -F` it instead.
-- **`WORKLOG.md`** is the team's running log (newest entries on top, dated,
-  attributed). Not required for every micro-edit but worth checking before
-  a session to see teammates' latest context, and worth an entry for
-  anything structural.
-- **Term definitions on first use** — no statistics jargon without a
-  one-line plain-English definition, per the project's `CLAUDE.md` (not
-  read this session, but referenced repeatedly in `WORKLOG.md`/`HANDOFF.md`
-  — worth reading if not already).
+  (bare `$` is a LaTeX delimiter in Streamlit markdown).
+- **Naming:** first mention "U.S. Census Bureau", later "Census Bureau".
+  Never "the Bureau", "Census" alone, or "BOC".
+- **AppTest tips:** load dotted file names with
+  `importlib.util.spec_from_file_location` and register in `sys.modules`
+  before executing. Open a tab by setting `session_state["main_tabs"]` in a
+  **fresh** AppTest session — switching it mid-session snaps back on the next
+  widget interaction (harness quirk; real browser clicks are fine).
+  Selectboxes with `format_func` need `select_index()`, not `set_value()`.
+- **PowerShell, not bash.** No `&&`, no heredocs; `>` writes UTF-16 (use
+  Python or `Out-File -Encoding utf8` for files git will read).
+- **`WORKLOG.md`** is the team's running log (newest on top). Worth an entry
+  for anything structural.
+- **Term definitions on first use**, per the project's `CLAUDE.md`.
 
-## 6. Prior brainstorming relevant to "structural UI changes"
+## 6. Open threads / ideas not yet decided
 
-The user has NOT yet specified exactly what structural change they want
-next — this handover was requested right after the color-ramp revert, before
-a new ask was made. Context from earlier sessions that's likely relevant
-background for whatever comes next:
-
-- We discussed **scope expansion to more stakeholders** (local government/
-  urban planning, business/econ dev, community/social services, real
-  estate/housing, education/healthcare) and debated **one dashboard vs.
-  stakeholder-specific tabs**. No decision was made — the resolution taken
-  so far is the opt-in **card checklist** (§4) rather than separate tabs,
-  keeping "County explorer" as a single surface. If the next structural
-  change revisits multi-tab-by-audience, that's a bigger architectural
-  shift (would touch `main()`'s `st.tabs()`, `render_welcome()`'s guidance
-  copy, and possibly split `render_explorer()`).
-- The **Welcome page** was flagged as the natural place to instruct
-  different user types on how to use the app for their use case — not yet
-  implemented beyond Katie's general-purpose redesign.
-- **Statistical peers** (§4) was the last major structural feature added
-  (2026-08-30) — grant-writing/"find similar counties" use case. If further
-  peer-related UI work is wanted (e.g., promoting it out of "below the
-  cards, behind a divider" into a more prominent structural position),
-  `render_peer_panel()` and its call site at the end of `render_explorer()`
-  are the places to look.
-- Card redesign (interval SVG, CV badge, removed redundant range line) is
-  considered DONE per the user's last explicit sign-off — don't re-open
-  without a new ask.
+- CV rank ranks the CV; ranking the estimate itself was not chosen yet.
+- Stakeholder-specific tabs vs one dashboard: still resolved via the opt-in
+  card checklist; Welcome page could carry audience-specific guidance.
+- The "Viewing: national (all states)" status button is styled as an Azul
+  command button; could become plain text.
+- Main's `tests/test_us_v3_score.py` is not in the worktree; a v4 copy of it
+  (and v4 versions of the branding/peer/tooltip tests) would be worth adding.
 
 ## 7. Suggested first step in the new chat
 
-Ask the user what specific structural UI change they want (e.g.: multi-tab
-by stakeholder, reorganizing the card-checklist UX, promoting peer counties,
-something else entirely) before making changes — this doc gives the "where
-things are," not a plan for "what's next."
+Ask the user what specific change they want next before editing — this doc
+gives the "where things are," not a plan for "what's next."
