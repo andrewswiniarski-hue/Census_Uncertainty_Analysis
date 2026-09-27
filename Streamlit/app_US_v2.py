@@ -185,6 +185,26 @@ QUADRANT_ORDER = tuple(QUADRANT_COLOR)
 IMPUTATION_INCOME = "Imputation: household income"
 
 
+class ImputationSource(NamedTuple):
+    """An ACS allocation (imputation) table a card's score can draw on."""
+    column: str      # column in data["alloc_county"]
+    label: str       # shown in the statistics panel
+    is_proxy: bool   # True when the table does not measure the card's own item
+
+
+# Card reliability score (lead decision #19, 2026-09-27). Only these two
+# tables pair with dashboard measures; every other measure is scored on
+# sampling alone and says "imputation not published". Age bands are
+# deliberately sampling only: age imputation is 1.1% at the median county,
+# too small for a relative scale to mean anything.
+IMPUTATION_SOURCES: dict[str, ImputationSource] = {
+    "income": ImputationSource("income_alloc", "household income, Table B99192", False),
+    "family_poverty": ImputationSource(
+        "fam_pov_alloc", "family poverty status, Table B99172", True,
+    ),
+}
+
+
 @dataclass(frozen=True)
 class Measure:
     """One card-and-map-able ACS measure (variable expansion, 2026-08-30).
@@ -227,6 +247,8 @@ class Measure:
     # states without a numeric MOE carries the API annotation "*****"; none of
     # the 130 counties with a numeric MOE does (live API check, 2026-09-14).
     controlled_when_moe_missing: bool = False
+    # Key into IMPUTATION_SOURCES, or None for a sampling-only score.
+    imputation: str | None = None
 
     @property
     def reference_mode(self) -> str:
@@ -301,7 +323,7 @@ def _build_measures() -> dict[str, Measure]:
         ),
         "Median household income": Measure(
             label="Median household income", topic="Income", table_id="B19013",
-            values=_income_values, state_reference=True,
+            values=_income_values, state_reference=True, imputation="income",
         ),
         "Median gross rent": Measure(
             label="Median gross rent", topic="Housing", table_id="B25064",
@@ -335,6 +357,7 @@ def _build_measures() -> dict[str, Measure]:
             values=acs_low_income, universe=acs_poverty_ratio_universe,
             rate_label="of people below 200% of the poverty line",
             measure_label="population below 200% of the poverty line",
+            imputation="family_poverty",
         ),
         "Unemployed": Measure(
             label="Unemployed", topic="Employment", table_id="B23025",
@@ -395,6 +418,7 @@ def _build_measures() -> dict[str, Measure]:
             universe=partial(acs_poverty_universe, band=band, sex="both"),
             rate_label=f"of {band} residents in poverty",
             measure_label=f"{band} population in poverty",
+            imputation="family_poverty",
         )
 
     for band in INCOME_BANDS:
@@ -404,6 +428,7 @@ def _build_measures() -> dict[str, Measure]:
             values=partial(acs_income_bracket, band=band),
             universe=acs_income_bracket_universe,
             rate_label=f"of households earning {band}",
+            imputation="income",
         )
 
     return registry
@@ -532,6 +557,22 @@ a:hover { color: #0D54B0; }
                  margin-right: 4px; vertical-align: middle; }
 .legend-label  { font-size: 0.78rem; color: #5A5A5A; }
 .filter-count  { color: #5A5A5A; font-size: 0.8rem; }
+.score-strip { display: flex; justify-content: space-between; align-items: baseline;
+               flex-wrap: wrap; gap: 2px 8px; padding-top: 6px; margin-bottom: 4px;
+               font-size: 0.8rem; }
+.score-band  { font-weight: 700; }
+.score-num   { color: #5A5A5A; white-space: nowrap; }
+.score-num b { color: #131313; }
+.score-bar-row { display: grid; grid-template-columns: 8.5rem 1fr 2.5rem; gap: 8px;
+                 align-items: center; padding: 5px 2px; font-size: 0.85rem;
+                 border-bottom: 1px solid #E6E6E6; }
+.score-bar-row .label { color: #5A5A5A; }
+.score-bar-row .value { text-align: right; font-weight: 600; color: #222;
+                        font-variant-numeric: tabular-nums; }
+.score-bar { display: block; position: relative; height: 6px; background: #EEEEEE;
+             border-radius: 3px; }
+.score-bar > span { position: absolute; left: 0; top: 0; height: 6px;
+                    background: #5A6672; border-radius: 3px; }
 </style>
 """
 
@@ -577,7 +618,14 @@ def _load_all() -> dict:
         pop_bin=population_size_bin(county_df["B01001_001E"].astype(float)),
     ).merge(rucc[["_key", "RUCC_2023", "RUCC_METRO"]], on="_key", how="left")
 
+    alloc_by_key = alloc_county.set_index("_key")
+    imputation_subs = {
+        name: composite.imputation_subscores(alloc_by_key[src.column])
+        for name, src in IMPUTATION_SOURCES.items()
+    }
+
     return {
+        "imputation_subs": imputation_subs,
         "state_df": state_df,
         "county_df": county_df,
         "state_geo": state_geo,
@@ -1155,6 +1203,79 @@ def _rent_context_panel(row: pd.DataFrame) -> None:
             "county's total occupied housing units. Rent estimates carry a wider "
             "margin of error where fewer households rent."
         )
+
+
+# Band colors reuse the Trenton prototype's tier colors (Streamlit/app.py
+# TIER_COLOR), per the lead (2026-09-27). Label text uses a darker shade of
+# each so it passes WCAG AA (4.5:1) on white; the bar keeps the brand color.
+BAND_COLOR = {composite.BAND_HIGHER: "#0072B2", composite.BAND_MODERATE: "#E69F00",
+              composite.BAND_LOWER: "#D55E00"}
+BAND_TEXT = {composite.BAND_HIGHER: "#005A8C", composite.BAND_MODERATE: "#8A5A00",
+             composite.BAND_LOWER: "#A34700"}
+BAND_ICON = {composite.BAND_HIGHER: "●", composite.BAND_MODERATE: "▲",
+             composite.BAND_LOWER: "■"}
+
+
+def score_for(measure_key: str, code: str, cv: float,
+              imputation_subs: dict[str, pd.Series]) -> composite.ReliabilityScore | None:
+    """The card score for one measure in one county (None when CV is NaN)."""
+    measure = MEASURES[measure_key]
+    if measure.imputation is None:
+        return composite.reliability_score(cv, note="not published")
+    src = IMPUTATION_SOURCES[measure.imputation]
+    sub = imputation_subs[measure.imputation].get(code, float("nan"))
+    if pd.isna(sub):
+        return composite.reliability_score(cv, note="not available for this county")
+    return composite.reliability_score(cv, float(sub), source=src.label, is_proxy=src.is_proxy)
+
+
+def _score_strip_html(rs: composite.ReliabilityScore, compact: bool = False) -> str:
+    """Band strip for the top of a card: colored bar, band label, score."""
+    number = f"<b>{rs.score:.0f}</b> / 100"
+    right = number if compact else f"Reliability score {number}"
+    return (
+        f"<div class='score-strip' style='border-top: 4px solid {BAND_COLOR[rs.band]};'>"
+        f"<span class='score-band' style='color: {BAND_TEXT[rs.band]};'>"
+        f"<span aria-hidden='true'>{BAND_ICON[rs.band]}</span> {rs.band}</span>"
+        f"<span class='score-num'>{right}</span></div>"
+    )
+
+
+def _score_note_html(rs: composite.ReliabilityScore) -> str:
+    """One neutral line under the card's dashed divider."""
+    if rs.imputation_sub is not None:
+        text = f"Sampling {rs.sampling_sub:.0f}, imputation {rs.imputation_sub:.0f}, averaged."
+    elif rs.imputation_note == "not available for this county":
+        text = "Sampling only: imputation rate not available for this county."
+    else:
+        text = "Sampling only: imputation not published for this figure."
+    return f"<div class='card-alloc'>{text}</div>"
+
+
+def _score_breakdown_html(rs: composite.ReliabilityScore) -> str:
+    """Sub-score bars and facts for 'Show me the statistics'."""
+    def bar(label: str, value: float | None, missing: str) -> str:
+        if value is None:
+            return (f"<div class='score-bar-row'><span class='label'>{label}</span>"
+                    f"<span></span><span class='value'>{missing}</span></div>")
+        return (f"<div class='score-bar-row'><span class='label'>{label}</span>"
+                f"<span class='score-bar'><span style='width: {value:.0f}%;'></span></span>"
+                f"<span class='value'>{value:.0f}</span></div>")
+
+    missing = rs.imputation_note or "not published"
+    band = rs.band + (" (capped by the CV)" if rs.capped_by_cv else "")
+    source = "not published" if rs.imputation_source is None else (
+        rs.imputation_source + (" [proxy]" if rs.imputation_is_proxy else ""))
+    return (
+        f"<div class='stat-row'><span class='label'>Reliability score</span>"
+        f"<span class='value'>{rs.score:.1f} / 100</span></div>"
+        f"<div class='stat-row'><span class='label'>Band</span>"
+        f"<span class='value'>{band}</span></div>"
+        + bar("Sampling sub-score", rs.sampling_sub, "")
+        + bar("Imputation sub-score", rs.imputation_sub, missing)
+        + f"<div class='stat-row'><span class='label'>Imputation source</span>"
+        f"<span class='value'>{source}</span></div>"
+    )
 
 
 def render_card(
