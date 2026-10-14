@@ -2141,7 +2141,8 @@ def geography_search_control(search_slot, data: dict, filtered_county_df: pd.Dat
 # statistics background assumed. First tab, selected by default (st.tabs'
 # own behavior -- the first tab passed to it is the initial selection).
 # Every term gets a one-line definition on first use, per CLAUDE.md, same
-# rule _term() enforces on Streamlit/pages/1_Whose_data_is_this.py.
+# rule the How this app works page follows
+# (Streamlit/pages/1_How_this_app_works.py).
 # ---------------------------------------------------------------------------
 
 def render_welcome() -> None:
