@@ -359,3 +359,34 @@ national median, 50 at the national 75th percentile, 0 for the most imputed coun
 Relative rather than absolute because no published standard says how much imputation
 is too much, and rates depend mostly on the question asked (the median county imputes
 38% of household incomes but about 1% of ages).
+
+
+**Large language model (LLM):** A computer program trained on large amounts of text
+that writes new text in reply to a request. The dashboard's "Ask about this county"
+panel uses one, Claude Haiku 5.5 from Anthropic, reached over the internet. In this
+project it writes only the wording of an answer; every figure is filled in by our code.
+
+**API key:** A secret password that lets a program use an online service, here
+Anthropic's Claude API (an API, or application programming interface, is the way one
+program asks another for something). It lives only in the git-ignored `.env` file as
+`ANTHROPIC_API_KEY` and is never committed or shared.
+
+**Prompt:** The text sent to a language model to ask for an answer. In the dashboard,
+each of the three buttons sends a fixed prompt written by us
+(`analysis/assistant_text.py`); the question box sends what the user typed.
+
+**System prompt:** The standing instructions sent with every question, before the
+question itself: who the reader is, what the assistant may and may not answer, that it
+must write named blanks instead of numbers, and the voice rules. Ours is
+`SYSTEM_PROMPT` in `analysis/assistant_text.py`.
+
+**Fact sheet:** **Our design.** A structured summary of every figure the dashboard
+shows for one county, built by the same functions the cards use
+(`_county_fact_sheet` in `Streamlit/app_US_v7.py`). The model sees each figure's name
+and the exact text the card shows; our code puts those texts into the answer.
+
+**Token:** The unit a language model reads and writes, roughly three quarters of an
+English word. Use of the model is priced per million tokens (Claude Haiku 5.5:
+\$0.10 for input, \$0.50 for output, list prices dated 2026-10-06). One question to
+the assistant uses about 13,500 input tokens, mostly the instructions and fact sheet,
+which are cached and reused at a tenth of the price.

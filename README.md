@@ -73,6 +73,8 @@ Every finished piece of work — script, analysis, notebook, document — gets a
 
 **Update 2026-09-14 (decision #18):** the dashboard covers **all US counties** and widens beyond income and poverty to measures the user-segment research ties to named federal programs: employment, housing cost, education and disability (see [`docs/dashboard-variable-shortlist.md`](docs/dashboard-variable-shortlist.md)). Income and poverty remain the anchor. The 2026-08-01 decisions below are kept as the record of how the project first narrowed; where they conflict with this update (domain, NJ pilot geography), this update wins.
 
+**Update 2026-10-18 (decision #20):** dashboard v7 adds an "Ask about this county" panel, on branch `county-ai-assistant`: a language model words short answers built only from the county's own dashboard figures (no new data or measures). It serves Q4 and the "plain-language interpretive aids" nice-to-have; see [`Streamlit/README.md`](Streamlit/README.md).
+
 Mentor guidance from the first biweekly: the EDA breadth is good — now **narrow the project to a specific product or metric the EDA found interesting and build the tool around that**, rather than an uncertainty reporting tool for the whole product catalog. Lead decisions implementing it:
 
 - **Domain: income & poverty** *(widened 2026-09-14 by decision #18; income and poverty remain the anchor)* — where our strongest findings already cluster (poverty defies the sampling law and is least reliable where poverty is suburbanizing, EDA 02/03; ~39% of median-tract households have imputed income, EDA 05; the 22.8% low-CV/high-allocation blind spot is an income finding, EDA 06).

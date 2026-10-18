@@ -26,7 +26,29 @@
 | `ASSISTANT_MODEL` | Model name | `claude-haiku-5-5` |
 | `ASSISTANT_FREE_TEXT` | `0` hides the question box and keeps the three buttons | `1` |
 
-Install the client with `pip install -r requirements.txt` (it adds `anthropic`), then run `streamlit run Streamlit/app_US_v7.py`. Restart Streamlit after changing `.env` or anything in `analysis/`. Estimated cost is about a tenth of a cent per question (list prices, not yet measured).
+Install the client with `pip install -r requirements.txt` (it adds `anthropic`), then run `streamlit run Streamlit/app_US_v7.py`. Restart Streamlit after changing `.env` or anything in `analysis/`. Measured cost is about four hundredths of a cent per question (205 questions for about \$0.09 at list prices, 2026-10-18).
+
+**Evaluation (2026-10-18).** `analysis/assistant_eval.py` asks 41 fixed questions about each of five counties chosen by fixed rules (Jefferson County, Alabama; Loving County, Texas; Alpine County, California; Bristol Bay Borough, Alaska; Wyoming County, Pennsylvania). First full run, 205 replies: the scope decision (answer or redirect) was right in 183 (89%); 11 (5%) were blocked by the checks, 6 for an unknown blank and 5 for a stray number; 1 of 15 ready-made prompt replies was blocked (under the one-in-ten line for moving to a larger model); none were unavailable; estimated cost about \$0.09. Fixes for the miss patterns followed: the eight questions that had missed went from 25 to 38 of 40 right on rerun, and the similar-county comparison now reads the right way round in all live checks. Details and open items: WORKLOG 2026-10-18.
+
+**Rerun it** from the repo root (live runs need the key and spend money):
+
+```bash
+python analysis/assistant_eval.py --dry-run
+```
+
+```bash
+python analysis/assistant_eval.py --county 01073 --limit 2
+```
+
+```bash
+python analysis/assistant_eval.py --match rising --match "median gross rent"
+```
+
+```bash
+python analysis/assistant_eval.py
+```
+
+Each live run writes `data/processed/assistant_eval_<date>.jsonl` (git-ignored; later runs the same day add `_run2`, `_run3`), one line per reply with the question, the shown text, the model's text with blanks, every failed check and the failed attempts' text, and token counts. Read a sample of answers against the cards after any change to the wording or the fact sheet: the checks guarantee every figure is real, not that every sentence about it is right.
 
 ## US county dashboard (v6)
 
