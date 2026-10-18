@@ -2,16 +2,35 @@
 
 | File | What it is | Status |
 |---|---|---|
-| [`app_US_v6.py`](app_US_v6.py) | US county dashboard, version 6 (Justus Long, with Katie Christiansen's welcome page): v3 plus the Statistical peers tab, ranked peers and the Census Bureau branding shell | **Current.** Use this one |
+| [`app_US_v7.py`](app_US_v7.py) | US county dashboard, version 7: v6 plus the "Ask about this county" AI assistant, which is off unless an API key is set (2026-10-18) | **Current.** Use this one |
+| [`app_US_v6.py`](app_US_v6.py) | US county dashboard, version 6 (Justus Long, with Katie Christiansen's welcome page): v3 plus the Statistical peers tab, ranked peers and the Census Bureau branding shell | Superseded by v7; kept unchanged as the snapshot before the assistant |
 | [`app_US_v3.py`](app_US_v3.py) | US county dashboard, version 3: version 2 plus the card reliability score (2026-09-27) | Superseded by v6 |
 | [`app_US_v2.py`](app_US_v2.py) | US county dashboard, version 2: every US county, 26 measures across 10 topics | Superseded by v3; kept as the snapshot before the reliability score |
 | [`app_US_v1.2.py`](app_US_v1.2.py) | Katie Christiansen's redesigned welcome page on top of v1.1 | Superseded by v2, which includes its welcome page verbatim |
 | [`app_US_v1.1.py`](app_US_v1.1.py) | Justus Long's nationwide county explorer | Superseded by v2 |
 | [`app.py`](app.py) | Trenton grant data prototype, NJ tracts | A learning instrument, not the deliverable (below) |
 
+## US county dashboard (v7): the "Ask about this county" assistant
+
+`app_US_v7.py` is version 6 plus one panel on the County explorer tab, directly under the county heading (2026-10-18; spec `docs/superpowers/specs/2026-10-10-county-ai-assistant-design.md`). Without an API key the panel is one line saying the assistant is off, and the page is otherwise identical to v6.
+
+**What the panel does.** Three buttons ("Give me a county brief", "How reliable are these figures?", "How does this county compare with similar counties?") and a question box (400 characters at most, 20 questions per session). A large language model, Claude Haiku 5.5, writes a short plain-language answer. It never types a number: it writes named blanks such as `[[median_household_income.estimate]]`, and our code fills each one with the exact figure the card shows, taken from a fact sheet built by the same functions the cards call (`_county_fact_sheet`). A reply is shown only if every blank resolves, no other digits or spelled-out numbers remain, and it contains no advice wording; otherwise the model gets one retry, then a fixed fallback text. Off-topic questions get a fixed redirect. Selecting a different county starts a new conversation. All wording is in `analysis/assistant_text.py`; the engine and its checks are in `analysis/assistant.py`.
+
+**What leaves the machine.** The question, the county's fact sheet (public statistics) and the standing instructions go to Anthropic's API. Nothing is written to disk. The panel's disclosure line says so.
+
+**Switching it on.** Copy `.env.example` to `.env` if you have not already, then set:
+
+| Variable | Purpose | Default |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | Your Claude API key. Never commit it; `.env` is git-ignored | none: the assistant is off |
+| `ASSISTANT_MODEL` | Model name | `claude-haiku-5-5` |
+| `ASSISTANT_FREE_TEXT` | `0` hides the question box and keeps the three buttons | `1` |
+
+Install the client with `pip install -r requirements.txt` (it adds `anthropic`), then run `streamlit run Streamlit/app_US_v7.py`. Restart Streamlit after changing `.env` or anything in `analysis/`. Estimated cost is about a tenth of a cent per question (list prices, not yet measured).
+
 ## US county dashboard (v6)
 
-`app_US_v6.py` is the current dashboard file (2026-10-18). It is Justus Long's version 6, copied unchanged from `origin/JL_Work_Tree` (commit 46850e8): version 3 below plus a Statistical peers tab with its own map and ranked peer table, the Census Bureau branding shell, map tooltips, a left-hand filter panel, "Nth of N counties in the state" CV ranks, and Katie Christiansen's goal-oriented welcome page (v5). Run it with `streamlit run Streamlit/app_US_v6.py`; it needs the same data as v3. Still open lead decisions: the peer table's "Similarity" score (our invention, not yet in the glossary), the blue and gold palette, and the em dashes in its user-facing text. The v3 notes below still describe the cards, measures and data.
+`app_US_v6.py` was the current dashboard file before v7 (2026-10-18). It is Justus Long's version 6, copied unchanged from `origin/JL_Work_Tree` (commit 46850e8): version 3 below plus a Statistical peers tab with its own map and ranked peer table, the Census Bureau branding shell, map tooltips, a left-hand filter panel, "Nth of N counties in the state" CV ranks, and Katie Christiansen's goal-oriented welcome page (v5). Run it with `streamlit run Streamlit/app_US_v6.py`; it needs the same data as v3. Still open lead decisions: the peer table's "Similarity" score (our invention, not yet in the glossary), the blue and gold palette, and the em dashes in its user-facing text. The v3 notes below still describe the cards, measures and data.
 
 ## US county dashboard (v3)
 

@@ -161,11 +161,13 @@ import streamlit as st
 
 from analysis import composite
 # -- The assistant is optional: without the anthropic package the panel is
-# -- off and the rest of the dashboard runs unchanged.
+# -- off and the rest of the dashboard runs unchanged. assistant_text is plain
+# -- strings with no dependencies, so the "off" line can always be shown.
+from analysis import assistant_text
 try:
-    from analysis import assistant, assistant_text
+    from analysis import assistant
 except ImportError:
-    assistant = assistant_text = None
+    assistant = None
 from analysis.acs import flag_topcoded_income, income_cv, Z_90
 from analysis.common import moe_to_cv
 from analysis.dashboard import (
@@ -1276,8 +1278,7 @@ def _published_figures(
         b["esri_class"] = ("high reliability" if cv < 0.12 else
                            "medium reliability" if cv <= 0.40 else "low reliability")
         b["nchs_flag"] = "is flagged" if cv > 0.30 else "is not flagged"
-    if (key in _PEER_MEDIANS and assistant_text is not None and assistant_text.HUD_RULE_VERIFIED
-            and _finite(e, m)):
+    if key in _PEER_MEDIANS and assistant_text.HUD_RULE_VERIFIED and _finite(e, m):
         b["hud_median_rule"] = "meets" if m < e / 2 else "does not meet"
     return b, v
 
@@ -3123,7 +3124,7 @@ def _explorer_cards_fragment(
         v7: one shared helper, so the assistant's fact sheet reads the same rank."""
         return _cv_rank_in_state(data, row["STATE"].iloc[0], measure_name, key)
 
-    st.subheader(f"{label} -- American Community Survey ({ACS_VINTAGE})")
+    # v7: the county heading moved to render_explorer, above the assistant panel.
     st.info(
         "ACS surveys a *sample* of households, not everyone. Every number below ships "
         "with a real, measured margin of error -- the range comes directly from the "
@@ -3353,6 +3354,102 @@ def _explorer_cards_fragment(
                         _rent_context_panel(row)
 
 
+# ---------------------------------------------------------------------------
+# "Ask about this county" panel (v7). Wording lives in
+# analysis/assistant_text.py; the model call and every check live in
+# analysis/assistant.py. This section only lays out the panel and keeps the
+# conversation in st.session_state["assistant"] = {"code", "turns", "count"},
+# where a turn is {"shown": what the user clicked or typed, "sent": the text
+# sent as the question, "reply": AssistantReply}.
+# ---------------------------------------------------------------------------
+
+@st.cache_data(show_spinner=False)
+def _county_fact_sheet_cached(code: str, unavailable_key: tuple[str, ...]) -> dict:
+    """_county_fact_sheet, cached per county. Loads the data itself because
+    the data dictionary cannot be hashed as a cache key."""
+    return _county_fact_sheet(_load_all(), code, set(unavailable_key))
+
+
+def _assistant_client():
+    """One client per browser session. Kept in session state rather than
+    st.cache_resource, so a client is never shared across sessions or test
+    runs."""
+    if "assistant_client" not in st.session_state:
+        st.session_state["assistant_client"] = assistant.make_client()
+    return st.session_state["assistant_client"]
+
+
+def _clear_assistant() -> None:
+    st.session_state["assistant"]["turns"] = []
+
+
+def _answer(code: str, unavailable: set[str], turns: list[dict], sent: str):
+    """One question to the engine. Any failure becomes the fixed
+    "unavailable" reply: the panel must never take the page down."""
+    try:
+        client = _assistant_client()
+        if client is None:
+            return assistant.AssistantReply("unavailable", assistant_text.UNAVAILABLE)
+        sheet = _county_fact_sheet_cached(code, tuple(sorted(unavailable)))
+        on_screen = [assistant.measure_id(k)
+                     for k in st.session_state.get("card_checklist", list(DEFAULT_CARD_LABELS))]
+        history = [(t["sent"], t["reply"].template) for t in turns if t["reply"].status == "answer"]
+        with st.spinner("Writing an answer..."):
+            return assistant.ask(client, sheet, on_screen, history, sent)
+    except Exception:  # noqa: BLE001 -- deliberate: no engine failure may break the page
+        return assistant.AssistantReply("unavailable", assistant_text.UNAVAILABLE)
+
+
+@st.fragment
+def _assistant_fragment(data: dict, code: str, label: str, unavailable: set[str]) -> None:
+    """The "Ask about this county" panel, in its own fragment so asking a
+    question does not redraw the map or the cards. Off (one line) when no
+    API key is configured or the anthropic package is missing."""
+    with st.container(border=True):
+        st.markdown("**Ask about this county**")
+        if assistant is None or not assistant.is_configured():
+            st.caption(assistant_text.OFF)
+            return
+
+        state = st.session_state.get("assistant")
+        if not state or state.get("code") != code:
+            # -- a new county starts a new conversation
+            state = {"code": code, "turns": [], "count": 0}
+            st.session_state["assistant"] = state
+
+        st.caption(assistant_text.CAN_ASK)
+        asked = None
+        for i, (col, preset) in enumerate(zip(st.columns(3), assistant_text.PRESETS)):
+            with col:
+                if st.button(preset.label, key=f"assistant_preset_{i}", use_container_width=True):
+                    asked = (preset.label, preset.prompt)
+        conversation = st.container()
+        if assistant.free_text_enabled():
+            typed = st.chat_input(f"Ask a question about {label}",
+                                  max_chars=assistant.MAX_QUESTION_CHARS, key="assistant_question")
+            if typed:
+                asked = (typed, typed)
+        st.button("Clear conversation", key="assistant_clear", on_click=_clear_assistant)
+        st.caption(assistant_text.DISCLOSURE)
+
+        if asked is not None:
+            shown, sent = asked
+            if state["count"] >= assistant.MAX_QUESTIONS_PER_SESSION:
+                reply = assistant.AssistantReply("blocked", assistant_text.QUESTION_CAP)
+            else:
+                state["count"] += 1
+                with conversation:
+                    reply = _answer(code, unavailable, state["turns"], sent)
+            state["turns"].append({"shown": shown, "sent": sent, "reply": reply})
+
+        with conversation:
+            for turn in state["turns"]:
+                with st.chat_message("user"):
+                    st.text(turn["shown"])  # never markdown: the user's own text, shown verbatim
+                with st.chat_message("assistant"):
+                    st.markdown(turn["reply"].text)  # checked, and $ already escaped
+
+
 def _explorer_methodology_disclaimer() -> None:
     """One collapsible copy of the methodology that used to repeat under
     every card's 'Show me the statistics' expander."""
@@ -3416,6 +3513,8 @@ def render_explorer(data: dict) -> None:
                 st.warning("This county isn't in the current data. Search for it in the panel beside the map.")
             else:
                 state_row = data["state_df"][data["state_df"]["_key"] == row["STATE"].iloc[0]]
+                st.subheader(f"{label} -- American Community Survey ({ACS_VINTAGE})")
+                _assistant_fragment(data, code, label, unavailable)
                 _explorer_cards_fragment(data, code, label, row, state_row, unavailable)
 
     _explorer_methodology_disclaimer()

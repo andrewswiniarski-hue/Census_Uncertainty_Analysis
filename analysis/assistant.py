@@ -255,7 +255,8 @@ def ask(client, sheet: dict, on_screen: list[str], history: list[tuple[str, str]
 
     on_screen holds measure ids; history holds (question_sent, template)
     pairs for earlier answers, oldest first."""
-    if len(question) > MAX_QUESTION_CHARS:
+    # -- The limit is for typed questions; the ready-made prompts are ours and longer
+    if len(question) > MAX_QUESTION_CHARS and question not in {p.prompt for p in text.PRESETS}:
         return AssistantReply("blocked", text.TOO_LONG)
 
     messages = _messages(sheet, on_screen, history, question)

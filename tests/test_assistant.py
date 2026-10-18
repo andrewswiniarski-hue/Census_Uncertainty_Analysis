@@ -285,3 +285,10 @@ def test_usage_is_summed_across_attempts():
     r = ask(fake(TYPED_DIGIT, GOOD), SHEET, [], [], "q")
     assert r.usage == {"input_tokens": 2, "output_tokens": 2,
                        "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0}
+
+
+def test_preset_prompts_are_not_length_limited():
+    # -- the 400-character limit is for typed questions; our own prompts are longer
+    for preset in text.PRESETS:
+        c = fake(GOOD); r = ask(c, SHEET, [], [], preset.prompt)
+        assert r.status == "answer" and len(c.messages.calls) == 1
