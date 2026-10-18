@@ -19,3 +19,4 @@ openpyxl          # .xlsx read/write (tools/product_scope.py --export xlsx)
 topojson          # shared-border-aware geometry simplification (nationwide county app) --
                    # shapely.simplify preserves each polygon's own validity but not shared
                    # borders with its neighbors, which creates slivers at national tolerances
+anthropic         # Claude API client for the dashboard's "Ask about this county" assistant (tested with 1.15.0)
