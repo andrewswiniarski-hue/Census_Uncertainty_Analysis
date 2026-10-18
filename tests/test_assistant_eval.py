@@ -92,3 +92,21 @@ def test_score_counts_first_failed_checks_including_retries_that_passed():
     s = score(rows)
     assert s["retried"] == 2
     assert s["first_failed_by_check"] == {"stray_number": 1, "advice_wording": 1}
+
+
+def test_select_questions_by_text():
+    from analysis.assistant_eval import select_questions
+    assert select_questions([]) == QUESTIONS
+    picked = select_questions(["rising", "MEDIAN GROSS RENT"])
+    assert [q.text for q in picked] == ["Is poverty rising in this county?", "What is the median gross rent here?"]
+
+
+def test_an_earlier_run_is_never_overwritten(tmp_path):
+    from datetime import date
+    from analysis.assistant_eval import output_path
+    day = date(2026, 10, 18)
+    first = output_path(tmp_path, day)
+    assert first.name == "assistant_eval_20261018.jsonl"
+    first.write_text("x")
+    second = output_path(tmp_path, day)
+    assert second.name == "assistant_eval_20261018_run2.jsonl"

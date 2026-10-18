@@ -21,7 +21,8 @@ What it needs
 What it produces
 ----------------
 - A live run writes one JSON line per question and county to
-  data/processed/assistant_eval_<YYYYMMDD>.jsonl (git-ignored) and prints the
+  data/processed/assistant_eval_<YYYYMMDD>.jsonl (git-ignored; a later run the
+  same day writes _run2, _run3 and so on) and prints the
   score summary: scope accuracy, blocked share by check, preset blocks,
   token totals and an estimated cost.
 - --dry-run prints the counties and the number of questions and calls.
@@ -29,6 +30,7 @@ What it produces
 Usage (from the repo root):
     python analysis/assistant_eval.py --dry-run
     python analysis/assistant_eval.py --county 01073 --limit 2
+    python analysis/assistant_eval.py --match rising --match "median gross rent"
     python analysis/assistant_eval.py
 
 Plan: docs/superpowers/plans/2026-10-10-county-ai-assistant.md, Task 6.
@@ -126,6 +128,26 @@ QUESTIONS: tuple[EvalQuestion, ...] = (
 _PRESET_TEXTS = {p.prompt for p in PRESETS}
 
 
+def select_questions(match: list[str]) -> tuple[EvalQuestion, ...]:
+    """QUESTIONS whose text contains any of `match` (case-insensitive);
+    all of them when `match` is empty."""
+    if not match:
+        return QUESTIONS
+    needles = [m.lower() for m in match]
+    return tuple(q for q in QUESTIONS if any(n in q.text.lower() for n in needles))
+
+
+def output_path(out_dir: Path, day: date) -> Path:
+    """assistant_eval_<YYYYMMDD>.jsonl, or _run2, _run3 ... when an earlier
+    run that day already wrote one, so no run is overwritten."""
+    path = out_dir / f"assistant_eval_{day:%Y%m%d}.jsonl"
+    n = 2
+    while path.exists():
+        path = out_dir / f"assistant_eval_{day:%Y%m%d}_run{n}.jsonl"
+        n += 1
+    return path
+
+
 def load_app():
     """The v7 dashboard module, for _load_all and _county_fact_sheet. Its
     page code runs only under `streamlit run`, not on import."""
@@ -213,12 +235,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dry-run", action="store_true", help="pick counties and count calls; spend nothing")
     parser.add_argument("--limit", type=int, default=None, help="ask only the first N questions")
     parser.add_argument("--county", default=None, help="ask about this county FIPS code only")
+    parser.add_argument("--match", action="append", default=[],
+                        help="ask only questions containing this text (repeatable)")
     args = parser.parse_args(argv)
 
     app = load_app()
     data = app._load_all()
     counties = [args.county] if args.county else pick_counties(data["county_df"], app.MEASURES)
-    questions = QUESTIONS[:args.limit] if args.limit else QUESTIONS
+    questions = select_questions(args.match)
+    questions = questions[:args.limit] if args.limit else questions
     names = data["labels_county"]
     print("counties: " + "; ".join(f"{c} {names.get(c, '(not in data)')}" for c in counties))
     print(f"questions: {len(questions)} per county, {len(questions) * len(counties)} calls")
@@ -236,7 +261,7 @@ def main(argv: list[str] | None = None) -> int:
     unavailable = app._unavailable_measures(data)
     on_screen = [assistant.measure_id(k) for k in app.DEFAULT_CARD_LABELS]
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    out_path = OUT_DIR / f"assistant_eval_{date.today():%Y%m%d}.jsonl"
+    out_path = output_path(OUT_DIR, date.today())
     rows: list[dict] = []
     with out_path.open("w", encoding="utf-8") as fh:
         for code in counties:

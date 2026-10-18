@@ -74,6 +74,37 @@ SHEET = {
             "blanks": {"label": "Median gross rent"},
             "values": {},
         },
+        # -- Measures whose definitions carry numbers (ages, thresholds)
+        "poverty_5_17": {
+            "key": "Poverty: 5-17", "label": "5-17 population in poverty",
+            "topic": "Poverty", "table": "B17001", "status": "published",
+            "unit": None, "rate_label": "of 5-17 residents in poverty",
+            "blanks": {"label": "5-17 population in poverty", "estimate": "21,004"},
+            "values": {"estimate": 21004.0},
+        },
+        "households_earning_under_25_000": {
+            "key": "Households earning under \\$25,000", "label": "Households earning under $25,000",
+            "topic": "Income", "table": "B19001", "status": "published",
+            "unit": None, "rate_label": "of households earning Under $25k",
+            "blanks": {"label": "Households earning under $25,000", "estimate": "58,210"},
+            "values": {"estimate": 58210.0},
+        },
+        "no_high_school_diploma_age_25": {
+            "key": "No high school diploma (age 25+)",
+            "label": "adults 25 and over without a high school diploma",
+            "topic": "Education", "table": "B15003", "status": "published",
+            "unit": None, "rate_label": "of adults 25 and over without a high school diploma",
+            "blanks": {"label": "adults 25 and over without a high school diploma", "estimate": "40,112"},
+            "values": {"estimate": 40112.0},
+        },
+        "cost_burdened_renters_30_of_income": {
+            "key": "Cost-burdened renters (30%+ of income)",
+            "label": "cost-burdened renter households",
+            "topic": "Housing", "table": "B25070", "status": "published",
+            "unit": None, "rate_label": "of renters paying 30% or more of income in rent",
+            "blanks": {"label": "cost-burdened renter households", "estimate": "52,077"},
+            "values": {"estimate": 52077.0},
+        },
     },
 }
 
@@ -328,3 +359,47 @@ def test_every_failed_check_is_recorded():
     r = ask(fake(TYPED_DIGIT, EMPTY), SHEET, [], [], "q")
     assert (r.status, r.failed_check, r.checks_failed) == ("blocked", "no_grounding", ("stray_number", "no_grounding"))
     assert ask(fake(GOOD), SHEET, [], [], "q").checks_failed == ()
+
+
+# -- Fixes after the full evaluation (2026-10-18) ------------------------------
+
+@pytest.mark.parametrize("answer, used, expected", [
+    # -- numbers that are part of a measure's definition may be typed, in natural forms
+    ("Children aged 5 to 17 in poverty: [[poverty_5_17.estimate]].", ["poverty_5_17"], None),
+    ("Children ages 5-17 in poverty: [[poverty_5_17.estimate]].", ["poverty_5_17"], None),
+    ("People below 200% of the poverty line: [[low_income_below_200_of_poverty.estimate]].",
+     ["low_income_below_200_of_poverty"], None),
+    ("Households earning under $25,000: [[households_earning_under_25_000.estimate]].",
+     ["households_earning_under_25_000"], None),
+    ("Adults age 25 and over without a diploma: [[no_high_school_diploma_age_25.estimate]].",
+     ["no_high_school_diploma_age_25"], None),
+    ("Adults 25 and older without a diploma: [[no_high_school_diploma_age_25.estimate]].",
+     ["no_high_school_diploma_age_25"], None),
+    ("Renters paying 30% or more of their income: [[cost_burdened_renters_30_of_income.estimate]].",
+     ["cost_burdened_renters_30_of_income"], None),
+    # -- a definitional number on its own, or a near miss of one, is still a stray number
+    ("There are 17 children in poverty. [[poverty_5_17.estimate]]", ["poverty_5_17"], "stray_number"),
+    ("About 35% of renters are cost-burdened. [[cost_burdened_renters_30_of_income.estimate]]",
+     ["cost_burdened_renters_30_of_income"], "stray_number"),
+    ("Under $250,000 households: [[households_earning_under_25_000.estimate]].",
+     ["households_earning_under_25_000"], "stray_number"),
+])
+def test_definitional_numbers(answer, used, expected):
+    reply = Reply(kind="answer", answer=answer, measures_used=used, terms_explained=[])
+    assert check_answer(reply, SHEET) == expected
+
+
+def test_failed_reply_text_is_saved():
+    r = ask(fake(TYPED_DIGIT, GOOD), SHEET, [], [], "q")
+    assert r.failed_templates == (TYPED_DIGIT.answer,)
+    r = ask(fake(TYPED_DIGIT, EMPTY), SHEET, [], [], "q")
+    assert r.failed_templates == (TYPED_DIGIT.answer, EMPTY.answer)
+    assert ask(fake(GOOD), SHEET, [], [], "q").failed_templates == ()
+
+
+def test_prompt_keeps_near_misses_and_unpublished_figures_as_answers():
+    p = text.SYSTEM_PROMPT
+    # -- the two near misses and an unpublished figure are answered, not redirected
+    assert 'use kind "answer" for both' in p
+    assert "suppressed" in p and "top_coded" in p and "not_in_local_data" in p
+    assert 'Use "not_in_dashboard" only for a topic or figure the dashboard does not cover at all' in p

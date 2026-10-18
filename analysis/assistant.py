@@ -154,10 +154,43 @@ def render_answer(template: str, sheet: dict) -> str:
     return _UNESCAPED_DOLLAR_RE.sub(r"\\$", filled)
 
 
+_RANGE_RE = re.compile(r"(\d+)\s*[-–]\s*(\d+)")
+_AND_OVER_RE = re.compile(r"(\d+)(?:\+| and over| and older)")
+_PERCENT_RE = re.compile(r"\d+%")
+_DOLLAR_AMOUNT_RE = re.compile(r"\$[\d,]+[kK]?")
+_UNDER_RE = re.compile(r"\bunder (\d+)\b", re.IGNORECASE)
+
+
+def _definitional_phrases(s: str) -> set[str]:
+    """Number phrases that define a measure (an age range, a poverty or rent
+    threshold, an income bracket), in the forms a sentence would use:
+    "5-17" also allows "5 to 17"; "25+" allows "25 and over" and "25 and
+    older". Each stays a whole phrase, so a bare "17" or "35%" still fails."""
+    out: set[str] = set()
+    for a, b in _RANGE_RE.findall(s):
+        out |= {f"{a}-{b}", f"{a}–{b}", f"{a} to {b}"}
+    for a in _AND_OVER_RE.findall(s):
+        out |= {f"{a}+", f"{a} and over", f"{a} and older"}
+    out |= set(_PERCENT_RE.findall(s))
+    for amount in _DOLLAR_AMOUNT_RE.findall(s):
+        amount = amount.rstrip(",")
+        if not amount.lower().endswith("k") and len(amount) > 1:
+            out.add(amount)
+    out |= {f"under {a}" for a in _UNDER_RE.findall(s)}
+    return out
+
+
 def _allowed_phrases(sheet: dict) -> list[str]:
+    """Phrases with digits the model may type: the fixed list, each measure's
+    label and rate label, and the number phrases in each measure's
+    definition (its label, rate label and registry key). Longest first, so a
+    long phrase is removed before a shorter one inside it."""
     phrases = set(text.ALLOWED_PHRASES)
     for m in sheet["measures"].values():
+        sources = [p for p in (m.get("label"), m.get("rate_label"), m.get("key")) if p]
         phrases.update(p for p in (m.get("label"), m.get("rate_label")) if p)
+        for s in sources:
+            phrases |= _definitional_phrases(s.replace("\\$", "$"))
     return sorted(phrases, key=len, reverse=True)
 
 
@@ -254,6 +287,7 @@ class AssistantReply:
     attempts: int = 0
     usage: dict | None = None
     checks_failed: tuple[str, ...] = ()  # every failed check, in order, including a retry that then passed
+    failed_templates: tuple[str, ...] = ()  # the model's text for each failed attempt; never shown
 
 
 def make_client():
@@ -303,10 +337,11 @@ def ask(client, sheet: dict, on_screen: list[str], history: list[tuple[str, str]
     messages = _messages(sheet, on_screen, history, question)
     usage = dict.fromkeys(_USAGE_KEYS, 0)
     failed: list[str] = []
+    failed_texts: list[str] = []
 
     def done(status, shown, attempt, **kw) -> AssistantReply:
         return AssistantReply(status, shown, attempts=attempt, usage=usage,
-                              checks_failed=tuple(failed), **kw)
+                              checks_failed=tuple(failed), failed_templates=tuple(failed_texts), **kw)
 
     for attempt in (1, 2):
         try:
@@ -345,6 +380,7 @@ def ask(client, sheet: dict, on_screen: list[str], history: list[tuple[str, str]
         if check is None:
             return done("answer", render_answer(reply.answer, sheet), attempt, template=reply.answer)
         failed.append(check)
+        failed_texts.append(reply.answer)
         messages = messages + [
             {"role": "assistant", "content": [_text_block(reply.model_dump_json())]},
             {"role": "user", "content": [_text_block(
