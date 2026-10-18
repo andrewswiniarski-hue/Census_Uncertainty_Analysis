@@ -74,18 +74,18 @@ def test_jefferson_matches_the_cards(sheet):
     assert (c["overall_imputed"], c["sex_imputed"], c["age_imputed"], c["race_imputed"]) == ("13.5%", "0.1%", "1.2%", "1.1%")
     b = m["blanks"]
     assert m["status"] == "published" and m["unit"] == "dollars"
-    assert (b["estimate"], b["ci_low"], b["ci_high"], b["cv"]) == ("66,388", "64,897", "67,879", "1.4%")
+    assert (b["estimate"], b["ci_low"], b["ci_high"], b["cv"]) == ("$66,388", "$64,897", "$67,879", "1.4%")
     assert (b["score"], b["sampling_score"], b["imputation_score"], b["band"]) == ("95", "97", "92", "Higher reliability")
     assert (b["cv_rank"], b["cv_rank_n"]) == ("3rd", "67")
     assert (b["similar_tested"], b["similar_tied"], b["similar_higher"], b["similar_lower"]) == ("237", "18", "196", "23")
-    assert (b["acs1_estimate"], b["acs1_ci_low"], b["acs1_ci_high"]) == ("69,363", "66,685", "72,041")
+    assert (b["acs1_estimate"], b["acs1_ci_low"], b["acs1_ci_high"]) == ("$69,363", "$66,685", "$72,041")
     assert b["esri_class"] == "high reliability" and "hud_median_rule" not in b
     assert m["values"]["estimate"] == 66388.0
 
 
 def test_income_state_comparison(sheet):
     b = sheet["measures"]["median_household_income"]["blanks"]
-    assert (b["state_value"], b["state_moe"], b["vs_state"]) == ("63,999", "399", "differs from")
+    assert (b["state_value"], b["state_moe"], b["vs_state"]) == ("$63,999", "$399", "differs from")
     assert len(b["similar_tied_examples"].split("; ")) == 5
 
 
@@ -230,7 +230,7 @@ def test_preset_click_shows_the_checked_answer(fake):
     at.button(key="assistant_preset_0").click().run()
     assert not at.exception
     chat = _chat_text(at)
-    assert "Income is 66,388." in chat and assistant_text.PRESETS[0].label in chat
+    assert "Income is \\$66,388." in chat and assistant_text.PRESETS[0].label in chat
     sent = fake.calls[0]["messages"][-1]["content"][-1]["text"]
     assert f"<question>{assistant_text.PRESETS[0].prompt}</question>" in sent
     assert "Cards on screen: total_population, median_household_income" in sent
@@ -246,13 +246,13 @@ def test_typed_question_is_shown_verbatim(fake):
 def test_county_switch_restarts_the_conversation(fake):
     at = _explorer()
     at.button(key="assistant_preset_0").click().run()
-    assert "Income is 66,388." in _chat_text(at)
+    assert "Income is \\$66,388." in _chat_text(at)
     # -- switch the way a user does: the county search box owns us_geo, so
     # -- writing us_geo directly is overwritten by the box on the next run
     [box] = [s for s in at.selectbox if s.label == "Search for a county"]
     box.set_value("Autauga County, Alabama").run()
     assert not at.exception
-    assert "Income is 66,388." not in _chat_text(at)
+    assert "Income is \\$66,388." not in _chat_text(at)
     assert at.session_state["assistant"]["turns"] == [] and at.session_state["assistant"]["code"] == "01001"
 
 

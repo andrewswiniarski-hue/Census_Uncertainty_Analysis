@@ -82,3 +82,13 @@ def test_score_reports_preset_blocks_and_tokens():
 def test_dry_run_makes_no_calls(monkeypatch, capsys):
     monkeypatch.setattr(assistant, "make_client", lambda: (_ for _ in ()).throw(AssertionError))
     assert main(["--dry-run"]) == 0 and "questions" in capsys.readouterr().out
+
+
+def test_score_counts_first_failed_checks_including_retries_that_passed():
+    rows = [{"expect": "answer", "status": "answer", "failed_check": None, "checks_failed": ["stray_number"]},
+            {"expect": "answer", "status": "blocked", "failed_check": "no_grounding",
+             "checks_failed": ["advice_wording", "no_grounding"]},
+            {"expect": "answer", "status": "answer", "failed_check": None, "checks_failed": []}]
+    s = score(rows)
+    assert s["retried"] == 2
+    assert s["first_failed_by_check"] == {"stray_number": 1, "advice_wording": 1}

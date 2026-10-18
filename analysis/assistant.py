@@ -58,6 +58,18 @@ _NUMBER_WORD_RE = re.compile(
     r"\b(" + "|".join(text.NUMBER_WORDS) + r")s?\b", re.IGNORECASE
 )
 _UNESCAPED_DOLLAR_RE = re.compile(r"(?<!\\)\$")
+# -- A blank with the "$" the model may type in front of it
+_SLOT_WITH_DOLLAR_RE = re.compile(r"(\$?)\[\[([a-z0-9_]+)\.([a-z0-9_]+)\]\]")
+_CENSUS_RE = re.compile(r"(?:U\.?S\.? )?Census Bureau")
+# -- Blanks whose value is a verb phrase ("differs from", "is flagged",
+# -- "meets"), so "is" written before them doubles the verb
+_PHRASE_FIELDS = ("vs_state", "nchs_flag", "hud_median_rule")
+_BLANK_GRAMMAR_RE = re.compile(
+    r"\b(?:is|are|was|were|be|been)\s+\[\[[a-z0-9_]+\.(?:" + "|".join(_PHRASE_FIELDS) + r")\]\]",
+    re.IGNORECASE,
+)
+_RULE_SLOT_RE = re.compile(r"\[\[rule\.[a-z0-9_]+\]\]")
+_SENTENCE_START_RE = re.compile(r"(?:[.!?]\s+|\n\s*)$")
 
 # -- Fields of a measure that go to the model (never "values" or "key")
 _MODEL_FIELDS = ("label", "topic", "table", "status", "unit", "rate_label", "blanks")
@@ -110,19 +122,36 @@ def sheet_for_model(sheet: dict) -> str:
     return json.dumps(payload, sort_keys=True, ensure_ascii=False)
 
 
+def _census_naming(s: str) -> str:
+    """"U.S. Census Bureau" at the first mention and "Census Bureau" after
+    (the project's naming rule), whatever the model wrote."""
+    count = 0
+
+    def name(_: re.Match) -> str:
+        nonlocal count
+        count += 1
+        return "U.S. Census Bureau" if count == 1 else "Census Bureau"
+
+    return _CENSUS_RE.sub(name, s)
+
+
 def render_answer(template: str, sheet: dict) -> str:
-    """Fill every blank from the fact sheet and escape each `$` for
-    st.markdown (a pair of unescaped `$` renders as math). Raises
-    UnknownBlank for a blank the fact sheet does not offer."""
+    """Fill every blank from the fact sheet, apply the Census Bureau naming
+    rule, and escape each `$` for st.markdown (a pair of unescaped `$`
+    renders as math). A `$` the model typed in front of a dollar figure is
+    dropped, since the figure carries its own. Raises UnknownBlank for a
+    blank the fact sheet does not offer."""
     values = slot_values(sheet)
 
     def fill(m: re.Match) -> str:
-        name = f"{m.group(1)}.{m.group(2)}"
+        name = f"{m.group(2)}.{m.group(3)}"
         if name not in values:
             raise UnknownBlank(name)
-        return values[name]
+        value = values[name]
+        return value if value.startswith("$") else m.group(1) + value
 
-    return _UNESCAPED_DOLLAR_RE.sub(r"\\$", SLOT_RE.sub(fill, template))
+    filled = _census_naming(_SLOT_WITH_DOLLAR_RE.sub(fill, template))
+    return _UNESCAPED_DOLLAR_RE.sub(r"\\$", filled)
 
 
 def _allowed_phrases(sheet: dict) -> list[str]:
@@ -142,6 +171,10 @@ def check_answer(reply: Reply, sheet: dict) -> str | None:
     stray_number  -- a digit or number word left once blanks and allowed
                      phrases are removed
     advice_wording -- a banned verdict or advice phrase
+    blank_grammar -- "is" or "are" before a blank that is already a verb
+                     phrase ("is differs from")
+    rule_placement -- a rule blank that does not start its own sentence; the
+                     rule sentence names its source, so a lead-in repeats it
     """
     answer = reply.answer
     if (
@@ -168,6 +201,13 @@ def check_answer(reply: Reply, sheet: dict) -> str | None:
     lowered = prose.lower()
     if any(p in lowered for p in text.BANNED_PHRASES):
         return "advice_wording"
+
+    if _BLANK_GRAMMAR_RE.search(answer):
+        return "blank_grammar"
+    for m in _RULE_SLOT_RE.finditer(answer):
+        before = answer[:m.start()]
+        if before.strip() and not _SENTENCE_START_RE.search(before):
+            return "rule_placement"
     return None
 
 
@@ -213,6 +253,7 @@ class AssistantReply:
     failed_check: str | None = None
     attempts: int = 0
     usage: dict | None = None
+    checks_failed: tuple[str, ...] = ()  # every failed check, in order, including a retry that then passed
 
 
 def make_client():
@@ -261,7 +302,12 @@ def ask(client, sheet: dict, on_screen: list[str], history: list[tuple[str, str]
 
     messages = _messages(sheet, on_screen, history, question)
     usage = dict.fromkeys(_USAGE_KEYS, 0)
-    failed = None
+    failed: list[str] = []
+
+    def done(status, shown, attempt, **kw) -> AssistantReply:
+        return AssistantReply(status, shown, attempts=attempt, usage=usage,
+                              checks_failed=tuple(failed), **kw)
+
     for attempt in (1, 2):
         try:
             response = client.messages.parse(
@@ -274,35 +320,34 @@ def ask(client, sheet: dict, on_screen: list[str], history: list[tuple[str, str]
                 output_format=Reply,
             )
         except anthropic.AuthenticationError:
-            return AssistantReply("unavailable", text.UNAVAILABLE, attempts=attempt)
+            return done("unavailable", text.UNAVAILABLE, attempt)
         except anthropic.RateLimitError:
-            return AssistantReply("unavailable", text.UNAVAILABLE, attempts=attempt)
+            return done("unavailable", text.UNAVAILABLE, attempt)
         except anthropic.APIStatusError:
-            return AssistantReply("unavailable", text.UNAVAILABLE, attempts=attempt)
+            return done("unavailable", text.UNAVAILABLE, attempt)
         except anthropic.APIConnectionError:
-            return AssistantReply("unavailable", text.UNAVAILABLE, attempts=attempt)
+            return done("unavailable", text.UNAVAILABLE, attempt)
         except pydantic.ValidationError:
             # -- the reply did not match the four-field schema
-            return AssistantReply("unavailable", text.UNAVAILABLE, attempts=attempt)
+            return done("unavailable", text.UNAVAILABLE, attempt)
 
         _add_usage(usage, getattr(response, "usage", None))
         if response.stop_reason in ("refusal", "max_tokens") or response.parsed_output is None:
-            return AssistantReply("unavailable", text.UNAVAILABLE, attempts=attempt, usage=usage)
+            return done("unavailable", text.UNAVAILABLE, attempt)
 
         reply: Reply = response.parsed_output
         if reply.kind == "out_of_scope":
-            return AssistantReply("out_of_scope", text.REDIRECT_OUT_OF_SCOPE, attempts=attempt, usage=usage)
+            return done("out_of_scope", text.REDIRECT_OUT_OF_SCOPE, attempt)
         if reply.kind == "not_in_dashboard":
-            return AssistantReply("not_in_dashboard", text.REDIRECT_NOT_IN_DASHBOARD,
-                                  attempts=attempt, usage=usage)
+            return done("not_in_dashboard", text.REDIRECT_NOT_IN_DASHBOARD, attempt)
 
-        failed = check_answer(reply, sheet)
-        if failed is None:
-            return AssistantReply("answer", render_answer(reply.answer, sheet), template=reply.answer,
-                                  attempts=attempt, usage=usage)
+        check = check_answer(reply, sheet)
+        if check is None:
+            return done("answer", render_answer(reply.answer, sheet), attempt, template=reply.answer)
+        failed.append(check)
         messages = messages + [
             {"role": "assistant", "content": [_text_block(reply.model_dump_json())]},
             {"role": "user", "content": [_text_block(
-                f"Your reply failed this check: {failed}. Write it again and follow the rules.")]},
+                f"Your reply failed this check: {check}. Write it again and follow the rules.")]},
         ]
-    return AssistantReply("blocked", text.FALLBACK, failed_check=failed, attempts=2, usage=usage)
+    return done("blocked", text.FALLBACK, 2, failed_check=failed[-1])

@@ -53,7 +53,9 @@ SHEET = {
             "topic": "Income", "table": "B19013", "status": "published",
             "unit": "dollars", "rate_label": None,
             "blanks": {"label": "Median household income", "estimate": "66,388",
-                       "ci_low": "64,897", "ci_high": "67,879", "band": "Higher reliability"},
+                       "ci_low": "64,897", "ci_high": "67,879", "band": "Higher reliability",
+                       "state_value": "$63,999", "vs_state": "differs from",
+                       "esri_class": "high reliability", "nchs_flag": "is not flagged"},
             "values": {"estimate": 66388.0, "ci_low": 64897.0, "ci_high": 67879.0},
         },
         "low_income_below_200_of_poverty": {
@@ -292,3 +294,37 @@ def test_preset_prompts_are_not_length_limited():
     for preset in text.PRESETS:
         c = fake(GOOD); r = ask(c, SHEET, [], [], preset.prompt)
         assert r.status == "answer" and len(c.messages.calls) == 1
+
+
+# -- Wording fixes after the first live run (2026-10-18) -----------------------
+
+def test_first_mention_is_us_census_bureau():
+    out = render_answer("The Census Bureau publishes it. The U.S. Census Bureau also controls it.", SHEET)
+    assert out == "The U.S. Census Bureau publishes it. The Census Bureau also controls it."
+
+
+def test_a_typed_dollar_sign_before_a_dollar_blank_is_dropped():
+    assert render_answer("State: $[[median_household_income.state_value]].", SHEET) == "State: \\$63,999."
+    assert render_answer("State: [[median_household_income.state_value]].", SHEET) == "State: \\$63,999."
+
+
+@pytest.mark.parametrize("answer, expected", [
+    ("Income [[median_household_income.vs_state]] the state's.", None),
+    ("The figure is [[median_household_income.vs_state]] the state median.", "blank_grammar"),
+    ("This figure [[median_household_income.nchs_flag]] by that rule.", None),
+    ("This figure is [[median_household_income.nchs_flag]].", "blank_grammar"),
+    ("[[rule.esri]] By that rule, income is [[median_household_income.esri_class]].", None),
+    ("Income is [[median_household_income.estimate]].\n\n[[rule.nchs]]", None),
+    ("ESRI, a mapping software company, says: [[rule.esri]]", "rule_placement"),
+])
+def test_phrase_and_rule_blanks_are_placed_as_whole_phrases(answer, expected):
+    reply = Reply(kind="answer", answer=answer, measures_used=["median_household_income"], terms_explained=[])
+    assert check_answer(reply, SHEET) == expected
+
+
+def test_every_failed_check_is_recorded():
+    r = ask(fake(TYPED_DIGIT, GOOD), SHEET, [], [], "q")
+    assert (r.status, r.failed_check, r.checks_failed) == ("answer", None, ("stray_number",))
+    r = ask(fake(TYPED_DIGIT, EMPTY), SHEET, [], [], "q")
+    assert (r.status, r.failed_check, r.checks_failed) == ("blocked", "no_grounding", ("stray_number", "no_grounding"))
+    assert ask(fake(GOOD), SHEET, [], [], "q").checks_failed == ()

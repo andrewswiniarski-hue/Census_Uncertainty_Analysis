@@ -184,6 +184,9 @@ def score(rows: list[dict]) -> dict:
         "blocked": len(blocked),
         "blocked_by_check": dict(Counter(r["failed_check"] for r in blocked)),
         "unavailable": sum(r["status"] == "unavailable" for r in rows),
+        # -- replies that failed a check at least once, including retries that then passed
+        "retried": sum(bool(r.get("checks_failed")) for r in rows),
+        "first_failed_by_check": dict(Counter(r["checks_failed"][0] for r in rows if r.get("checks_failed"))),
         "preset_n": len(presets),
         "preset_blocked": sum(r["status"] == "blocked" for r in presets),
         "tokens": tokens,
@@ -197,6 +200,7 @@ def _print_summary(s: dict) -> None:
     print(f"scope correct: {s['scope_correct']} ({s['scope_correct'] / n:.0%})")
     print(f"blocked: {s['blocked']} ({s['blocked'] / n:.0%}), by check: {s['blocked_by_check']}")
     print(f"unavailable: {s['unavailable']}")
+    print(f"failed a check at least once: {s['retried']}, first failure by check: {s['first_failed_by_check']}")
     if s["preset_n"]:
         print(f"ready-made prompts blocked: {s['preset_blocked']} of {s['preset_n']}"
               f" ({s['preset_blocked'] / s['preset_n']:.0%}; above 10% means consider a larger model)")

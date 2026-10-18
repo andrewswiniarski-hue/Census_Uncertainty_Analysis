@@ -1178,14 +1178,20 @@ def _one(values: tuple[pd.Series, pd.Series]) -> tuple[float, float]:
     return float(est.iloc[0]), float(moe.iloc[0])
 
 
+def _fact_number(key: str, measure: Measure, v: float) -> str:
+    """A figure as the card shows it, plus a leading "$" for the three
+    dollar measures, so a sentence reads "$66,388" where the card relies on
+    its title for the unit."""
+    return f"{'$' if key in _DOLLAR_MEASURES else ''}{v:,.0f}{measure.unit_suffix}"
+
+
 def _published_figures(
     data: dict, code: str, key: str, measure: Measure, row: pd.DataFrame,
     state_row: pd.DataFrame, acs1_row: pd.DataFrame, e: float, m: float,
 ) -> tuple[dict[str, str], dict[str, float]]:
     """Blanks and raw values for a measure with a published estimate and
     margin of error, following _explorer_cards_fragment's card for it."""
-    suffix = measure.unit_suffix
-    fmt = lambda v: f"{v:,.0f}{suffix}"  # noqa: E731 -- the card's own number format
+    fmt = partial(_fact_number, key, measure)
     low, high = acs_range(e, m)
     cv = cv_from_range(e, low, high)
     b = {"estimate": fmt(e), "moe": fmt(m), "ci_low": fmt(max(0.0, low)), "ci_high": fmt(high)}
@@ -1339,7 +1345,7 @@ def _county_fact_sheet(data: dict, code: str, unavailable: set[str]) -> dict:
                 entry["status"] = "suppressed"
             elif pd.isna(m):
                 entry["status"] = "controlled" if measure.controlled_when_moe_missing else "no_moe"
-                entry["blanks"]["estimate"] = f"{e:,.0f}{measure.unit_suffix}"
+                entry["blanks"]["estimate"] = _fact_number(key, measure, e)
                 entry["values"]["estimate"] = e
             else:
                 blanks, values = _published_figures(data, code, key, measure, row, state_row, acs1_row, e, m)
