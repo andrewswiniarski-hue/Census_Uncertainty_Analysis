@@ -26,7 +26,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from analysis.dashboard import RAW_DIR  # noqa: E402
 
-APP_FILES = ["app_US_v6.py"]
+APP_FILES = ["app_US_v6.py", "app_US_v7.py"]
 
 needs_data = pytest.mark.skipif(
     not (RAW_DIR / "acs5_2024_usdash_county.parquet").exists(),
