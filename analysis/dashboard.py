@@ -867,6 +867,35 @@ def poverty_rate(
 proportion_rate = poverty_rate
 
 
+def proportion_rate_series(
+    below_est: pd.Series,
+    below_moe: pd.Series,
+    universe_est: pd.Series,
+    universe_moe: pd.Series,
+) -> tuple[pd.Series, pd.Series]:
+    """Vectorized ACS proportion-MOE formula. Same handbook math as
+    proportion_rate() / poverty_rate(), Series in and Series out.
+    """
+    below_est = pd.to_numeric(below_est, errors="coerce")
+    below_moe = pd.to_numeric(below_moe, errors="coerce")
+    universe_est = pd.to_numeric(universe_est, errors="coerce")
+    universe_moe = pd.to_numeric(universe_moe, errors="coerce")
+    rate = pd.Series(np.nan, index=below_est.index, dtype=float)
+    moe = pd.Series(np.nan, index=below_est.index, dtype=float)
+    valid = universe_est > 0
+    if not valid.any():
+        return rate, moe
+    p = below_est[valid] / universe_est[valid]
+    se_x = below_moe[valid] / Z_90
+    se_y = universe_moe[valid] / Z_90
+    term = se_x**2 - (p**2) * se_y**2
+    term = term.where(term >= 0, se_x**2 + (p**2) * se_y**2)
+    se_p = (1 / universe_est[valid]) * np.sqrt(term)
+    rate.loc[valid] = p * 100
+    moe.loc[valid] = se_p * Z_90 * 100
+    return rate, moe
+
+
 def expected_at_rate(
     state_est: float, state_moe: float,
     state_universe_est: float, state_universe_moe: float,

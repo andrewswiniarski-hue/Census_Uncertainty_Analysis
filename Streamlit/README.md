@@ -2,11 +2,16 @@
 
 | File | What it is | Status |
 |---|---|---|
-| [`app_US_v3.py`](app_US_v3.py) | US county dashboard, version 3: version 2 plus the card reliability score (2026-09-27) | **Current.** Use this one |
+| [`app_US_v6.py`](app_US_v6.py) | US county dashboard, version 6 (Justus Long, with Katie Christiansen's welcome page): v3 plus the Statistical peers tab, ranked peers and the Census Bureau branding shell | **Current.** Use this one |
+| [`app_US_v3.py`](app_US_v3.py) | US county dashboard, version 3: version 2 plus the card reliability score (2026-09-27) | Superseded by v6 |
 | [`app_US_v2.py`](app_US_v2.py) | US county dashboard, version 2: every US county, 26 measures across 10 topics | Superseded by v3; kept as the snapshot before the reliability score |
 | [`app_US_v1.2.py`](app_US_v1.2.py) | Katie Christiansen's redesigned welcome page on top of v1.1 | Superseded by v2, which includes its welcome page verbatim |
 | [`app_US_v1.1.py`](app_US_v1.1.py) | Justus Long's nationwide county explorer | Superseded by v2 |
 | [`app.py`](app.py) | Trenton grant data prototype, NJ tracts | A learning instrument, not the deliverable (below) |
+
+## US county dashboard (v6)
+
+`app_US_v6.py` is the current dashboard file (2026-10-18). It is Justus Long's version 6, copied unchanged from `origin/JL_Work_Tree` (commit 46850e8): version 3 below plus a Statistical peers tab with its own map and ranked peer table, the Census Bureau branding shell, map tooltips, a left-hand filter panel, "Nth of N counties in the state" CV ranks, and Katie Christiansen's goal-oriented welcome page (v5). Run it with `streamlit run Streamlit/app_US_v6.py`; it needs the same data as v3. Still open lead decisions: the peer table's "Similarity" score (our invention, not yet in the glossary), the blue and gold palette, and the em dashes in its user-facing text. The v3 notes below still describe the cards, measures and data.
 
 ## US county dashboard (v3)
 

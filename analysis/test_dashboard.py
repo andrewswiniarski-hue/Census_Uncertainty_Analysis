@@ -74,6 +74,7 @@ from analysis.dashboard import (
     load_pums_profile,
     poverty_rate,
     proportion_rate,
+    proportion_rate_series,
     statistical_peers,
     tier,
 )
@@ -153,6 +154,30 @@ class PovertyRateTest(unittest.TestCase):
         univ_est, _ = acs_poverty_universe(df, "Under 5", "both")
         self.assertEqual(float(below_est.iloc[0]), 18.0)
         self.assertEqual(float(univ_est.iloc[0]), 100.0)
+
+
+class ProportionRateSeriesTest(unittest.TestCase):
+    def test_series_matches_scalar_elementwise(self) -> None:
+        # Three handbook cases in one Series: a normal proportion, the
+        # negative-sqrt-term fallback, and universe <= 0.
+        below_est = pd.Series([100.0, 100.0, 0.0])
+        below_moe = pd.Series([20.0, 500.0, 10.0])
+        universe_est = pd.Series([1000.0, 1000.0, 0.0])
+        universe_moe = pd.Series([50.0, 50.0, 10.0])
+        rate_s, moe_s = proportion_rate_series(
+            below_est, below_moe, universe_est, universe_moe
+        )
+        for i in range(len(below_est)):
+            rate, moe = proportion_rate(
+                float(below_est.iloc[i]), float(below_moe.iloc[i]),
+                float(universe_est.iloc[i]), float(universe_moe.iloc[i]),
+            )
+            if np.isnan(rate):
+                self.assertTrue(np.isnan(rate_s.iloc[i]))
+                self.assertTrue(np.isnan(moe_s.iloc[i]))
+            else:
+                self.assertAlmostEqual(float(rate_s.iloc[i]), rate)
+                self.assertAlmostEqual(float(moe_s.iloc[i]), moe)
 
 
 class TierTest(unittest.TestCase):
