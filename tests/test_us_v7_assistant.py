@@ -77,7 +77,9 @@ def test_jefferson_matches_the_cards(sheet):
     assert (b["estimate"], b["ci_low"], b["ci_high"], b["cv"]) == ("$66,388", "$64,897", "$67,879", "1.4%")
     assert (b["score"], b["sampling_score"], b["imputation_score"], b["band"]) == ("95", "97", "92", "Higher reliability")
     assert (b["cv_rank"], b["cv_rank_n"]) == ("3rd", "67")
-    assert (b["similar_tested"], b["similar_tied"], b["similar_higher"], b["similar_lower"]) == ("237", "18", "196", "23")
+    assert (b["similar_tested"], b["similar_counties_tied_with_this"],
+            b["similar_counties_significantly_higher_than_this"],
+            b["similar_counties_significantly_lower_than_this"]) == ("237", "18", "196", "23")
     assert (b["acs1_estimate"], b["acs1_ci_low"], b["acs1_ci_high"]) == ("$69,363", "$66,685", "$72,041")
     assert b["esri_class"] == "high reliability" and "hud_median_rule" not in b
     assert m["values"]["estimate"] == 66388.0
@@ -87,6 +89,16 @@ def test_income_state_comparison(sheet):
     b = sheet["measures"]["median_household_income"]["blanks"]
     assert (b["state_value"], b["state_moe"], b["vs_state"]) == ("$63,999", "$399", "differs from")
     assert len(b["similar_tied_examples"].split("; ")) == 5
+
+
+def test_similar_county_blanks_name_their_direction(sheet):
+    # -- The live brief read "it is higher than in 196" when 196 similar
+    # -- counties are higher than this one: a blank's name must say which way
+    # -- its count runs, and the ambiguous names must be gone.
+    b = sheet["measures"]["median_household_income"]["blanks"]
+    assert not {"similar_higher", "similar_lower", "similar_tied"} & set(b)
+    directional = [k for k in b if k.startswith("similar_") and ("higher" in k or "lower" in k or "tied" in k)]
+    assert directional and all(k.endswith(("_than_this", "_with_this", "_examples")) for k in directional)
 
 
 def test_controlled_population(sheet):

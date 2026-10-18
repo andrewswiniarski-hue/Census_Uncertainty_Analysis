@@ -29,6 +29,12 @@ Ground rules:
 
 ## Log
 
+### 2026-10-18 — Andrew Swiniarski — AI assistant: similar-county comparisons always read the right way round
+- **Area:** dashboard / analysis
+- **What was done:** Fixed the reversed comparison found in the browser check, tests written first. The fact sheet's similar-county counts were named `similar_higher`, `similar_lower` and `similar_tied`, and the model read "higher" as "this county is higher than" in one answer. They are now named for their direction: `similar_counties_significantly_higher_than_this`, `similar_counties_significantly_lower_than_this` and `similar_counties_tied_with_this`. The instructions to the model spell out the direction with an example sentence, and say that `similar_tested` is the only count for "of the ... similar counties".
+- **Findings / decisions:** (1) Live check of the three prompts that report the comparison, in all five evaluation counties (15 calls): every one of 13 comparison sentences ran the right way. (2) That run surfaced a second slip of the same kind: one brief wrote "Of the [higher count] similar counties, [higher count] have a significantly higher...", using the "higher" count as the total. After the instruction about `similar_tested`, the brief was rerun in all five counties: four used the right total, one left it out, and none reversed. (3) The checks still cannot prove a sentence describes its figure correctly; better blank names reduce the risk, and the lead's read remains the safeguard. Live checks today total about \$0.14 at list prices. Tests: 343 passed, 8 skipped.
+- **Files:** Streamlit/app_US_v7.py, analysis/assistant_text.py, tests/test_us_v7_assistant.py, tests/test_assistant.py, WORKLOG.md. Eval output (git-ignored): data/processed/assistant_eval_20261018_run3.jsonl, _run4.jsonl.
+
 ### 2026-10-18 — Andrew Swiniarski — AI assistant: browser check on Jefferson County, Alabama
 - **Area:** dashboard
 - **What was done:** Plan Task 7, Step 2. Ran `Streamlit/app_US_v7.py` with the lead's key, selected Jefferson County, Alabama, clicked the three ready-made prompts and typed the spec's county clerk question ("What is the average income here and how does it compare with similar counties?"). Read every figure in the four answers against the cards and their "Show me the statistics" panels. Four calls, well under a cent.

@@ -403,3 +403,8 @@ def test_prompt_keeps_near_misses_and_unpublished_figures_as_answers():
     assert 'use kind "answer" for both' in p
     assert "suppressed" in p and "top_coded" in p and "not_in_local_data" in p
     assert 'Use "not_in_dashboard" only for a topic or figure the dashboard does not cover at all' in p
+
+
+def test_prompt_names_the_similar_county_total():
+    # -- a live brief used the "higher" count as the number of similar counties
+    assert "similar_tested is the number of similar counties compared" in text.SYSTEM_PROMPT

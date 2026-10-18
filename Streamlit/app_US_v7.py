@@ -1268,9 +1268,12 @@ def _published_figures(
     if key in PEER_MEASURES:
         r = _compute_peers(data["county_df"], code, key, True, True)
         if r is not None:
+            # -- Names say which way each count runs: a live answer read
+            # -- "similar_higher" as "this county is higher than" (2026-10-18)
             counts = {"similar_pool": r.pool_n, "similar_tested": r.tested_n,
-                      "similar_tied": len(r.peers), "similar_higher": r.n_higher,
-                      "similar_lower": r.n_lower}
+                      "similar_counties_tied_with_this": len(r.peers),
+                      "similar_counties_significantly_higher_than_this": r.n_higher,
+                      "similar_counties_significantly_lower_than_this": r.n_lower}
             b.update({k: f"{n:,}" for k, n in counts.items()})
             v.update(counts)
             if len(r.peers):
