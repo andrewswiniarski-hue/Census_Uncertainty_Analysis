@@ -36,7 +36,9 @@ PRESETS: tuple[Preset, ...] = (
         "Then cover each card on screen: the figure in plain words, its 90% range, "
         "and its reliability band. Say how the county compares with its state and "
         "with similar counties where the fact sheet has that comparison. End by "
-        "naming any card on screen that is not published. Do not recommend anything.",
+        "naming any card on screen whose figure is suppressed, top-coded or missing "
+        "from the dashboard's data; a controlled figure such as total population is "
+        "published, without a margin of error. Do not recommend anything.",
     ),
     Preset(
         "How reliable are these figures?",
@@ -132,8 +134,9 @@ GLOSSARY: dict[str, str] = {
         "it so that ranges made this way contain the true value 90% of the time."
     ),
     "coefficient of variation": (
-        "The margin of error expressed as a share of the estimate (CV), so a CV of "
-        "30% means the sampling noise is about a third the size of the figure."
+        "The standard error (the margin of error divided by 1.645) expressed as a "
+        "share of the estimate (CV), so a CV of 30% means the typical sampling error "
+        "is about a third the size of the figure."
     ),
     "imputation": (
         "An answer the Census Bureau filled in by statistical methods because the "
@@ -167,7 +170,7 @@ GLOSSARY: dict[str, str] = {
     ),
     "statistically tied": (
         "Two estimates whose difference is within what sampling error could "
-        "produce, using the Census Bureau's two-estimate test at 90% confidence, "
+        "produce, using the Census Bureau's test for comparing estimates at 90% confidence, "
         "so neither can be called higher."
     ),
     "state-rate benchmark": (
@@ -194,11 +197,21 @@ BANNED_PHRASES: tuple[str, ...] = (
 )
 # Phrases with digits the model may type itself (matched as whole phrases,
 # along with every measure label in the fact sheet).
+# "90%" only in its confidence-level wording, so "90% of residents" is still blocked.
 ALLOWED_PHRASES: tuple[str, ...] = (
-    "90%", "5-year", "1-year", "2020-2024", "2020 to 2024", "0 to 100",
+    "90% range", "90% ranges", "90% confidence", "90% of the time",
+    "5-year", "1-year", "2020-2024", "2020 to 2024", "0 to 100",
 )
-# A spelled-out number is blocked like a typed digit.
-NUMBER_WORDS: tuple[str, ...] = ("hundred", "thousand", "million", "billion")
+# A spelled-out number is blocked like a typed digit. "One", "half" and
+# "third" are left out: the instructions and glossary use them in ordinary
+# wording ("the one period", "half of households are above it").
+NUMBER_WORDS: tuple[str, ...] = (
+    "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+    "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen",
+    "seventeen", "eighteen", "nineteen", "twenty", "thirty", "forty", "fifty",
+    "sixty", "seventy", "eighty", "ninety", "hundred", "thousand", "million",
+    "billion", "dozen",
+)
 
 
 def _rules_text() -> str:
@@ -225,7 +238,7 @@ YOUR REPLY has four fields:
 - terms_explained: the glossary terms below that your answer explains, written exactly as listed.
 An answer must name at least one measure or explain at least one glossary term.
 
-UNPUBLISHED FIGURES ARE STILL ANSWERS. A measure listed in the fact sheet whose status is "suppressed", "top_coded", "controlled", "no_moe" or "not_in_local_data" is on the dashboard. Answer a question about it with kind "answer": name the measure and say what its status means, for example that the U.S. Census Bureau did not publish that estimate for this county. Use "not_in_dashboard" only for a topic or figure the dashboard does not cover at all.
+UNPUBLISHED FIGURES ARE STILL ANSWERS. A measure listed in the fact sheet whose status is "suppressed", "top_coded" or "not_in_local_data" is on the dashboard but has no figure for this county. Answer a question about it with kind "answer": name the measure and say what its status means, for example that the U.S. Census Bureau did not publish that estimate for this county. A measure whose status is "controlled" or "no_moe" is published without a margin of error: never call it unpublished. A controlled estimate, such as total population in most counties, is pinned to official population estimates, so it has no sampling error. Use "not_in_dashboard" only for a topic or figure the dashboard does not cover at all.
 
 YOU CAN answer about: this county's figures across the dashboard's measures; what a range, CV, reliability score or band means; how the county compares with its state and with similar counties; which figures are imputed, suppressed or controlled; where to find something on the dashboard.
 

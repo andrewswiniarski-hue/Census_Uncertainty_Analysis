@@ -408,3 +408,63 @@ def test_prompt_keeps_near_misses_and_unpublished_figures_as_answers():
 def test_prompt_names_the_similar_county_total():
     # -- a live brief used the "higher" count as the number of similar counties
     assert "similar_tested is the number of similar counties compared" in text.SYSTEM_PROMPT
+
+
+# -- Final review fixes (2026-10-18) -------------------------------------------
+
+@pytest.mark.parametrize("answer, used", [
+    # -- C1a: a definitional number outside its defining phrase is a stray number
+    ("Median household income is well above $25,000. [[median_household_income.estimate]]",
+     ["median_household_income"]),
+    ("Rent burden is above 30%, so many renters struggle. [[cost_burdened_renters_30_of_income.estimate]]",
+     ["cost_burdened_renters_30_of_income"]),
+    ("About 90% of residents are insured. [[median_household_income.estimate]]", ["median_household_income"]),
+    ("Of 5-17 similar counties, most are higher. [[poverty_5_17.estimate]]", ["poverty_5_17"]),
+    ("Income is under 50 to 100. [[median_household_income.estimate]]", ["median_household_income"]),
+    # -- C1b: spelled numbers and fractions
+    ("Sixty-six percent of adults work. [[median_household_income.estimate]]", ["median_household_income"]),
+    ("Twelve percent are uninsured. [[median_household_income.estimate]]", ["median_household_income"]),
+    ("About two thirds of renters pay a lot. [[cost_burdened_renters_30_of_income.estimate]]",
+     ["cost_burdened_renters_30_of_income"]),
+    ("One in five residents is poor. [[poverty_5_17.estimate]]", ["poverty_5_17"]),
+    ("A dozen counties are tied. [[median_household_income.estimate]]", ["median_household_income"]),
+    ("Ten figures fall in the Lower reliability band. [[median_household_income.band]]", ["median_household_income"]),
+    ("About ⅓ of renters pay a lot. [[cost_burdened_renters_30_of_income.estimate]]",
+     ["cost_burdened_renters_30_of_income"]),
+])
+def test_invented_numbers_are_blocked(answer, used):
+    reply = Reply(kind="answer", answer=answer, measures_used=used, terms_explained=[])
+    assert check_answer(reply, SHEET) == "stray_number"
+
+
+@pytest.mark.parametrize("answer", [
+    "The median is the middle value: half of households are above it and half below. [[median_household_income.estimate]]",
+    "The 90% range runs from [[median_household_income.ci_low]] to [[median_household_income.ci_high]], "
+    "built so ranges like it contain the true value 90% of the time.",
+    "The score runs on a 0 to 100 scale for 2020-2024, 5-year estimates. [[median_household_income.estimate]]",
+])
+def test_ordinary_explanations_still_pass(answer):
+    reply = Reply(kind="answer", answer=answer, measures_used=["median_household_income"], terms_explained=[])
+    assert check_answer(reply, SHEET) is None
+
+
+def test_controlled_figures_are_described_as_published():
+    # -- I1: total population is controlled in most counties and is published
+    assert "published without a margin of error" in text.SYSTEM_PROMPT
+    assert "not published" not in text.PRESETS[0].prompt
+    assert "controlled" in text.PRESETS[0].prompt
+
+
+def test_cv_definition_matches_the_project_formula():
+    # -- I2: CV = (MOE / 1.645) / estimate, docs/glossary.md and HANDOFF decision #4
+    cv = text.GLOSSARY["coefficient of variation"]
+    assert "standard error" in cv and "1.645" in cv
+    assert "margin of error expressed as a share" not in cv
+
+
+def test_placeholder_key_counts_as_unset(monkeypatch):
+    # -- I4: .env.example's placeholder must not switch the panel on
+    monkeypatch.setattr(assistant, "load_dotenv", lambda *a, **k: False)
+    monkeypatch.delenv("ANTHROPIC_AUTH_TOKEN", raising=False)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "your_key_here")
+    assert is_configured() is False

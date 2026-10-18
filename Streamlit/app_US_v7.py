@@ -3367,7 +3367,9 @@ def _explorer_cards_fragment(
 # "Ask about this county" panel (v7). Wording lives in
 # analysis/assistant_text.py; the model call and every check live in
 # analysis/assistant.py. This section only lays out the panel and keeps the
-# conversation in st.session_state["assistant"] = {"code", "turns", "count"},
+# conversation in st.session_state["assistant"] = {"code", "turns"} and the
+# session's question count in st.session_state["assistant_count"] (kept apart, so
+# a county switch restarts the conversation but not the 20-question cap),
 # where a turn is {"shown": what the user clicked or typed, "sent": the text
 # sent as the question, "reply": AssistantReply}.
 # ---------------------------------------------------------------------------
@@ -3423,7 +3425,7 @@ def _assistant_fragment(data: dict, code: str, label: str, unavailable: set[str]
         state = st.session_state.get("assistant")
         if not state or state.get("code") != code:
             # -- a new county starts a new conversation
-            state = {"code": code, "turns": [], "count": 0}
+            state = {"code": code, "turns": []}
             st.session_state["assistant"] = state
 
         st.caption(assistant_text.CAN_ASK)
@@ -3443,10 +3445,10 @@ def _assistant_fragment(data: dict, code: str, label: str, unavailable: set[str]
 
         if asked is not None:
             shown, sent = asked
-            if state["count"] >= assistant.MAX_QUESTIONS_PER_SESSION:
+            if st.session_state.get("assistant_count", 0) >= assistant.MAX_QUESTIONS_PER_SESSION:
                 reply = assistant.AssistantReply("blocked", assistant_text.QUESTION_CAP)
             else:
-                state["count"] += 1
+                st.session_state["assistant_count"] = st.session_state.get("assistant_count", 0) + 1
                 with conversation:
                     reply = _answer(code, unavailable, state["turns"], sent)
             state["turns"].append({"shown": shown, "sent": sent, "reply": reply})

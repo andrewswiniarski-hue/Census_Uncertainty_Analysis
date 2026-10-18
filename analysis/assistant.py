@@ -35,6 +35,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -156,42 +157,70 @@ def render_answer(template: str, sheet: dict) -> str:
 
 _RANGE_RE = re.compile(r"(\d+)\s*[-–]\s*(\d+)")
 _AND_OVER_RE = re.compile(r"(\d+)(?:\+| and over| and older)")
-_PERCENT_RE = re.compile(r"\d+%")
-_DOLLAR_AMOUNT_RE = re.compile(r"\$[\d,]+[kK]?")
-_UNDER_RE = re.compile(r"\bunder (\d+)\b", re.IGNORECASE)
+_PERCENT_RE = re.compile(r"(\d+)%")
+_DOLLAR_AMOUNT_RE = re.compile(r"\$(\d[\d,]*\d)(?![\d,]*[kK])")
+_UNDER_AGE_RE = re.compile(r"\bunder (\d+)(?!\S*\$)", re.IGNORECASE)
 
 
-def _definitional_phrases(s: str) -> set[str]:
-    """Number phrases that define a measure (an age range, a poverty or rent
-    threshold, an income bracket), in the forms a sentence would use:
-    "5-17" also allows "5 to 17"; "25+" allows "25 and over" and "25 and
-    older". Each stays a whole phrase, so a bare "17" or "35%" still fails."""
+def _literal(phrase: str) -> str:
+    """A fixed phrase as a pattern that cannot match inside a longer word or
+    number: "under 5" never matches inside "under 50"."""
+    head = r"(?<![\w$])" if re.match(r"[\w$]", phrase) else ""
+    tail = r"(?![\w%])" if re.search(r"[\w%]$", phrase) else ""
+    return head + re.escape(phrase) + tail
+
+
+def _definitional_patterns(s: str) -> set[str]:
+    """Patterns for the numbers that define a measure (an age range, a poverty
+    or rent threshold, an income bracket), each allowed only inside the
+    wording that gives it that meaning: "aged 5 to 17", "age 25 and over",
+    "below 200% of the poverty line", "30% or more of income", "earning
+    under $25,000". A definitional number on its own ("30%", "$25,000",
+    "5-17") stays a stray number, since the model could otherwise present it
+    as a measured figure."""
+    age = r"(?<![\w$])(?:age[sd]?|adults|residents|people|children)\s+"
     out: set[str] = set()
     for a, b in _RANGE_RE.findall(s):
-        out |= {f"{a}-{b}", f"{a}–{b}", f"{a} to {b}"}
+        span = rf"{a}\s*(?:-|–|to)\s*{b}(?![\w%])"
+        out |= {age + span, rf"(?<![\w$]){span}[\s-]+years?\b"}
     for a in _AND_OVER_RE.findall(s):
-        out |= {f"{a}+", f"{a} and over", f"{a} and older"}
-    out |= set(_PERCENT_RE.findall(s))
-    for amount in _DOLLAR_AMOUNT_RE.findall(s):
-        amount = amount.rstrip(",")
-        if not amount.lower().endswith("k") and len(amount) > 1:
-            out.add(amount)
-    out |= {f"under {a}" for a in _UNDER_RE.findall(s)}
+        out.add(age + rf"{a}\s*(?:\+|and over|and older|or older)")
+    for a in _UNDER_AGE_RE.findall(s):
+        out |= {rf"(?<![\w$])(?:age[sd]?|children)\s+under\s+(?:age\s+)?{a}(?![\w%])",
+                rf"(?<![\w$])under\s+(?:age\s+)?{a}\s+years?\b"}
+    for a in _PERCENT_RE.findall(s):
+        out |= {rf"(?<![\w$]){a}%\s+of\s+(?:the\s+)?(?:federal\s+)?poverty(?:\s+(?:line|level|threshold))?\b",
+                rf"(?<![\w$]){a}%\s+or\s+more\s+of\s+(?:their\s+|household\s+)?income\b"}
+    amounts = [m.replace(",", "") for m in _DOLLAR_AMOUNT_RE.findall(s)]
+    if amounts:
+        money = [rf"\$(?:{int(x):,}|{x})(?![\d,]*\d)" for x in amounts]
+        span = money[0] if len(money) == 1 else rf"{money[0]}\s*(?:-|–|to|and)\s*{money[1]}"
+        lead = (r"(?<![\w$])(?:earning|earn|earns|with\s+(?:household\s+)?incomes?|incomes?)\s+"
+                r"(?:(?:of|under|below|less\s+than|from|between|over|above|at\s+least)\s+)?")
+        out.add(lead + span + r"(?:\+|\s+or\s+more)?")
     return out
 
 
-def _allowed_phrases(sheet: dict) -> list[str]:
-    """Phrases with digits the model may type: the fixed list, each measure's
-    label and rate label, and the number phrases in each measure's
-    definition (its label, rate label and registry key). Longest first, so a
-    long phrase is removed before a shorter one inside it."""
-    phrases = set(text.ALLOWED_PHRASES)
+def _allowed_patterns(sheet: dict) -> list[str]:
+    """Patterns for the text with digits the model may type: the fixed
+    phrases in assistant_text.ALLOWED_PHRASES, each measure's label and rate
+    label as whole phrases, and each measure's definitional numbers in their
+    defining wording (from its label, rate label and registry key). Longest
+    first, so a long phrase is removed before a shorter one inside it."""
+    literals = set(text.ALLOWED_PHRASES)
+    patterns: set[str] = set()
     for m in sheet["measures"].values():
-        sources = [p for p in (m.get("label"), m.get("rate_label"), m.get("key")) if p]
-        phrases.update(p for p in (m.get("label"), m.get("rate_label")) if p)
-        for s in sources:
-            phrases |= _definitional_phrases(s.replace("\\$", "$"))
-    return sorted(phrases, key=len, reverse=True)
+        literals.update(p for p in (m.get("label"), m.get("rate_label")) if p)
+        for s in (m.get("label"), m.get("rate_label"), m.get("key")):
+            if s:
+                patterns |= _definitional_patterns(s.replace("\\$", "$"))
+    return [_literal(p) for p in sorted(literals, key=len, reverse=True)] + sorted(patterns, key=len, reverse=True)
+
+
+def _has_number(s: str) -> bool:
+    """Digits, spelled-out numbers, or fraction characters such as "⅓"."""
+    return bool(re.search(r"\d", s) or _NUMBER_WORD_RE.search(s)
+                or any(unicodedata.category(ch) == "No" for ch in s))
 
 
 def check_answer(reply: Reply, sheet: dict) -> str | None:
@@ -201,8 +230,9 @@ def check_answer(reply: Reply, sheet: dict) -> str | None:
     no_grounding  -- empty answer; measures or terms not in the fact sheet or
                      glossary; or neither a measure nor a term named
     unknown_blank -- a blank the fact sheet does not offer, or a malformed one
-    stray_number  -- a digit or number word left once blanks and allowed
-                     phrases are removed
+    stray_number  -- a digit, number word or fraction left once blanks and
+                     allowed phrases are removed; a number that defines a
+                     measure is allowed only inside its defining wording
     advice_wording -- a banned verdict or advice phrase
     blank_grammar -- "is" or "are" before a blank that is already a verb
                      phrase ("is differs from")
@@ -226,9 +256,9 @@ def check_answer(reply: Reply, sheet: dict) -> str | None:
         return "unknown_blank"
 
     bare = prose
-    for phrase in _allowed_phrases(sheet):
-        bare = re.sub(re.escape(phrase), " ", bare, flags=re.IGNORECASE)
-    if re.search(r"\d", bare) or _NUMBER_WORD_RE.search(bare):
+    for pattern in _allowed_patterns(sheet):
+        bare = re.sub(pattern, " ", bare, flags=re.IGNORECASE)
+    if _has_number(bare):
         return "stray_number"
 
     lowered = prose.lower()
@@ -249,7 +279,9 @@ def check_answer(reply: Reply, sheet: dict) -> str | None:
 def is_configured() -> bool:
     """Whether a credential is present (environment or the repo's .env)."""
     load_dotenv(REPO_ROOT / ".env")
-    return bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"))
+    # -- .env.example's placeholder, copied unchanged, is not a credential
+    real = lambda name: (os.environ.get(name) or "").strip() not in ("", "your_key_here")  # noqa: E731
+    return real("ANTHROPIC_API_KEY") or real("ANTHROPIC_AUTH_TOKEN")
 
 
 def model_name() -> str:

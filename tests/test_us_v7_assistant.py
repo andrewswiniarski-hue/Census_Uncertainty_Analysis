@@ -268,15 +268,24 @@ def test_county_switch_restarts_the_conversation(fake):
     assert at.session_state["assistant"]["turns"] == [] and at.session_state["assistant"]["code"] == "01001"
 
 
-def test_session_cap(fake):
-    at = AppTest.from_file(str(APP_PATH), default_timeout=180)
-    at.session_state["main_tabs"] = "County explorer"
-    at.session_state["us_geo"] = dict(JEFFERSON)
-    at.session_state["assistant"] = {"code": "01073", "turns": [], "count": 20}
-    at.run()
+def test_session_cap(fake, monkeypatch):
+    monkeypatch.setattr(assistant, "MAX_QUESTIONS_PER_SESSION", 0)
+    at = _explorer()
     at.button(key="assistant_preset_0").click().run()
     assert not at.exception
     assert assistant_text.QUESTION_CAP in _chat_text(at) and fake.calls == []
+
+
+def test_session_cap_survives_a_county_switch(fake, monkeypatch):
+    # -- I3: switching county restarts the conversation, not the question count
+    monkeypatch.setattr(assistant, "MAX_QUESTIONS_PER_SESSION", 1)
+    at = _explorer()
+    at.button(key="assistant_preset_0").click().run()
+    [box] = [s for s in at.selectbox if s.label == "Search for a county"]
+    box.set_value("Autauga County, Alabama").run()
+    at.button(key="assistant_preset_0").click().run()
+    assert not at.exception
+    assert assistant_text.QUESTION_CAP in _chat_text(at) and len(fake.calls) == 1
 
 
 def test_presets_only_mode(fake, monkeypatch):

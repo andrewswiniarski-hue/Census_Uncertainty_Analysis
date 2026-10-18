@@ -7,7 +7,7 @@
 
 ## Purpose
 
-The US county dashboard shows up to 26 measures for a county. Each card carries an estimate, a 90% range, a coefficient of variation (CV: the margin of error as a share of the estimate) and a reliability score. A user who is not a statistician sees many numbers and no overall takeaway.
+The US county dashboard shows up to 26 measures for a county. Each card carries an estimate, a 90% range, a coefficient of variation (CV: the standard error, the margin of error divided by 1.645, as a share of the estimate; corrected 2026-10-18 from "the margin of error as a share of the estimate") and a reliability score. A user who is not a statistician sees many numbers and no overall takeaway.
 
 This design adds a panel where that user clicks a ready-made prompt or types a plain question and gets a short written answer. The answer is worded by a large language model (LLM: a text-generating AI system reached over the internet through an API, a programming interface) and built only from figures the dashboard already computes.
 
