@@ -146,10 +146,6 @@ details.xp .new { font-size: 11px; font-weight: 700; letter-spacing: .05em; text
 .kpi span { font-size: 13px; color: var(--muted); }
 .three { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; margin: 0 0 16px; }
 .three .flow-step h3 { font-size: 17px; }
-.team { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; margin: 0 0 14px; }
-.team div { border: 1px solid var(--line); border-radius: 9px; padding: 12px 14px; }
-.team b { color: var(--ink); display: block; }
-.team span { font-size: 13.5px; }
 .steps-num { counter-reset: qs; list-style: none; padding: 0; margin: 0 0 14px; }
 .steps-num > li { counter-increment: qs; position: relative; padding: 4px 0 10px 44px; }
 .steps-num > li::before { content: counter(qs); position: absolute; left: 0; top: 2px; width: 30px; height: 30px; border-radius: 50%; background: var(--gold); color: #3b2a00; font-weight: 700; text-align: center; line-height: 30px; }
@@ -273,13 +269,6 @@ figcaption b { color: var(--ink); }
     <li><strong>No data files.</strong> Every data file is downloaded fresh by the ingestion scripts (see <a href="#quickstart">Run it locally</a>), so nothing in the repo goes stale or carries a license question. All of it is public.</li>
   </ul>
 
-  <h3>Who built it</h3>
-  <div class="team">
-    <div><b>Andrew Swiniarski</b><span>Project lead and repository owner. EDA 01–05, the Phase 1 findings report, EDA 10 (SAIPE vs ACS) and EDA 14, the dashboard's v2/v3 card redesign and reliability score (decision #19), and the v7 assistant (decision #20).</span></div>
-    <div><b>Justus Long</b><span>Composite reliability matrix and CV-driver model (EDA 06), the DHC/DP1 notebooks (10–12), the SAIPE Mercer comparator (13), the Trenton prototype, the nationwide county explorer (v1.1) and v4–v6: statistical peers, Census Bureau branding shell, and the "How this app works" guide ported into this page.</span></div>
-    <div><b>Katie Christiansen</b><span>US boundary pull and national data exploration, and the dashboard's welcome page redesigns (v1.2 and the goal-oriented v5 welcome page carried into v6 and v7).</span></div>
-    <div><b>Garrett Spangler</b><span>Financial EDA (notebooks 08–09: allocation denominators, who gets imputed in PUMS), SAIPE/PUMS/VRT pulls, replicate-weight standard errors, API-surface verification, and the user-segment research behind the dashboard's measures.</span></div>
-  </div>
   <p class="disclaimer">This is a student capstone demonstration. It is not an official Census Bureau product. The repository is public, so it names no sponsor contacts.</p>
 </section>
 
