@@ -18,7 +18,9 @@ import pandas as pd
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-APP_PATH = REPO_ROOT / "Streamlit" / "app_US_v3.py"
+# The score wiring was introduced in v3 and is carried into v7, the only app
+# kept on the handoff branch.
+APP_PATH = REPO_ROOT / "Streamlit" / "app_US_v7.py"
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 

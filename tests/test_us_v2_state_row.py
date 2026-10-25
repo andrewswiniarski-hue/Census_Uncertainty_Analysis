@@ -23,11 +23,10 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-# v2 is the snapshot before the reliability score; v3 is current. Both carry
-# the same state-row drawing, so both are tested.
+# The state-row drawing was introduced in v2 and is carried unchanged into
+# v7, the only app kept on the handoff branch.
 APP_PATHS = {
-    "v2": REPO_ROOT / "Streamlit" / "app_US_v2.py",
-    "v3": REPO_ROOT / "Streamlit" / "app_US_v3.py",
+    "v7": REPO_ROOT / "Streamlit" / "app_US_v7.py",
 }
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))

@@ -1,14 +1,12 @@
-"""Smoke tests for the US county dashboard v6 and its successors.
+"""Smoke tests for the US county dashboard v7.
 
 Run:
-    python -m pytest tests/test_us_v6_smoke.py -v
+    python -m pytest tests/test_us_v7_smoke.py -v
 
-Checks that each app file loads, carries the expected measure registries,
+Checks that the app file loads, carries the expected measure registries,
 reproduces known peer counts for Jefferson County, Alabama (01073), and that
 each main tab renders without an exception. Real-data tests are skipped when
 data/raw/acs5_2024_usdash_county.parquet is absent.
-
-Plan: docs/superpowers/plans/2026-10-10-county-ai-assistant.md, Task 1.
 """
 
 from __future__ import annotations
@@ -26,7 +24,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from analysis.dashboard import RAW_DIR  # noqa: E402
 
-APP_FILES = ["app_US_v6.py", "app_US_v7.py"]
+APP_FILES = ["app_US_v7.py"]
 
 needs_data = pytest.mark.skipif(
     not (RAW_DIR / "acs5_2024_usdash_county.parquet").exists(),
