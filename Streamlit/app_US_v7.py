@@ -132,7 +132,7 @@ What changed from app_NJ.py, and why
    methodology, not a Census Bureau product.
 
 Run from the repo root:
-    streamlit run Streamlit/app_US_v4.py
+    streamlit run Streamlit/app_US_v7.py
 
 Needs data/raw/{acs5_2024_usdash,acs1_2024_usdash,geo_2024_usdash,
 acs5_2024_usdash_alloc,rucc_2023}_* -- regenerate with:
@@ -2379,9 +2379,8 @@ def geography_search_control(search_slot, data: dict, filtered_county_df: pd.Dat
 # Welcome tab (change G, 2026-08-18) -- plain-language orientation, no
 # statistics background assumed. First tab, selected by default (st.tabs'
 # own behavior -- the first tab passed to it is the initial selection).
-# Every term gets a one-line definition on first use, per CLAUDE.md, same
-# rule the How this app works page follows
-# (Streamlit/pages/1_How_this_app_works.py).
+# Every term gets a one-line definition on first use (the team's house rule),
+# the same rule the "How this app works" section of HANDOVER.html follows.
 # ---------------------------------------------------------------------------
 
 def render_welcome() -> None:

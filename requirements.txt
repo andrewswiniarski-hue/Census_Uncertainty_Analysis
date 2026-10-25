@@ -5,18 +5,23 @@
 #   .venv\Scripts\activate           (Windows)
 #   source .venv/bin/activate        (Mac/Linux)
 #   pip install -r requirements.txt
+#
+# Versions are pinned to the set verified together on Python 3.13.5
+# (2026-10-25: all four dashboard pulls run from an empty data/raw/, the full
+# test suite passes, Streamlit/app_US_v7.py serves). anthropic stays on the
+# version the assistant was evaluated with live (2026-10-18).
 
-pandas            # tabular data wrangling
-geopandas         # spatial data: joins estimates to map geometries
-matplotlib        # charts and maps
-censusdis         # Census API client: pulls estimates, MOEs, and boundaries in one call
-python-dotenv     # loads CENSUS_API_KEY from the local .env file
-jupyter           # notebooks for exploratory analysis
-pyarrow           # fast, compact parquet file storage
-streamlit         # Trenton dashboard prototype (Streamlit/app.py)
-pydeck            # interactive tract choropleth in the Trenton dashboard
-openpyxl          # .xlsx read/write (tools/product_scope.py --export xlsx)
-topojson          # shared-border-aware geometry simplification (nationwide county app) --
-                   # shapely.simplify preserves each polygon's own validity but not shared
-                   # borders with its neighbors, which creates slivers at national tolerances
-anthropic         # Claude API client for the dashboard's "Ask about this county" assistant (tested with 1.15.0)
+pandas==2.3.3          # tabular data wrangling
+geopandas==1.0.1       # spatial data: joins estimates to map geometries
+matplotlib==3.11.2     # charts and maps (notebooks)
+censusdis==1.4.2       # Census API client: pulls estimates, MOEs, and boundaries in one call
+python-dotenv==1.2.4   # loads CENSUS_API_KEY / ANTHROPIC_API_KEY from the local .env file
+jupyter==1.1.1         # notebooks for exploratory analysis
+pyarrow==18.1.0        # fast, compact parquet file storage
+streamlit==1.66.1      # the US county dashboard (Streamlit/app_US_v7.py)
+pydeck==0.9.3          # interactive state and county maps in the dashboard
+openpyxl==3.1.5        # .xlsx reads: DAS demonstration-file docs (analysis/dhc.py, ingestion/pull_das_demo_nj.py)
+topojson==2.2          # shared-border-aware geometry simplification (nationwide county app) --
+                       # shapely.simplify preserves each polygon's own validity but not shared
+                       # borders with its neighbors, which creates slivers at national tolerances
+anthropic==1.15.0      # Claude API client for the dashboard's "Ask about this county" assistant

@@ -1,10 +1,10 @@
 # Glossary — Census Uncertainty Analytics
 
 Running glossary of every statistical term used in this project. House rule (from
-`CLAUDE.md`): define every term the first time it appears in any document or
+the team's working rules): define every term the first time it appears in any document or
 notebook, then add it here. Plain English first, math second.
 
-> *Seeded from terms already used in `README.md` and `NEXT_ACTIONS.md`. Definitions
+> *Seeded from terms already used in `README.md` and the team's original setup runbook. Definitions
 > will be refined against the official Census methodology docs during Phase 1,
 > Step 2 (methodology grounding) — treat these as working definitions until then.*
 
@@ -226,7 +226,7 @@ in NJ. For block-level uses this flips places between "inhabited" and "empty" �
 it is not adequately described as ±noise, so we report it as its own class.
 
 **Reliability tier (Solid / Use with care / Too risky)** — The plain-language
-labels the Trenton dashboard prototype (`Streamlit/app.py`, see
+labels the Trenton dashboard prototype (`Streamlit/app.py`, on `main`; see
 `Streamlit/README.md`) attaches to every figure, built on a CV threshold:
 **Solid** (CV ≤ 0.12, the ESRI "high reliability" convention), **Use with care**
 (0.12 < CV ≤ 0.30, the NCHS "flag/caution" convention), **Too risky** (CV > 0.30).

@@ -1,7 +1,7 @@
 # ACS Uncertainty Dashboard — User Segments, Needs, and Function Ideas
 
 **Status: RESEARCH SUMMARY — for discussion, not committed scope.**
-Companion to [`acs-user-needs-and-functions.pptx`](acs-user-needs-and-functions.pptx).
+Companion to `acs-user-needs-and-functions.pptx` (on `main`).
 
 **Author:** Garrett Spangler. **Deck dated:** 2026-08-24.
 **Research passes:** 2026-08-19 and 2026-08-24. **Scope of the research:** ACS only.
