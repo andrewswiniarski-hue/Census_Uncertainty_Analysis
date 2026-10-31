@@ -11,7 +11,7 @@ every blank resolves, no stray digits or spelled numbers, no advice wording).
 
 What it needs
 -------------
-- A fact sheet: the dictionary Streamlit/app_US_v7.py builds with
+- A fact sheet: the dictionary Streamlit/us_county_explorer.py builds with
   _county_fact_sheet (shape in the plan, Task 2). Only its display strings
   ("blanks") are sent to the model; raw numbers ("values") never are.
 - All wording from analysis/assistant_text.py.
@@ -26,8 +26,8 @@ sends one question to the model and returns an AssistantReply: a checked
 answer, one of the fixed texts in assistant_text, or a fallback. ask() never
 raises for an API failure, so the page that calls it never breaks.
 
-Spec: docs/superpowers/specs/2026-10-10-county-ai-assistant-design.md
-Plan: docs/superpowers/plans/2026-10-10-county-ai-assistant.md
+Spec: docs/design-specs/2026-10-10-county-ai-assistant-design.md
+Plan (on the main branch): docs/superpowers/plans/2026-10-10-county-ai-assistant.md
 """
 
 from __future__ import annotations

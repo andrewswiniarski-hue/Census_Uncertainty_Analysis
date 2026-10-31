@@ -10,9 +10,9 @@ the checks in analysis/assistant.py use.
 What it needs: nothing. No imports beyond the standard library.
 
 What it produces: plain strings, tuples and dictionaries. analysis/assistant.py
-and Streamlit/app_US_v7.py import them.
+and Streamlit/us_county_explorer.py import them.
 
-Spec: docs/superpowers/specs/2026-10-10-county-ai-assistant-design.md
+Spec: docs/design-specs/2026-10-10-county-ai-assistant-design.md
 ("The three ready-made prompts" and "Fixed texts" are copied word for word).
 Rules for this file: no em dashes; "U.S. Census Bureau" on first mention and
 "Census Bureau" after, never "the Bureau"; band names exactly as on the cards.
@@ -97,7 +97,7 @@ TOO_LONG = "Questions are limited to 400 characters."
 QUESTION_CAP = "This session has reached its limit of 20 questions."
 
 # -- Outside rules: fixed sentences written by us; the comparison is done in
-# -- code (Streamlit/app_US_v7.py) and offered to the model as a blank. Source:
+# -- code (Streamlit/us_county_explorer.py) and offered to the model as a blank. Source:
 # -- docs/glossary.md, "Reliability threshold conventions", and
 # -- docs/user-segments-and-needs.md for HUD.
 
@@ -189,7 +189,7 @@ GLOSSARY: dict[str, str] = {
 
 # -- Phrase lists used by analysis.assistant.check_answer --------------------
 
-# Verdict and advice wording; extends ADVICE_WORDS in tests/test_us_v3_score.py.
+# Verdict and advice wording; extends ADVICE_WORDS in tests/test_card_reliability_score.py.
 BANNED_PHRASES: tuple[str, ...] = (
     "safe to", "too risky", "use with care", "you should", "we recommend",
     "i recommend", "trustworthy", "can be trusted", "reliable enough",

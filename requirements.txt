@@ -8,7 +8,7 @@
 #
 # Versions are pinned to the set verified together on Python 3.13.5
 # (2026-10-25: all four dashboard pulls run from an empty data/raw/, the full
-# test suite passes, Streamlit/app_US_v7.py serves). anthropic stays on the
+# test suite passes, Streamlit/us_county_explorer.py serves). anthropic stays on the
 # version the assistant was evaluated with live (2026-10-18).
 
 pandas==2.3.3          # tabular data wrangling
@@ -18,7 +18,7 @@ censusdis==1.4.2       # Census API client: pulls estimates, MOEs, and boundarie
 python-dotenv==1.2.4   # loads CENSUS_API_KEY / ANTHROPIC_API_KEY from the local .env file
 jupyter==1.1.1         # notebooks for exploratory analysis
 pyarrow==18.1.0        # fast, compact parquet file storage
-streamlit==1.66.1      # the US county dashboard (Streamlit/app_US_v7.py)
+streamlit==1.66.1      # the US county dashboard (Streamlit/us_county_explorer.py)
 pydeck==0.9.3          # interactive state and county maps in the dashboard
 openpyxl==3.1.5        # .xlsx reads: DAS demonstration-file docs (analysis/dhc.py, ingestion/pull_das_demo_nj.py)
 topojson==2.2          # shared-border-aware geometry simplification (nationwide county app) --

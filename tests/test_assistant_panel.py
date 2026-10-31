@@ -2,7 +2,7 @@
 (built from the cards' own functions) and the "Ask about this county" panel.
 
 Run:
-    python -m pytest tests/test_us_v7_assistant.py -v
+    python -m pytest tests/test_assistant_panel.py -v
 
 Every test here reads real local data and is skipped when
 data/raw/acs5_2024_usdash_county.parquet is absent. No test calls the
@@ -11,8 +11,8 @@ network: the panel tests replace analysis.assistant.make_client with a fake.
 Expected Jefferson County, Alabama (01073) figures are the ones the v6 cards
 showed on 2026-10-10 (spec, "Testing").
 
-Spec: docs/superpowers/specs/2026-10-10-county-ai-assistant-design.md
-Plan: docs/superpowers/plans/2026-10-10-county-ai-assistant.md, Tasks 4 and 5.
+Spec: docs/design-specs/2026-10-10-county-ai-assistant-design.md
+Plan (on the main branch): docs/superpowers/plans/2026-10-10-county-ai-assistant.md, Tasks 4 and 5.
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-APP_PATH = REPO_ROOT / "Streamlit" / "app_US_v7.py"
+APP_PATH = REPO_ROOT / "Streamlit" / "us_county_explorer.py"
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
@@ -40,7 +40,7 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.fixture(scope="module")
 def app():
-    spec = importlib.util.spec_from_file_location("app_us_v7_under_test", APP_PATH)
+    spec = importlib.util.spec_from_file_location("county_explorer_under_test", APP_PATH)
     mod = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = mod  # dataclasses needs the module registered
     spec.loader.exec_module(mod)

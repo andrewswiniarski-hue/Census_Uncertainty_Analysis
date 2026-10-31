@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-10
 **Branch:** `county-ai-assistant`
-**Files affected:** new `analysis/assistant.py`, `analysis/assistant_eval.py`, `Streamlit/app_US_v7.py`, two new test files under `tests/`; `Streamlit/app_US_v6.py` and one function brought over from `origin/JL_Work_Tree`; `requirements.txt`, `.env.example`, and the project docs listed under "Documentation".
+**Files affected:** new `analysis/assistant.py`, `analysis/assistant_eval.py`, `Streamlit/us_county_explorer.py`, two new test files under `tests/`; `Streamlit/app_US_v6.py` and one function brought over from `origin/JL_Work_Tree`; `requirements.txt`, `.env.example`, and the project docs listed under "Documentation".
 **Status:** Written spec reviewed and approved by the lead (2026-10-10). No code has been written.
 
 ## Purpose
@@ -15,7 +15,7 @@ It serves research question Q4, how uncertainty should be communicated to non-te
 
 ## Decisions already made (lead, 2026-10-10)
 
-1. **Base version.** Bring Justus's `app_US_v6.py` onto `main` as a file, unchanged, then build the assistant into a new `app_US_v7.py`. Older versions stay as snapshots, as with v1.1 through v3.
+1. **Base version.** Bring Justus's `app_US_v6.py` onto `main` as a file, unchanged, then build the assistant into a new `us_county_explorer.py`. Older versions stay as snapshots, as with v1.1 through v3.
 2. **Model.** Claude Haiku 5.5 (`claude-haiku-5-5`), the lowest-cost current Claude model. The model name is one environment variable, so it can be changed without a code change.
 3. **Voice.** "Describe, plus cited outside rules." The assistant states what a figure's reliability band is and what drives it. It may quote named outside rules as theirs. It gives no verdict of its own. This follows the sponsor's 2026-08-12 neutral-voice direction.
 4. **Shape.** Three ready-made prompts plus a question box. The question box accepts only questions about the selected county's dashboard figures.
@@ -53,9 +53,9 @@ The conversation restarts when a different county is selected. With no API key c
 
 | Piece | Where | Job |
 |---|---|---|
-| Fact sheet | `Streamlit/app_US_v7.py` | One plain dictionary of every figure for the selected county |
+| Fact sheet | `Streamlit/us_county_explorer.py` | One plain dictionary of every figure for the selected county |
 | Engine | `analysis/assistant.py` (no Streamlit imports) | Prompts, the model call, and the checks |
-| Panel | `Streamlit/app_US_v7.py` | Buttons, question box, conversation |
+| Panel | `Streamlit/us_county_explorer.py` | Buttons, question box, conversation |
 | Evaluation | `analysis/assistant_eval.py` | A fixed question set that measures how often replies pass the checks |
 
 ### Fact sheet
@@ -109,7 +109,7 @@ The result is that the model cannot state a figure the dashboard did not compute
 3. **Scope.** If `kind` is not `answer`, the user sees our fixed redirect text and the three buttons. The model's own text is not shown.
 4. **Grounding.** An answer must name at least one measure or one glossary term. Every blank must resolve, and none may point at a figure whose status is not `published`.
 5. **No stray digits** (above).
-6. **No advice wording.** A banned-phrase list that extends `ADVICE_WORDS` in `tests/test_us_v3_score.py`: "safe to", "too risky", "use with care", "you should", "we recommend", "trustworthy", "can be trusted", "reliable enough", "good enough".
+6. **No advice wording.** A banned-phrase list that extends `ADVICE_WORDS` in `tests/test_card_reliability_score.py`: "safe to", "too risky", "use with care", "you should", "we recommend", "trustworthy", "can be trusted", "reliable enough", "good enough".
 7. **One retry.** If checks 4 to 6 fail, the engine asks once more, naming the failed check. A second failure shows the fixed fallback text.
 8. **Failures.** A refusal by the model, a cut-off reply or an API error shows the fixed "unavailable" text. The page never crashes.
 
@@ -201,7 +201,7 @@ The HUD rule has not been checked against a HUD document by this project. It is 
 - `check_answer(reply, fact_sheet)`: checks 4 to 6; returns the first failure or none.
 - `ask(client, fact_sheet, on_screen, history, question)`: one question in, one checked reply out, including the retry.
 
-### `Streamlit/app_US_v7.py`
+### `Streamlit/us_county_explorer.py`
 
 - A copy of `app_US_v6.py` with two additions.
 - `_county_fact_sheet(...)`: builds the fact sheet; cached per county.
@@ -221,9 +221,9 @@ About 40 questions across 5 counties: in scope, out of scope, "average income", 
 ## Testing
 
 - **Engine, no network (`tests/test_assistant.py`):** blanks fill correctly; an unknown blank, a stray digit and a banned phrase each block the reply; label digits are allowed; out-of-scope replies show only the fixed text; one retry then fallback; refusal, cut-off and error paths; no credential means off.
-- **Fact sheet, real data, skipped when data is absent (`tests/test_us_v7_assistant.py`):** Jefferson County, Alabama (`01073`) must match what the v6 cards showed on 2026-10-10: income 66,388, range 64,897 to 67,879, CV 1.4%, score 95 with sampling 97 and imputation 92, Higher reliability band, CV rank 3 of 67, and 18 tied of 237 tested with 196 higher and 23 lower. A county with a suppressed median rent (seven exist) reports `suppressed` and offers no blanks. Two builds for one county are byte-identical. The 26 blank names are unique.
+- **Fact sheet, real data, skipped when data is absent (`tests/test_assistant_panel.py`):** Jefferson County, Alabama (`01073`) must match what the v6 cards showed on 2026-10-10: income 66,388, range 64,897 to 67,879, CV 1.4%, score 95 with sampling 97 and imputation 92, Higher reliability band, CV rank 3 of 67, and 18 tied of 237 tested with 196 higher and 23 lower. A county with a suppressed median rent (seven exist) reports `suppressed` and offers no blanks. Two builds for one county are byte-identical. The 26 blank names are unique.
 - **App smoke tests:** all three tabs load with and without a credential.
-- **Full suite:** `python -m pytest analysis tests -q` stays green (248 passed, 8 skipped on `main` today).
+- **Full suite:** `python -m pytest tests -q` stays green (248 passed, 8 skipped on `main` today).
 - **Live check:** run v7, select Jefferson County, use the three buttons and the county clerk question, and read every figure against the cards. Confirm the second question reads from the cache.
 - **Evaluation:** as above, with results in the WORKLOG. The lead reads 20 answers against the cards.
 

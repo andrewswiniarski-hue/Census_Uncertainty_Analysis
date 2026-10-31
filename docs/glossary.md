@@ -382,7 +382,7 @@ must write named blanks instead of numbers, and the voice rules. Ours is
 
 **Fact sheet:** **Our design.** A structured summary of every figure the dashboard
 shows for one county, built by the same functions the cards use
-(`_county_fact_sheet` in `Streamlit/app_US_v7.py`). The model sees each figure's name
+(`_county_fact_sheet` in `Streamlit/us_county_explorer.py`). The model sees each figure's name
 and the exact text the card shows; our code puts those texts into the answer.
 
 **Token:** The unit a language model reads and writes, roughly three quarters of an

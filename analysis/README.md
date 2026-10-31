@@ -17,7 +17,10 @@ copy-pasted between notebooks.
 | [`noise_model.py`](noise_model.py) | DAS noise model transcribed from EDA 04's committed output — 2010-demonstration-derived, applied to 2020 DHC/DP1 as an estimate (Phase B) |
 | [`dashboard.py`](dashboard.py) | Everything the dashboard apps compute: geography registries, measure definitions (cell lists and accessors), rate MOEs, the state-rate benchmark (`expected_at_rate`), statistical peers |
 | [`viz.py`](viz.py) | Shared chart furniture: boxplot style, CV reference lines, brand palette, `save_chart` |
-| `test_*.py` | Focused unit tests for formula-bearing helpers |
+| [`assistant.py`](assistant.py) · [`assistant_text.py`](assistant_text.py) · [`assistant_eval.py`](assistant_eval.py) | The dashboard's optional "Ask about this county" assistant: engine and checks, every fixed sentence, and the evaluation script |
+| [`alloc_denominator.py`](alloc_denominator.py) · [`alloc_profile.py`](alloc_profile.py) · [`common.py`](common.py) · [`replicate.py`](replicate.py) | Denominator-aware allocation analysis, the NJ PUMS allocation profile, shared MOE helpers, PUMS replicate-weight standard errors |
+
+Unit tests for these modules live in [`../tests/`](../tests/) (moved from here on 2026-10-31).
 
 Ingestion-side duplication (API key loading, sanity checks, label fetching)
 lives in [`ingestion/_common.py`](../ingestion/_common.py), not here — it has

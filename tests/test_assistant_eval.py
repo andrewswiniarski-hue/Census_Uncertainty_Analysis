@@ -6,7 +6,7 @@ Run:
 No test calls the network. The county picker and the dry run read real local
 data and are skipped when data/raw/acs5_2024_usdash_county.parquet is absent.
 
-Plan: docs/superpowers/plans/2026-10-10-county-ai-assistant.md, Task 6.
+Plan (on the main branch): docs/superpowers/plans/2026-10-10-county-ai-assistant.md, Task 6.
 """
 
 from __future__ import annotations

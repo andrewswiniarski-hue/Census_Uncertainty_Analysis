@@ -2,13 +2,15 @@
 
 | File | What it is | Status |
 |---|---|---|
-| [`app_US_v7.py`](app_US_v7.py) | US county dashboard, version 7: v6 plus the "Ask about this county" AI assistant, which is off unless an API key is set (2026-10-18) | **Current.** The only app on the handoff branch |
+| [`us_county_explorer.py`](us_county_explorer.py) | The US County Demographic Explorer, version 7: v6 plus the "Ask about this county" AI assistant, which is off unless an API key is set (2026-10-18). Named `app_US_v7.py` until 2026-10-31 | **Current.** The only app on the handoff branch |
+
+Its data files are committed in `data/raw/`, so `streamlit run Streamlit/us_county_explorer.py` works straight after cloning; the four pulls below refresh them.
 
 **How v7 came to be.** v1.1 (Justus Long, the nationwide county explorer) → v1.2 (Katie Christiansen's redesigned welcome page) → v2 (Andrew Swiniarski: every US county, 26 measures, error-bar cards) → v3 (the card reliability score, 2026-09-27) → v6 (Justus Long: Statistical peers tab, ranked peers, Census Bureau branding shell, with Katie Christiansen's v5 welcome page) → v7 (Andrew Swiniarski: the assistant). The earlier files (v1.1–v3, and the Trenton grant data prototype `app.py`, NJ tracts, a learning instrument) remain on `main`; v6 is on the `county-ai-assistant` and `JL_Work_Tree` branches. [`HANDOVER.html`](../HANDOVER.html) at the repo root explains how v7 works.
 
 ## US county dashboard (v7): the "Ask about this county" assistant
 
-`app_US_v7.py` is version 6 plus one panel on the County explorer tab, directly under the county heading (2026-10-18; spec `docs/superpowers/specs/2026-10-10-county-ai-assistant-design.md`). Without an API key the panel is one line saying the assistant is off, and the page is otherwise identical to v6.
+Version 7 is version 6 plus one panel on the County explorer tab, directly under the county heading (2026-10-18; spec `docs/design-specs/2026-10-10-county-ai-assistant-design.md`). Without an API key the panel is one line saying the assistant is off, and the page is otherwise identical to v6.
 
 **What the panel does.** Three buttons ("Give me a county brief", "How reliable are these figures?", "How does this county compare with similar counties?") and a question box (400 characters at most, 20 questions per session). A large language model, Claude Haiku 5.5, writes a short plain-language answer. It does not type figures: it writes named blanks such as `[[median_household_income.estimate]]`, and our code fills each one with the exact figure the card shows, taken from a fact sheet built by the same functions the cards call (`_county_fact_sheet`). A reply is shown only if every blank resolves, no other digits, spelled-out numbers or fraction signs remain (a number that defines a measure, such as "aged 5 to 17" or "below 200% of the poverty line", is allowed only in that wording), and it contains no advice wording; otherwise the model gets one retry, then a fixed fallback text. Off-topic questions get a fixed redirect. Selecting a different county starts a new conversation. All wording is in `analysis/assistant_text.py`; the engine and its checks are in `analysis/assistant.py`.
 
@@ -22,7 +24,7 @@
 | `ASSISTANT_MODEL` | Model name | `claude-haiku-5-5` |
 | `ASSISTANT_FREE_TEXT` | `0` hides the question box and keeps the three buttons | `1` |
 
-Install the client with `pip install -r requirements.txt` (it adds `anthropic`), then run `streamlit run Streamlit/app_US_v7.py`. Restart Streamlit after changing `.env` or anything in `analysis/`. Measured cost is about four hundredths of a cent per question (205 questions for about \$0.09 at list prices, 2026-10-18).
+Install the client with `pip install -r requirements.txt` (it adds `anthropic`), then run `streamlit run Streamlit/us_county_explorer.py`. Restart Streamlit after changing `.env` or anything in `analysis/`. Measured cost is about four hundredths of a cent per question (205 questions for about \$0.09 at list prices, 2026-10-18).
 
 **Evaluation (2026-10-18).** `analysis/assistant_eval.py` asks 41 fixed questions about each of five counties chosen by fixed rules (Jefferson County, Alabama; Loving County, Texas; Alpine County, California; Bristol Bay Borough, Alaska; Wyoming County, Pennsylvania). First full run, 205 replies: the scope decision (answer or redirect) was right in 183 (89%); 11 (5%) were blocked by the checks, 6 for an unknown blank and 5 for a stray number; 1 of 15 ready-made prompt replies was blocked (under the one-in-ten line for moving to a larger model); none were unavailable; estimated cost about \$0.09. Fixes for the miss patterns followed: the eight questions that had missed went from 25 to 38 of 40 right on rerun, and the similar-county comparison now reads the right way round in all live checks. Details and open items: WORKLOG 2026-10-18.
 
@@ -55,7 +57,7 @@ Version 6 (Justus Long, copied unchanged onto the v7 line from `JL_Work_Tree`, c
 **Run it** from the repo root:
 
 ```bash
-streamlit run Streamlit/app_US_v7.py
+streamlit run Streamlit/us_county_explorer.py
 ```
 
 **Data it needs.** Run these four pulls first. Each prints its own sanity checks; outputs land in `data/raw/`. The three Census pulls need `CENSUS_API_KEY` in `.env`; `pull_rucc.py` does not. Run `pull_usdash.py` first: `pull_rucc.py` cross-checks its county join against that file.
@@ -100,8 +102,8 @@ Three lists in the code fail silently if you miss them: nothing errors, the meas
 
 1. Add its cells to the pull in `ingestion/pull_usdash.py`, with a sanity check.
 2. Add its table prefix to `VALUE_COL_PREFIXES` in `analysis/dashboard.py`, or its columns are never converted to numbers.
-3. Add accessor functions in `analysis/dashboard.py` and tests in `analysis/test_dashboard.py`, checking cell numbers against the published labels.
-4. Add a `Measure` to `_build_measures()` in `app_US_v7.py`.
+3. Add accessor functions in `analysis/dashboard.py` and tests in `tests/test_dashboard.py`, checking cell numbers against the published labels.
+4. Add a `Measure` to `_build_measures()` in `us_county_explorer.py`.
 5. If its topic is new, add it to `TOPIC_ORDER`, or its card never appears.
 6. If it is a median, add it to `_PEER_MEDIANS`, or the peers panel treats it as a count.
 7. If the Census Bureau publishes an allocation table for the measure's item, add it to `IMPUTATION_SOURCES` (and to the allocation pull) and set `Measure.imputation`; otherwise the card is scored on sampling only and says so.

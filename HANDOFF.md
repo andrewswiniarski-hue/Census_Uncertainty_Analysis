@@ -1,6 +1,19 @@
 # HANDOFF.md — Session Handoff Notes
 
-> **Handoff branch note (2026-10-25).** [`HANDOVER.html`](HANDOVER.html) is the guide for the Census Bureau and anyone receiving this project; this file is its technical appendix (decisions, data landmines, environment notes). The state summary below is a dated working log: sections marked 2026-08-01 are historical. The `final-handoff` branch keeps only dashboard v7 and what supports it — files named below that are not on this branch (`Streamlit/app.py`, `app_US_v1.1`–`v3`, `tools/`, `product_*.json/html`, `notes/`, `docs/*.pptx`, `CLAUDE.md`, `Git_Instruct.md`, `docs/superpowers/plans/`) remain on `main` and in git history; `app_US_v6.py` is on `county-ai-assistant` and `JL_Work_Tree`.
+> **Handoff branch note (2026-10-25, updated 2026-10-31).** [`README.md`](README.md) is the front door for the Census Bureau delivery and [`HANDOVER.html`](HANDOVER.html) its visual companion; this file is the technical appendix (decisions, data landmines, environment notes). The state summary below is a dated working log: sections marked 2026-08-01 are historical. The `final-handoff` branch keeps dashboard v7, its data, the research and the Product Scope Tracker. Files named below that are not on this branch (`Streamlit/app.py`, `app_US_v1.1`–`v3`, `tools/archive/`, `CLAUDE.md`, `Git_Instruct.md`, `docs/superpowers/plans/`) remain on `main` and in git history; `app_US_v6.py` is on `county-ai-assistant` and `JL_Work_Tree`.
+>
+> **Renamed on 2026-10-31** for the Census Bureau's clear-naming guidance (the history below keeps the old names):
+>
+> | Old name | Current name |
+> |---|---|
+> | `Streamlit/app_US_v7.py` | `Streamlit/us_county_explorer.py` |
+> | `tests/test_us_v2_state_row.py` · `test_us_v3_score.py` · `test_us_v6_smoke.py` / `test_us_v7_smoke.py` · `test_us_v7_assistant.py` · `test_us_v4_peer_rank.py` | `tests/test_state_comparison_row.py` · `test_card_reliability_score.py` · `test_app_smoke.py` · `test_assistant_panel.py` · `test_peer_table_rank.py` |
+> | `analysis/test_*.py` | `tests/test_*.py` (same file names) |
+> | `notebooks/10-saipe-vs-acs-county.ipynb` ("EDA 10") | `notebooks/07-saipe-vs-acs-nj-counties.ipynb` |
+> | `notebooks/13-saipe-vs-acs-county.ipynb` | `notebooks/13-saipe-vs-acs-mercer-county.ipynb` |
+> | `docs/superpowers/specs/` | `docs/design-specs/` |
+> | `docs/*.pptx` | `docs/meeting-decks/*.pptx` |
+> | `README.md` (project brief) | `docs/project-brief.md`; `README.md` now follows the Census Bureau template |
 
 **Written:** 2026-07-09 at project setup; **last updated 2026-10-18** (dashboard v7 and the "Ask about this county" AI assistant, decision #20; 2026-09-27: dashboard "Compare to state" toggle, baseline branch choice and the diverging v2.0 landmine; 2026-09-14: US county dashboard v2, scope decision #18 and dashboard landmines recorded; the rest of the state summary below is still as of 2026-08-01 (4th)) — `main`, `JL_Work_Tree`, and `garrett/financial-eda-imputation` **merged** into `JL_Work_Tree`. The three previously-separate workstreams (Product Scope Tracker + product-shortlist sprint on `main`; composite score + CV-driver model + Trenton dashboard prototype on `JL_Work_Tree`; financial EDA + SAIPE/PUMS pulls + replicate weights on Garrett's branch) are now one tree. Next build: drop the DHC product pairing from the Trenton app, surface the allocation/imputation axis beside the CV tier, add a SAIPE county comparator (this session's approved plan).
 **For:** the next Claude session (or teammate) picking this work up cold.

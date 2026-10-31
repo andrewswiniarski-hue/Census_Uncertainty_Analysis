@@ -3,7 +3,7 @@
 **Prepared for:** Andrew Swiniarski, project lead — for briefing the capstone team and Census Bureau mentors
 **Date:** July 17, 2026; **updated through EDA 13** (SAIPE vs. ACS county comparator), 2026-08-01
 **Covers:** the complete Phase 1 exploratory analysis (notebooks 01-05), the Phase 2 composite-score bridge (notebook 06), Garrett's allocation-denominator and PUMS work (notebooks 08-09), and the Phase 3 scope pivot: DHC dropped from the dashboard, the allocation/imputation axis added beside the CV tier, and the SAIPE county comparator (notebook 13). New Jersey testbed throughout; Trenton and Mercer County are the dashboard pilot.
-**Companion materials:** biweekly deck (`docs/biweekly-2026-07-22.pptx`, on `main`), charts in `data/processed/`, thirteen notebooks in `notebooks/` (01-13; the DHC/DP1 modeled-noise work moved to 10-12 during a 2026-08-01 branch merge, see HANDOFF.md)
+**Companion materials:** biweekly deck (`docs/meeting-decks/biweekly-2026-07-22.pptx`), charts in `data/processed/`, thirteen notebooks in `notebooks/` (01-13; the DHC/DP1 modeled-noise work moved to 10-12 during a 2026-08-01 branch merge, see HANDOFF.md)
 
 ---
 
@@ -152,7 +152,7 @@ And one sentence for the Bureau audience, which I'd stand behind in any room:
 
 ## 8. What happens next
 
-- **July 22 biweekly:** present the status slide and the three priority questions (deck is built: `docs/biweekly-2026-07-22.pptx`, on `main`).
+- **July 22 biweekly:** present the status slide and the three priority questions (deck is built: `docs/meeting-decks/biweekly-2026-07-22.pptx`).
 - **Composite-score phase:** design the score from the component list above, with the tier thresholds as an explicit mentor-reviewed decision.
 - **Dashboard:** grow the EDA 03 map prototype into the linked-map deliverable a county planner can act on.
 - **Report:** this document's findings become the report's empirical backbone; the methodology write-up (`docs/uncertainty-sources.md`) is the next writing task.

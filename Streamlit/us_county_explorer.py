@@ -10,7 +10,7 @@ analysis/assistant.py has the model write named blanks in place of numbers
 and fills them from that fact sheet, and _assistant_fragment() is the panel.
 The card CV rank moved into _cv_rank_in_state() so the cards and the fact
 sheet share one computation. The assistant is off unless ANTHROPIC_API_KEY
-is set. Spec: docs/superpowers/specs/2026-10-10-county-ai-assistant-design.md.
+is set. Spec: docs/design-specs/2026-10-10-county-ai-assistant-design.md.
 
 Version 4.1 (2026-09-29, Justus Long): render_welcome() replaced with the
 goal-oriented Welcome page from app_US_v5_welcome.py (2026-09-28, Katie
@@ -49,7 +49,7 @@ thousands separators and a CV column in the peer table; the Census Bureau
 branding shell (_brand_header_html, _brand_footer_html, Azul widget
 chrome in _CSS); and the performance work (tabs render only when open,
 map and card fragments, GeoJSON indexed by key, vectorized rates). Specs:
-docs/superpowers/specs/2026-09-17-statistical-peers-tab-design.md and
+docs/design-specs/2026-09-17-statistical-peers-tab-design.md and
 2026-09-17-census-branding-shell-design.md. v3 keeps its own CV ramp
 (cv_color_blue_orange) and the ACS 1-year captions, which v2.0 dropped.
 
@@ -127,12 +127,12 @@ What changed from app_NJ.py, and why
    and NCHS 0.30 lines) and, for income and poverty figures, an imputation
    sub-score relative to all US counties, with the band capped at the CV's
    own band. Built by analysis.composite.reliability_score(); spec in
-   docs/superpowers/specs/2026-09-27-composite-reliability-score-cards-design.md.
+   docs/design-specs/2026-09-27-composite-reliability-score-cards-design.md.
    The composite tier question stays open for mentors; this is our
    methodology, not a Census Bureau product.
 
 Run from the repo root:
-    streamlit run Streamlit/app_US_v7.py
+    streamlit run Streamlit/us_county_explorer.py
 
 Needs data/raw/{acs5_2024_usdash,acs1_2024_usdash,geo_2024_usdash,
 acs5_2024_usdash_alloc,rucc_2023}_* -- regenerate with:
@@ -1146,7 +1146,7 @@ def _compute_peers(
 # shows it, so the assistant and the cards cannot disagree. The display
 # strings ("blanks") are what the model may cite; the raw numbers ("values")
 # are never sent to it. Shape: plan Task 2 in
-# docs/superpowers/plans/2026-10-10-county-ai-assistant.md.
+# docs/superpowers/plans/2026-10-10-county-ai-assistant.md (on the main branch).
 # ---------------------------------------------------------------------------
 
 _DOLLAR_MEASURES = {"Median household income", "Median gross rent", "Median home value"}
@@ -1668,7 +1668,7 @@ def _pct_or_na(value: float) -> str:
 def _population_quality_panel(alloc_county: pd.DataFrame, code: str) -> None:
     """Fills the space under the Total population card with data-quality
     context that doesn't depend on a population MOE (see design spec
-    docs/superpowers/specs/2026-08-18-population-data-quality-card-design.md)
+    docs/design-specs/2026-08-18-population-data-quality-card-design.md)
     -- population itself usually has no published MOE (it's calibrated to
     independent population controls, see the caption above), so CV is not
     available here the way it is for income. These allocation (imputation)

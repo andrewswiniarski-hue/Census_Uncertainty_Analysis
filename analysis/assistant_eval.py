@@ -33,7 +33,7 @@ Usage (from the repo root):
     python analysis/assistant_eval.py --match rising --match "median gross rent"
     python analysis/assistant_eval.py
 
-Plan: docs/superpowers/plans/2026-10-10-county-ai-assistant.md, Task 6.
+Plan (on the main branch): docs/superpowers/plans/2026-10-10-county-ai-assistant.md, Task 6.
 """
 
 from __future__ import annotations
@@ -55,7 +55,7 @@ if str(REPO_ROOT) not in sys.path:
 from analysis import assistant  # noqa: E402
 from analysis.assistant_text import PRESETS  # noqa: E402
 
-APP_PATH = REPO_ROOT / "Streamlit" / "app_US_v7.py"
+APP_PATH = REPO_ROOT / "Streamlit" / "us_county_explorer.py"
 OUT_DIR = REPO_ROOT / "data" / "processed"
 ANCHOR_COUNTY = "01073"  # Jefferson County, Alabama: the spec's worked example
 

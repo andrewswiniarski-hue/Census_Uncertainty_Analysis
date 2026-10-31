@@ -1,4 +1,4 @@
-"""Statistical peers table on app_US_v7.py: rank, similarity, and list size.
+"""Statistical peers table on us_county_explorer.py: rank, similarity, and list size.
 
 Production change that would fail these tests: dropping Rank or Similarity,
 ranking by something other than absolute estimate distance, or letting the
@@ -18,15 +18,15 @@ import pytest
 import streamlit as st
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-APP_PATH = REPO_ROOT / "Streamlit" / "app_US_v7.py"
+APP_PATH = REPO_ROOT / "Streamlit" / "us_county_explorer.py"
 
 
 def _load_app():
-    if "app_us_v7_peer_rank" in sys.modules:
-        return sys.modules["app_us_v7_peer_rank"]
-    spec = importlib.util.spec_from_file_location("app_us_v7_peer_rank", APP_PATH)
+    if "county_explorer_peer_rank" in sys.modules:
+        return sys.modules["county_explorer_peer_rank"]
+    spec = importlib.util.spec_from_file_location("county_explorer_peer_rank", APP_PATH)
     mod = importlib.util.module_from_spec(spec)
-    sys.modules["app_us_v7_peer_rank"] = mod
+    sys.modules["county_explorer_peer_rank"] = mod
     with patch.object(st, "set_page_config"):
         spec.loader.exec_module(mod)
     return mod

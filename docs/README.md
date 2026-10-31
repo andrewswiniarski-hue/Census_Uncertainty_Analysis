@@ -15,7 +15,9 @@ Start with [`../HANDOVER.html`](../HANDOVER.html) at the repo root: it summarize
 | [`dashboard-variable-shortlist.md`](dashboard-variable-shortlist.md) | Which variables the dashboard carries, for which audiences, and why | Adopted in part by decision #18, 2026-09-14; includes a correction to its table-level CVs |
 | [`user-segments-and-needs.md`](user-segments-and-needs.md) | Garrett Spangler's user research: who needs ACS uncertainty help and for which decisions | Research summary, 2026-08-24; basis for decision #18 |
 | [`imputation-slide-talk-track.md`](imputation-slide-talk-track.md) | 60 to 90 second talk track for the imputation slide: imputation is invisible to the MOE and independent of it | Written 2026-08-10; committed 2026-09-14 |
-| [`superpowers/specs/`](superpowers/specs/) | Design specs: population data-quality card, card reliability score (decision #19), county AI assistant (decision #20) | Written before each build |
+| [`project-brief.md`](project-brief.md) | The team's original project brief: research questions, deliverables, scope decisions over time, the Phase 1 checklist, milestones, and the full list of open questions for Census mentors | The repo's README until 2026-10-31 |
+| [`design-specs/`](design-specs/) | Design specs written before each dashboard build: population data-quality card, Census Bureau branding shell, Statistical peers tab, card reliability score (decision #19), county AI assistant (decision #20) | Design records; file names inside are updated to the current ones |
+| [`meeting-decks/`](meeting-decks/) | Slide decks from mentor meetings and team reviews: the July 22 biweekly, team recap, user-needs research, dashboard variable shortlist, two EDA 14 slides | Meeting history; the final presentation will be `presentation.pdf` |
 | [`handover/figures/`](handover/figures/) | Research charts used by `HANDOVER.html`, extracted from the committed notebook outputs | 2026-10-25 |
 
-The slide decks (`*.pptx`) that used to sit here are on `main` and in git history.
+**Final deliverables (to be added):** the final report as `final_report.pdf` and the final presentation as `presentation.pdf`, both in this folder.

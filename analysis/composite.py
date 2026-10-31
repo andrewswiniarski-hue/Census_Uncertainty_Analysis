@@ -222,7 +222,7 @@ def attach_cv_residual_flag(
 #
 # OUR methodology, not a Census Bureau product, pending mentor review (README
 # "Composite tier philosophy"). Spec:
-# docs/superpowers/specs/2026-09-27-composite-reliability-score-cards-design.md
+# docs/design-specs/2026-09-27-composite-reliability-score-cards-design.md
 # ---------------------------------------------------------------------------
 
 Z_90 = 1.645

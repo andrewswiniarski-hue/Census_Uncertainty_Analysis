@@ -42,7 +42,7 @@ exactly a quarter of them by construction and carry no information.
 The SAIPE comparator (added 2026-08-01, HANDOFF.md decision #17, Phase 3):
 one county-level-only element comparing ACS median household income against
 SAIPE's for Mercer County. SAIPE stops at the county level, so it never
-appears on the tract view. See notebooks/13-saipe-vs-acs-county.ipynb for
+appears on the tract view. See notebooks/13-saipe-vs-acs-mercer-county.ipynb for
 the full methodological point (a SAIPE interval is model error, not ACS
 sampling error) and the interval-coherence check.
 """
@@ -668,7 +668,7 @@ def load_saipe_county(state: str, county: str, year: int = common.ACS_VINTAGE) -
 
     SAIPE is a MODEL-based interval (sampling variance of its inputs plus
     model uncertainty), not an ACS-style sampling-only margin of error --
-    see notebooks/13-saipe-vs-acs-county.ipynb, which is where the two are
+    see notebooks/13-saipe-vs-acs-mercer-county.ipynb, which is where the two are
     checked against each other and where the interval-coherence assert
     ((UB90-LB90)/2 == published MOE) lives. This loader does no derivation
     of its own, so it needs no separate check beyond that notebook's.

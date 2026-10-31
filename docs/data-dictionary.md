@@ -82,7 +82,7 @@ Profile entries stay below as privacy-noise report evidence, not score inputs.)
 
 ### ACS 5-year: US county dashboard tables (added 2026-09-14)
 
-- **What:** The ACS tables behind the US county dashboard (`Streamlit/app_US_v7.py`; first built for v2 and v3), pulled for every US
+- **What:** The ACS tables behind the US county dashboard (`Streamlit/us_county_explorer.py`; first built for v2 and v3), pulled for every US
   state and county. Original set: B01001 (sex by age), B17001 (poverty by age),
   B19013 (median household income), B19001 (income brackets), B27001 (health
   insurance), B25064 (median gross rent), B25071 (median rent burden), B25003
@@ -306,7 +306,7 @@ Profile entries stay below as privacy-noise report evidence, not score inputs.)
   same-label points agree within ~2% — SAIPE's width buys single-year
   currency, the ACS's narrowness buys a five-year average. All NJ counties
   are large; SAIPE's small-area advantage is invisible here (national test
-  queued post-merge). See `notebooks/10-saipe-vs-acs-county.ipynb`.
+  queued post-merge). See `notebooks/07-saipe-vs-acs-nj-counties.ipynb`.
 
 ## ACS 5-year PUMS — Public Use Microdata Sample (vintage 2024) — *exact SEs + person-level imputation* (added 2026-08-01)
 

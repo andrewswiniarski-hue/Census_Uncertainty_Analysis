@@ -4,11 +4,11 @@ Run:
     python -m pytest tests/test_assistant.py -v
 
 No test here calls the network. The fact sheet is hand-written in the shape
-Streamlit/app_US_v7.py builds; every test that reaches the model uses a
+Streamlit/us_county_explorer.py builds; every test that reaches the model uses a
 fake client.
 
-Spec: docs/superpowers/specs/2026-10-10-county-ai-assistant-design.md
-Plan: docs/superpowers/plans/2026-10-10-county-ai-assistant.md, Tasks 2 and 3.
+Spec: docs/design-specs/2026-10-10-county-ai-assistant-design.md
+Plan (on the main branch): docs/superpowers/plans/2026-10-10-county-ai-assistant.md, Tasks 2 and 3.
 """
 
 from __future__ import annotations

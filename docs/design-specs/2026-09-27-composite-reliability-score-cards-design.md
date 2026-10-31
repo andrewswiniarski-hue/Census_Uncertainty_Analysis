@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-27
 **Branch:** `card-error-bar-redesign`
-**Files affected:** `analysis/composite.py`, `analysis/test_composite.py`, `Streamlit/app_US_v2.py`, a new test file under `tests/`, and the project docs listed under "Documentation".
+**Files affected:** `analysis/composite.py`, `tests/test_composite.py`, `Streamlit/app_US_v2.py`, a new test file under `tests/`, and the project docs listed under "Documentation".
 **Status:** Design approved by the lead in conversation (2026-09-27); this written spec awaits review.
 
 ## Purpose
@@ -112,7 +112,7 @@ The score never raises in the page: a missing CV gives no strip, and a missing a
 
 ## Testing
 
-- **`analysis/test_composite.py`:** the four anchors map exactly; the sub-score falls steadily as CV rises and is 0 beyond 0.608; NaN handling; the imputation sub-score is 100 at or below the median, 50 at the 75th percentile, and about 0 at the maximum on a synthetic series; band edges at 75 and 50; the guard (CV 0.35 with imputation 100 gives a score of about 71 but the Lower band, with `capped_by_cv` true); sampling-only scoring; None for NaN CV.
+- **`tests/test_composite.py`:** the four anchors map exactly; the sub-score falls steadily as CV rises and is 0 beyond 0.608; NaN handling; the imputation sub-score is 100 at or below the median, 50 at the 75th percentile, and about 0 at the maximum on a synthetic series; band edges at 75 and 50; the guard (CV 0.35 with imputation 100 gives a score of about 71 but the Lower band, with `capped_by_cv` true); sampling-only scoring; None for NaN CV.
 - **Real-data tests** (skipped when `data/raw` is absent, like the existing ones): Apache County median income scores 46.9 and Lower; the national median income band shares match the reference values above to one decimal.
 - **App tests (new file under `tests/`):** the strip HTML carries the band label and score and no "risky", "safe" or "reliable to cite" wording; sampling-only cards show the "not published" line; each band's text color passes 4.5:1 on white.
 - **Headless run of the real app** on Apache County and Washtenaw County, MI: the strip appears on every selected card except total population, the statistics panel shows both sub-scores, and there are no exceptions. Screenshot shared with the lead.

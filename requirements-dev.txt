@@ -8,9 +8,9 @@
 #     pip install -r requirements.txt -r requirements-dev.txt
 #
 # Then:
-#     python -m pytest analysis tests -q
+#     python -m pytest tests -q
 
-pytest==9.1.1     # runs analysis/test_*.py and tests/ (351 pass, 14 skip as of 2026-10-25)
+pytest==9.1.1     # runs tests/ (351 pass, 14 skip as of 2026-10-25)
 
 # NOT required, deliberately:
 #

@@ -1,7 +1,7 @@
 """Tests for the US dashboard v2 card graphic's state comparison row.
 
 Run:
-    python -m pytest tests/test_us_v2_state_row.py -v
+    python -m pytest tests/test_state_comparison_row.py -v
 
 Census Bureau feedback (2026-09) was that drawing the state marker on the
 county's own bar was hard to read. The redesign (option B, lead decision
@@ -26,7 +26,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 # The state-row drawing was introduced in v2 and is carried unchanged into
 # v7, the only app kept on the handoff branch.
 APP_PATHS = {
-    "v7": REPO_ROOT / "Streamlit" / "app_US_v7.py",
+    "v7": REPO_ROOT / "Streamlit" / "us_county_explorer.py",
 }
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
