@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap">
 <style>
-/* Palette and type follow Streamlit/app_US_v7.py and .streamlit/config.toml:
+/* Palette and type follow Streamlit/us_county_explorer.py and .streamlit/config.toml:
    Roboto (census.gov's own font), brand blue #205493, gold rule #FFC222. */
 :root {
   color-scheme: light;
@@ -42,6 +42,7 @@ pre code { background: none; color: inherit; padding: 0; }
 .census-app-title { font-weight: 700; font-size: 1.6rem; margin-top: 4px; color: #fff; line-height: 1.25; }
 .census-brand-bar__capstone { font-size: 0.8rem; font-weight: 500; color: var(--on-blue); white-space: nowrap; }
 .census-tagline { margin-top: 10px; font-size: 0.95rem; color: var(--on-blue); max-width: 60rem; }
+.census-meta { margin-top: 6px; font-size: 0.82rem; }
 .census-footer {
   background: var(--blue); color: #fff; padding: 16px 20px; margin: 28px 0 20px;
   font-size: 0.85rem; border-top: 4px solid var(--gold); border-radius: 12px;
@@ -212,9 +213,10 @@ figcaption b { color: var(--ink); }
       <div class="census-wordmark">U.S. Census Bureau · Capstone handover</div>
       <div class="census-app-title">US County Demographic Explorer — how it works, where it came from, and where everything lives</div>
     </div>
-    <div class="census-brand-bar__capstone">Capstone demonstration · v7 · October 2026</div>
+    <div class="census-brand-bar__capstone">Capstone demonstration · v7</div>
   </div>
   <div class="census-tagline">Census Uncertainty Analytics: From Collection to Decision Making. A guide to the dashboard, its data pipeline, the research behind it, and this repository.</div>
+  <div class="census-tagline census-meta">Authors: Andrew Swiniarski, Justus Long, Katie Christiansen, Garrett Spangler, Theodore Ruth · Partner organization: U.S. Census Bureau · Program: Georgetown University, MS in Business Analytics (MSBA) Capstone · Completion date: TBD</div>
 </header>
 
 <div class="layout">
@@ -231,6 +233,7 @@ figcaption b { color: var(--ink); }
       <li><a href="#decisions">Methodology choices</a></li>
       <li><a href="#open">Limits and open questions</a></li>
       <li><a href="#map">Where to find things</a></li>
+      <li><a href="#citations">Citations</a></li>
       <li><a href="#glossary">Glossary</a></li>
     </ol>
   </details>
@@ -260,13 +263,15 @@ figcaption b { color: var(--ink); }
     <div class="flow-step"><div class="flow-kicker">Published separately · allocation tables</div><h3>Imputation</h3><p>When a household skips a question, the Bureau fills in a plausible answer. About 1 in 7 person-characteristics is imputed, income far more than age or sex, and the rate is independent of the margin of error.</p></div>
   </div>
 
-  <h3>What is in this handover branch</h3>
+  <h3>What is in this repository</h3>
+  <p>The <a href="README.md">README</a> is the front door: setup steps, a file map, methods, limitations and citations. This page is its visual companion.</p>
   <ul>
-    <li><strong>The app:</strong> <a href="Streamlit/app_US_v7.py"><code>Streamlit/app_US_v7.py</code></a> (version 7), the only app on this branch.</li>
-    <li><strong>The code it runs on:</strong> <a href="analysis/"><code>analysis/</code></a> (formulas, loaders, the reliability score, the assistant) and <a href="ingestion/"><code>ingestion/</code></a> (the scripts that download every data file from the Census Bureau and USDA).</li>
-    <li><strong>The research:</strong> <a href="notebooks/"><code>notebooks/</code></a> (EDA 01–14) and <a href="docs/"><code>docs/</code></a> (findings report, glossary, data dictionary, methodology notes, design specs).</li>
-    <li><strong>The checks:</strong> <a href="tests/"><code>tests/</code></a> and <code>analysis/test_*.py</code>.</li>
-    <li><strong>No data files.</strong> Every data file is downloaded fresh by the ingestion scripts (see <a href="#quickstart">Run it locally</a>), so nothing in the repo goes stale or carries a license question. All of it is public.</li>
+    <li><strong>The app:</strong> <a href="Streamlit/us_county_explorer.py"><code>Streamlit/us_county_explorer.py</code></a> (version 7).</li>
+    <li><strong>Its data:</strong> the seven files it reads are committed in <a href="data/raw/"><code>data/raw/</code></a> (about 18.5 MB), so it runs straight after cloning. The scripts that produced them are in <a href="ingestion/"><code>ingestion/</code></a> and refresh them on demand.</li>
+    <li><strong>The code it runs on:</strong> <a href="analysis/"><code>analysis/</code></a> (formulas, loaders, the reliability score, the assistant).</li>
+    <li><strong>The research:</strong> <a href="notebooks/"><code>notebooks/</code></a> (EDA 01–14) and <a href="docs/"><code>docs/</code></a> (findings report, glossary, data dictionary, methodology notes, design specs, meeting decks). The final report and presentation will be added to <code>docs/</code>.</li>
+    <li><strong>A supporting tool:</strong> the Product Scope Tracker in <a href="tools/"><code>tools/</code></a>, a catalog of about 573 Census data products and the uncertainty each publishes (report: <a href="product_report.html"><code>product_report.html</code></a>).</li>
+    <li><strong>The checks:</strong> <a href="tests/"><code>tests/</code></a>.</li>
   </ul>
 
   <p class="disclaimer">This is a student capstone demonstration. It is not an official Census Bureau product. The repository is public, so it names no sponsor contacts.</p>
@@ -275,7 +280,7 @@ figcaption b { color: var(--ink); }
 <!-- ================================================================== -->
 <section id="quickstart">
   <h2>Run it locally</h2>
-  <p>About fifteen minutes from a fresh clone to a running dashboard, most of it the data download. You need <strong>git</strong>, <strong>Python 3.13</strong> (the pinned package versions in <code>requirements.txt</code> were verified together on Python 3.13.5), and a free Census API key. Run every command from the repository root.</p>
+  <p>A few minutes from a fresh clone to a running dashboard: the data is already in the repository. You need <strong>git</strong> and <strong>Python 3.13</strong> (the pinned package versions in <code>requirements.txt</code> were verified together on Python 3.13.5). A free Census API key is needed only to refresh the data. Run every command from the repository root.</p>
   <div class="os no-print" role="group" aria-label="Operating system">
     <button type="button" data-os="win" aria-pressed="true">Windows (PowerShell)</button>
     <button type="button" data-os="mac" aria-pressed="false">Mac / Linux</button>
@@ -284,34 +289,31 @@ figcaption b { color: var(--ink); }
     <li><b>Clone and install</b>
 <pre data-os="win"><code>git clone https://github.com/andrewswiniarski-hue/Census_Uncertainty_Analysis.git
 cd Census_Uncertainty_Analysis
-git checkout final-handoff
 python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt -r requirements-dev.txt</code></pre>
 <pre data-os="mac" hidden><code>git clone https://github.com/andrewswiniarski-hue/Census_Uncertainty_Analysis.git
 cd Census_Uncertainty_Analysis
-git checkout final-handoff
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt -r requirements-dev.txt</code></pre>
+      <p class="small muted">Until the handoff is merged into <code>main</code>, add <code>git checkout final-handoff</code> after <code>cd</code>.</p>
     </li>
-    <li><b>Add your Census API key</b>
-      <p>Request one at <a href="https://api.census.gov/data/key_signup.html">api.census.gov/data/key_signup.html</a>; it arrives by email within minutes. Copy <code>.env.example</code> to a new file named <code>.env</code> and replace <code>paste_your_key_here</code> with your key. <code>.env</code> is git-ignored, so the key never leaves your machine. The key is <strong>required</strong>: the three Census pulls stop with a clear message without it.</p>
+    <li><b>Start the dashboard</b>
+<pre><code>streamlit run Streamlit/us_county_explorer.py</code></pre>
+      <p>It opens at <code>http://localhost:8501</code> and reads the committed files in <code>data/raw/</code>. Restart the server after changing <code>.env</code> or anything in <code>analysis/</code>: Streamlit's Rerun button does not reload changed modules.</p>
+    </li>
+    <li><b>Optional: refresh the data from the Census Bureau</b>
+      <p>Get a free Census API key at <a href="https://api.census.gov/data/key_signup.html">api.census.gov/data/key_signup.html</a> (it arrives by email within minutes). Copy <code>.env.example</code> to a new file named <code>.env</code> and replace <code>paste_your_key_here</code> with your key; <code>.env</code> is git-ignored, so the key never leaves your machine.</p>
 <pre data-os="win"><code>Copy-Item .env.example .env
 notepad .env</code></pre>
 <pre data-os="mac" hidden><code>cp .env.example .env
 open -e .env   # or any text editor</code></pre>
-    </li>
-    <li><b>Download the data (four scripts, in this order)</b>
-      <p>Each script prints its own sanity checks and writes to <code>data/raw/</code>. Run <code>pull_usdash.py</code> first: <code>pull_rucc.py</code> cross-checks its county list against that file. A script whose output already exists skips the download. On this branch's verification run the four took <strong>about 6 minutes (pull_usdash.py is about 5 of them)</strong> in total.</p>
+      <p>Then run the four scripts, in this order. Each prints its own sanity checks and writes to <code>data/raw/</code>; run <code>pull_usdash.py</code> first, because <code>pull_rucc.py</code> cross-checks its county list against that file. A script whose output already exists skips the download, so delete the old file first to refresh it. On this branch's verification run the four took <strong>about 6 minutes (pull_usdash.py is about 5 of them)</strong> in total.</p>
 <pre><code>python ingestion/pull_usdash.py
 python ingestion/pull_usdash_alloc.py
 python ingestion/pull_us_geometry.py
 python ingestion/pull_rucc.py</code></pre>
-    </li>
-    <li><b>Start the dashboard</b>
-<pre><code>streamlit run Streamlit/app_US_v7.py</code></pre>
-      <p>It opens at <code>http://localhost:8501</code>. Restart the server after changing <code>.env</code> or anything in <code>analysis/</code>: Streamlit's Rerun button does not reload changed modules.</p>
     </li>
     <li><b>Optional: switch on the "Ask about this county" assistant</b>
       <p>Add these lines to <code>.env</code> and restart. Without a key the panel shows one line saying it is off, and the rest of the dashboard is unchanged.</p>
@@ -322,8 +324,8 @@ python ingestion/pull_rucc.py</code></pre>
       </tbody></table></div>
     </li>
     <li><b>Run the tests</b>
-<pre><code>python -m pytest analysis tests -q</code></pre>
-      <p>On this branch, with the data downloaded: <strong>351 passed, 14 skipped (the skipped tests need New Jersey research data that the dashboard does not use)</strong>. Tests that need the data files skip, rather than fail, when <code>data/raw/</code> is empty. No test calls the Census API or the Anthropic API.</p>
+<pre><code>python -m pytest tests -q</code></pre>
+      <p>On this branch, with the committed data: <strong>351 passed, 14 skipped (the skipped tests need New Jersey research data that the dashboard does not use)</strong>. Tests that need the data files skip, rather than fail, when <code>data/raw/</code> is empty. No test calls the Census API or the Anthropic API.</p>
     </li>
   </ol>
 </section>
@@ -359,7 +361,7 @@ python ingestion/pull_rucc.py</code></pre>
       <div class="box"><b><code>assistant.py</code> · <code>assistant_text.py</code></b>The assistant's engine, checks and every sentence of its fixed wording</div>
     </div></div>
     <div class="stack-arrow" aria-hidden="true">▼</div>
-    <div class="layer"><div class="layer-name">Dashboard<small><code style="background:none;color:inherit;padding:0">Streamlit/app_US_v7.py</code></small></div><div class="layer-boxes">
+    <div class="layer"><div class="layer-name">Dashboard<small><code style="background:none;color:inherit;padding:0">Streamlit/us_county_explorer.py</code></small></div><div class="layer-boxes">
       <div class="box"><b>Streamlit</b>Tabs, cached data loading, fragments, the chat box; theme in <code>.streamlit/config.toml</code></div>
       <div class="box"><b>pydeck (deck.gl)</b>The clickable state and county maps</div>
       <div class="box"><b>Inline SVG</b>Every card's interval graphic, drawn by the app itself</div>
@@ -393,7 +395,7 @@ python ingestion/pull_rucc.py</code></pre>
 <!-- ================================================================== -->
 <section id="data">
   <h2>How data gets into the app</h2>
-  <p>The app never calls an API while you use it. Four scripts download seven files once; the app reads those files a single time when it starts and keeps them in memory (<code>st.cache_resource</code>), and every card, map, peer list and assistant answer is computed from that one copy.</p>
+  <p>The app never calls an API while you use it. Four scripts download seven files (committed in <code>data/raw/</code>, as pulled on 2026-10-25); the app reads those files a single time when it starts and keeps them in memory (<code>st.cache_resource</code>), and every card, map, peer list and assistant answer is computed from that one copy.</p>
 
   <div class="diagram">
 <svg viewBox="0 0 1000 470" role="img" aria-label="Data pipeline: four sources, four ingestion scripts, seven Parquet files, loaded once into the app's features" font-family="Roboto, Helvetica, Arial, sans-serif">
@@ -475,7 +477,7 @@ python ingestion/pull_rucc.py</code></pre>
   <h3>Refreshing to a new ACS release</h3>
   <ol>
     <li>Change the year in each pull script (<code>2024</code> in <code>pull_usdash.py</code>'s download calls and output names; <code>VINTAGE</code> in <code>pull_usdash_alloc.py</code> and <code>pull_us_geometry.py</code>) and the file names the loaders read in <code>analysis/dashboard.py</code> (<code>US_LEVEL_SPECS</code>, <code>load_us_acs1_county</code>, <code>load_alloc_us_county</code>).</li>
-    <li>Re-run the four pulls, read their sanity output, then run the tests. A new table cell number or a renamed label shows up as a failing accessor test in <code>analysis/test_dashboard.py</code>, which checks cell numbers against the published labels.</li>
+    <li>Re-run the four pulls, read their sanity output, then run the tests. A new table cell number or a renamed label shows up as a failing accessor test in <code>tests/test_dashboard.py</code>, which checks cell numbers against the published labels.</li>
     <li>Update the "2020–2024" wording in the app's footer and welcome page. If an AI key is in use, re-run <code>python analysis/assistant_eval.py --dry-run</code>, then a live evaluation, before relying on its answers.</li>
   </ol>
 
@@ -628,7 +630,7 @@ python ingestion/pull_rucc.py</code></pre>
       </tbody></table></div>
       <h4>How well it works</h4>
       <p class="how-note"><a href="analysis/assistant_eval.py"><code>analysis/assistant_eval.py</code></a> asks 41 fixed questions about each of five counties chosen by fixed rules (Jefferson County, AL; Loving County, TX; Alpine County, CA; Bristol Bay Borough, AK; Wyoming County, PA). First full run, 205 replies (2026-10-18): the scope decision (answer or redirect) was right in <strong>183 (89%)</strong>; <strong>11 (5%)</strong> were blocked by the checks; 1 of 15 ready-made prompt replies was blocked; none were unavailable; about <strong>$0.09</strong> for all 205. Wording fixes followed, so rerun before quoting these numbers. The checks prove every figure is real, not that every sentence about a figure is right: read a sample of answers after any change to the wording or the fact sheet.</p>
-      <p class="small muted">Engine: <a href="analysis/assistant.py"><code>analysis/assistant.py</code></a> · all wording: <a href="analysis/assistant_text.py"><code>analysis/assistant_text.py</code></a> · design: <a href="docs/superpowers/specs/2026-10-10-county-ai-assistant-design.md">assistant design spec</a> · decision #20 in <a href="HANDOFF.md">HANDOFF.md</a>.</p>
+      <p class="small muted">Engine: <a href="analysis/assistant.py"><code>analysis/assistant.py</code></a> · all wording: <a href="analysis/assistant_text.py"><code>analysis/assistant_text.py</code></a> · design: <a href="docs/design-specs/2026-10-10-county-ai-assistant-design.md">assistant design spec</a> · decision #20 in <a href="HANDOFF.md">HANDOFF.md</a>.</p>
     </div>
   </details>
 
@@ -668,7 +670,7 @@ python ingestion/pull_rucc.py</code></pre>
 
   <h3>Two styles of published uncertainty, and the whole ACS</h3>
   <div class="fig-grid">
-    <figure><a href="docs/handover/figures/eda10_saipe_vs_acs_intervals.png" title="Open the full-size chart"><img src="docs/handover/figures/eda10_saipe_vs_acs_intervals.png" alt="SAIPE and ACS intervals compared for New Jersey counties" loading="lazy"></a><figcaption><b>Narrower is not better.</b> SAIPE's model-based interval runs about 2× the ACS width in 99–100% of NJ county-years. The two measure different kinds of uncertainty, so a tool must be product-aware. <a href="notebooks/10-saipe-vs-acs-county.ipynb">EDA 10</a>; Mercer County detail in <a href="notebooks/13-saipe-vs-acs-county.ipynb">EDA 13</a></figcaption></figure>
+    <figure><a href="docs/handover/figures/eda10_saipe_vs_acs_intervals.png" title="Open the full-size chart"><img src="docs/handover/figures/eda10_saipe_vs_acs_intervals.png" alt="SAIPE and ACS intervals compared for New Jersey counties" loading="lazy"></a><figcaption><b>Narrower is not better.</b> SAIPE's model-based interval runs about 2× the ACS width in 99–100% of NJ county-years. The two measure different kinds of uncertainty, so a tool must be product-aware. <a href="notebooks/07-saipe-vs-acs-nj-counties.ipynb">Notebook 07</a> (EDA 10); Mercer County detail in <a href="notebooks/13-saipe-vs-acs-mercer-county.ipynb">EDA 13</a></figcaption></figure>
     <figure><a href="docs/handover/figures/eda14_cv_by_family.png" title="Open the full-size chart"><img src="docs/handover/figures/eda14_cv_by_family.png" alt="Distribution of county CVs by ACS table family" loading="lazy"></a><figcaption><b>Most of the ACS can carry an error bar, and much of it is wide.</b> About 72% of a 100-table sample is scoreable; the rest is structured absence (zeros, publication floors, controlled cells). Family median CVs differ 36×; 36% of scoreable cells exceed CV 0.30. <a href="notebooks/14-acs-wide-error-bar-survey.ipynb">EDA 14</a></figcaption></figure>
   </div>
 
@@ -680,16 +682,16 @@ python ingestion/pull_rucc.py</code></pre>
     <tr><td>04</td><td><a href="notebooks/04-privacy-noise-das-demo.ipynb">Privacy noise, DAS demonstration</a></td><td>Slope −0.78 to −0.90; the block-group anomaly; 807 empty blocks gain 4,695 phantom residents, 427 lose everyone</td></tr>
     <tr><td>05</td><td><a href="notebooks/05-allocation-rates-vs-cv.ipynb">Allocation rates vs CV</a></td><td>Income ~39% imputed vs under 1% for demographics, independent of CV once size is controlled</td></tr>
     <tr><td>06</td><td><a href="notebooks/06-composite-reliability-and-cv-drivers.ipynb">Composite reliability and CV drivers</a></td><td>22.8% blind spot; place population R² 0.005 vs estimate size 0.67–0.73</td></tr>
+    <tr><td>07</td><td><a href="notebooks/07-saipe-vs-acs-nj-counties.ipynb">SAIPE vs ACS, NJ counties</a></td><td>SAIPE's interval is about 2× the ACS width in 99–100% of county-years</td></tr>
     <tr><td>08</td><td><a href="notebooks/08-allocation-denominator-sensitivity.ipynb">Allocation-denominator sensitivity</a></td><td>12 of 28 definition pairs reverse the ranking of income sources: never quote a bare allocation rate</td></tr>
     <tr><td>09</td><td><a href="notebooks/09-who-gets-inferred-nj-pums.ipynb">Who gets inferred, NJ PUMS</a></td><td>Whole-record substitution roughly halves up the age and education ladders (18.4% → 9.4%); sex is flat</td></tr>
     <tr><td>10</td><td><a href="notebooks/10-dhc-dp1-size-scaling.ipynb">2020 DHC/DP1 modeled noise by size</a></td><td>Modeled DHC noise rises from about 0 to a median of 0.14 at block; DP1 total population equals DHC exactly</td></tr>
-    <tr><td>10</td><td><a href="notebooks/10-saipe-vs-acs-county.ipynb">SAIPE vs ACS, NJ counties</a></td><td>SAIPE's interval is about 2× the ACS width in 99–100% of county-years</td></tr>
     <tr><td>11</td><td><a href="notebooks/11-dhc-dp1-variable-type.ipynb">DHC/DP1 by variable type</a></td><td>Black 65+ modeled noise is about 1,200× population's at county, about 5× at block</td></tr>
     <tr><td>12</td><td><a href="notebooks/12-dhc-choropleth.ipynb">DHC choropleth</a></td><td>Modeled DHC noise is an inverted population map (Spearman &lt; −0.95), a limit of a size-only model</td></tr>
-    <tr><td>13</td><td><a href="notebooks/13-saipe-vs-acs-county.ipynb">SAIPE vs ACS, Mercer County</a></td><td>Median income: ACS $100,645 ± $2,565 vs SAIPE $102,760 [98,661–106,859], two different kinds of uncertainty</td></tr>
+    <tr><td>13</td><td><a href="notebooks/13-saipe-vs-acs-mercer-county.ipynb">SAIPE vs ACS, Mercer County</a></td><td>Median income: ACS $100,645 ± $2,565 vs SAIPE $102,760 [98,661–106,859], two different kinds of uncertainty</td></tr>
     <tr><td>14</td><td><a href="notebooks/14-acs-wide-error-bar-survey.ipynb">ACS-wide error-bar survey</a></td><td>~72% scoreable; family CVs differ 36×; the size law holds (−0.54, R² 0.78, 6.1M cells)</td></tr>
   </tbody></table></div>
-  <p class="small muted">Two notebooks share the number 10 (the DHC work was renumbered during a branch merge); a renumbering pass was deliberately not done because the docs link to these names. The notebooks run on the New Jersey pulls (<code>pull_acs_nj.py</code>, <code>pull_nj_geometry.py</code>, <code>pull_das_demo_nj.py</code>, <code>pull_sf1_2010_nj.py</code>, <code>pull_acs_alloc_nj.py</code>, and others named at the top of each notebook), not the dashboard pulls.</p>
+  <p class="small muted">Notebook 07 is called "EDA 10" in older documents; it was renumbered on 2026-10-31 so that no two notebooks share a number. The notebooks run on New Jersey research data, which is not committed: <a href="notebooks/README.md">notebooks/README.md</a> lists the download scripts each one needs (for example <code>pull_acs_nj.py</code>, <code>pull_nj_geometry.py</code>, <code>pull_acs_alloc_nj.py</code>).</p>
 
   <h3>Who needs this, and for what</h3>
   <p>Garrett Spangler's user research (<a href="docs/user-segments-and-needs.md">docs/user-segments-and-needs.md</a>) ranked eleven user segments; the first tier is program staff (CDBG, HUD, ARC), small and rural county officials, and state data centers. About 74% of U.S. counties get 5-year estimates only. "The data stops at county. The functions do not have to." Four needs cover every segment:</p>
@@ -761,15 +763,18 @@ python ingestion/pull_rucc.py</code></pre>
   <h2>Where to find things</h2>
   <p>Links open the file in this repository. Every folder has its own README.</p>
   <div class="tscroll"><table class="tbl"><thead><tr><th>Path</th><th>What it is</th><th>Start with</th></tr></thead><tbody>
-    <tr><td><a href="Streamlit/"><code>Streamlit/</code></a></td><td>The dashboard: <code>app_US_v7.py</code> and its README (measures, how to add one, known limits, the assistant's evaluation)</td><td><a href="Streamlit/README.md">Streamlit/README.md</a></td></tr>
+    <tr><td><a href="Streamlit/"><code>Streamlit/</code></a></td><td>The dashboard: <code>us_county_explorer.py</code> and its README (measures, how to add one, known limits, the assistant's evaluation)</td><td><a href="Streamlit/README.md">Streamlit/README.md</a></td></tr>
     <tr><td><a href=".streamlit/config.toml"><code>.streamlit/config.toml</code></a></td><td>The app's theme (Roboto, Census palette) and two runner settings</td><td></td></tr>
-    <tr><td><a href="analysis/"><code>analysis/</code></a></td><td>Reusable modules: <code>acs.py</code> (CV, margins), <code>dashboard.py</code> (loaders, measure accessors), <code>composite.py</code> (reliability score), <code>alloc*.py</code> (imputation), <code>cv_model.py</code>, <code>dhc.py</code>, <code>noise_model.py</code>, <code>replicate.py</code> (PUMS standard errors), <code>assistant*.py</code>; plus their <code>test_*.py</code></td><td><a href="analysis/README.md">analysis/README.md</a></td></tr>
+    <tr><td><a href="analysis/"><code>analysis/</code></a></td><td>Reusable modules: <code>acs.py</code> (CV, margins), <code>dashboard.py</code> (loaders, measure accessors), <code>composite.py</code> (reliability score), <code>alloc*.py</code> (imputation), <code>cv_model.py</code>, <code>dhc.py</code>, <code>noise_model.py</code>, <code>replicate.py</code> (PUMS standard errors), <code>assistant*.py</code></td><td><a href="analysis/README.md">analysis/README.md</a></td></tr>
     <tr><td><a href="ingestion/"><code>ingestion/</code></a></td><td>One script per data pull, each sanity-checked. The dashboard needs four (see <a href="#data">How data gets in</a>); the rest feed the notebooks</td><td><a href="ingestion/README.md">ingestion/README.md</a></td></tr>
     <tr><td><a href="notebooks/"><code>notebooks/</code></a></td><td>EDA 01–14, committed with outputs</td><td><a href="notebooks/README.md">notebooks/README.md</a></td></tr>
-    <tr><td><a href="docs/"><code>docs/</code></a></td><td>Findings report, glossary, data dictionary, uncertainty sources, product shortlist, user research, allocation studies, API receipts, design specs, and the figures used here</td><td><a href="docs/README.md">docs/README.md</a></td></tr>
-    <tr><td><a href="tests/"><code>tests/</code></a></td><td>pytest suite: dashboard smoke tests, the assistant, the reliability score, ingestion helpers</td><td><code>python -m pytest analysis tests -q</code></td></tr>
-    <tr><td><a href="data/"><code>data/</code></a></td><td>Empty in git; filled by the ingestion scripts (<code>raw/</code>) and notebooks (<code>processed/</code>)</td><td><a href="data/README.md">data/README.md</a></td></tr>
-    <tr><td><a href="README.md"><code>README.md</code></a></td><td>Project brief: research questions, deliverables, scope history, open questions for mentors</td><td></td></tr>
+    <tr><td><a href="docs/"><code>docs/</code></a></td><td>Findings report, glossary, data dictionary, uncertainty sources, product shortlist, user research, allocation studies, API receipts, the project brief, design specs (<code>design-specs/</code>), meeting decks (<code>meeting-decks/</code>), and the figures used here. The final report and presentation will be added here</td><td><a href="docs/README.md">docs/README.md</a></td></tr>
+    <tr><td><a href="tests/"><code>tests/</code></a></td><td>pytest suite: formulas, loaders, dashboard smoke tests, the reliability score, the assistant, ingestion helpers</td><td><code>python -m pytest tests -q</code></td></tr>
+    <tr><td><a href="data/"><code>data/</code></a></td><td><code>raw/</code> holds the seven files the dashboard reads (committed); research data is downloaded into it by the ingestion scripts, and notebooks write to <code>processed/</code></td><td><a href="data/README.md">data/README.md</a></td></tr>
+    <tr><td><a href="tools/"><code>tools/</code></a> · <a href="product_report.html"><code>product_report.html</code></a></td><td>Product Scope Tracker: a catalog of about 573 Census data products and the uncertainty each publishes, with the team's review notes (<code>product_review.json</code>, <code>product_probes.json</code>, <code>notes/</code>)</td><td><a href="tools/README.md">tools/README.md</a></td></tr>
+    <tr><td><a href="README.md"><code>README.md</code></a></td><td>The front door: overview and metadata, file map, setup, methods, limitations, citations</td><td></td></tr>
+    <tr><td><a href="docs/project-brief.md"><code>docs/project-brief.md</code></a></td><td>The team's project brief: research questions, deliverables, scope history, open questions for mentors</td><td></td></tr>
+    <tr><td><a href="LICENSE"><code>LICENSE</code></a></td><td>CC0 1.0 Universal: the team's code and documents are dedicated to the public domain</td><td></td></tr>
     <tr><td><a href="HANDOFF.md"><code>HANDOFF.md</code></a></td><td>Technical appendix: the 20 decisions, about 40 data landmines, environment notes</td><td></td></tr>
     <tr><td><a href="WORKLOG.md"><code>WORKLOG.md</code></a></td><td>Who did what, when, and what they found: the project's audit trail</td><td></td></tr>
     <tr><td><a href="verify_api_surfaces.py"><code>verify_api_surfaces.py</code></a> · <a href="report_alloc_denominators.py"><code>report_alloc_*.py</code></a></td><td>Regenerate the API-receipt and allocation documents in <code>docs/</code></td><td></td></tr>
@@ -782,9 +787,43 @@ python ingestion/pull_rucc.py</code></pre>
     <li><a href="docs/data-dictionary.md">Data dictionary</a> — every product used: geographies, uncertainty shipped, cadence, access, landmines</li>
     <li><a href="docs/glossary.md">Glossary</a> — every term, defined in plain English first</li>
     <li><a href="docs/dashboard-variable-shortlist.md">Dashboard variable shortlist</a> — why each measure is on the dashboard, and which were held back</li>
-    <li><a href="docs/superpowers/specs/2026-09-27-composite-reliability-score-cards-design.md">Reliability score design</a> · <a href="docs/superpowers/specs/2026-10-10-county-ai-assistant-design.md">AI assistant design</a> · <a href="docs/superpowers/specs/2026-08-18-population-data-quality-card-design.md">Population data-quality card design</a></li>
+    <li><a href="docs/design-specs/2026-09-27-composite-reliability-score-cards-design.md">Reliability score design</a> · <a href="docs/design-specs/2026-10-10-county-ai-assistant-design.md">AI assistant design</a> · <a href="docs/design-specs/2026-09-17-statistical-peers-tab-design.md">Statistical peers design</a> · <a href="docs/design-specs/2026-08-18-population-data-quality-card-design.md">Population data-quality card design</a></li>
   </ul>
-  <p class="small muted">Not on this branch, but in git history: earlier dashboard versions (<code>Streamlit/app.py</code> Trenton prototype and v1.1–v3 on <code>main</code>; v6 on the <code>county-ai-assistant</code> and <code>JL_Work_Tree</code> branches), and on <code>main</code>: the Product Scope Tracker (<code>tools/</code>, <code>product_report.html</code>), the meeting slide decks, and the team's AI-assistant working files.</p>
+  <p class="small muted">Not in this repository's current files, but in its git history: earlier dashboard versions (<code>Streamlit/app.py</code>, the Trenton prototype, and v1.1–v3 on <code>main</code>; v6 on the <code>county-ai-assistant</code> and <code>JL_Work_Tree</code> branches) and the team's AI-assistant working files.</p>
+</section>
+
+<!-- ================================================================== -->
+<section id="citations">
+  <h2>Citations</h2>
+  <p>How to cite Census Bureau data, tools and documents: <a href="https://www.census.gov/about/policies/citation.html">census.gov/about/policies/citation.html</a>. The same list, with access dates, is in the <a href="README.md">README</a>.</p>
+  <h3>Data sources</h3>
+  <p class="small muted">Accessed 2026-10-25 for the dashboard data; July–August 2026 for the New Jersey research data.</p>
+  <ol class="small">
+    <li><strong>American Community Survey 5-Year Estimates, 2020–2024</strong>, including the B98/B99 allocation tables. U.S. Census Bureau (2025). <a href="https://www.census.gov/data/developers/data-sets/acs-5year.html">census.gov/data/developers/data-sets/acs-5year.html</a> · API <code>api.census.gov/data/2024/acs/acs5</code></li>
+    <li><strong>American Community Survey 1-Year Estimates, 2024.</strong> U.S. Census Bureau (2025). <a href="https://www.census.gov/data/developers/data-sets/acs-1year.2024.html">census.gov/data/developers/data-sets/acs-1year.2024.html</a></li>
+    <li><strong>ACS Public Use Microdata Sample, 2020–2024 5-Year.</strong> U.S. Census Bureau. <a href="https://www.census.gov/programs-surveys/acs/microdata.html">census.gov/programs-surveys/acs/microdata.html</a></li>
+    <li><strong>Cartographic Boundary Files, 2024.</strong> U.S. Census Bureau. <a href="https://www.census.gov/geographies/mapping-files/time-series/geo/cartographic-boundary.html">census.gov/geographies/mapping-files/time-series/geo/cartographic-boundary.html</a></li>
+    <li><strong>Rural-Urban Continuum Codes, 2023.</strong> USDA Economic Research Service (2024). <a href="https://www.ers.usda.gov/data-products/rural-urban-continuum-codes">ers.usda.gov/data-products/rural-urban-continuum-codes</a></li>
+    <li><strong>Small Area Income and Poverty Estimates, 2019–2024.</strong> U.S. Census Bureau. <a href="https://www.census.gov/programs-surveys/saipe.html">census.gov/programs-surveys/saipe.html</a></li>
+    <li><strong>2020 Census Demographic and Housing Characteristics File and Demographic Profile.</strong> U.S. Census Bureau (2023). <a href="https://www.census.gov/data/developers/data-sets/decennial-census.html">census.gov/data/developers/data-sets/decennial-census.html</a></li>
+    <li><strong>2010 Census Summary File 1.</strong> U.S. Census Bureau (2011). API <code>api.census.gov/data/2010/dec/sf1</code></li>
+    <li><strong>2010 Demonstration Data Products – Demographic and Housing Characteristics, 2022-08-25 release.</strong> U.S. Census Bureau (2022). <a href="https://www2.census.gov/programs-surveys/decennial/2020/program-management/data-product-planning/2010-demonstration-data-products/02-Demographic_and_Housing_Characteristics/">www2.census.gov/…/2010-demonstration-data-products/</a></li>
+    <li><strong>Census Regions and Divisions of the United States.</strong> U.S. Census Bureau. <a href="https://www2.census.gov/geo/docs/maps-data/maps/reg_div.txt">www2.census.gov/geo/docs/maps-data/maps/reg_div.txt</a></li>
+    <li><strong>OpenStreetMap</strong> (Trenton neighborhood names, research data only). © OpenStreetMap contributors, Open Database License. <a href="https://www.openstreetmap.org/copyright">openstreetmap.org/copyright</a></li>
+  </ol>
+  <h3>Background literature and tools</h3>
+  <ul class="small">
+    <li>U.S. Census Bureau (2020). <em>Understanding and Using American Community Survey Data: What All Data Users Need to Know.</em> <a href="https://www.census.gov/programs-surveys/acs/library/handbooks/general.html">census.gov/programs-surveys/acs/library/handbooks/general.html</a></li>
+    <li>U.S. Census Bureau. <em>American Community Survey Accuracy of the Data</em> (2020–2024 5-year; 2024 1-year) and <em>2020–2024 ACS 5-year PUMS Accuracy of the Data.</em> <a href="https://www.census.gov/programs-surveys/acs/technical-documentation/code-lists.html">census.gov/programs-surveys/acs/technical-documentation/code-lists.html</a> · <a href="https://www.census.gov/programs-surveys/acs/microdata/documentation.html">census.gov/programs-surveys/acs/microdata/documentation.html</a></li>
+    <li>Abowd, J. M., Ashmead, R., Cumings-Menon, R., Garfinkel, S., Heineck, M., Heiss, C., Johns, R., Kifer, D., Leclerc, P., Machanavajjhala, A., Moran, B., Sexton, W., Spence, M., &amp; Zhuravlev, P. (2022). The 2020 Census Disclosure Avoidance System TopDown Algorithm. <em>Harvard Data Science Review.</em> <a href="https://doi.org/10.1162/99608f92.529e3cb9">doi.org/10.1162/99608f92.529e3cb9</a></li>
+    <li>Spielman, S. E., Folch, D., &amp; Nagle, N. (2014). Patterns and causes of uncertainty in the American Community Survey. <em>Applied Geography, 46</em>, 147–157. <a href="https://doi.org/10.1016/j.apgeog.2013.11.002">doi.org/10.1016/j.apgeog.2013.11.002</a></li>
+    <li>Spielman, S. E., &amp; Folch, D. C. (2015). Reducing uncertainty in the American Community Survey through data-driven regionalization. <em>PLOS ONE, 10</em>(2), e0115626. <a href="https://doi.org/10.1371/journal.pone.0115626">doi.org/10.1371/journal.pone.0115626</a></li>
+    <li>Parker, J. D., et al. (2023). <em>National Center for Health Statistics Data Presentation Standards for Rates and Counts.</em> National Center for Health Statistics. <a href="https://doi.org/10.15620/cdc:124368">doi.org/10.15620/cdc:124368</a> (NCHS reliability standards; the CV 0.30 line as described in the team's glossary)</li>
+    <li>Esri. <em>U.S. Census Bureau's American Community Survey — Esri Demographics documentation</em> (Esri's ACS reliability measure). <a href="https://doc.arcgis.com/en/esri-demographics/latest/esri-demographics/american-community-survey.htm">doc.arcgis.com/…/american-community-survey.htm</a> (the 12% and 40% CV lines as cited from Esri's 2025 methodology statement in the team's user research)</li>
+    <li>Okabe, M., &amp; Ito, K. (2002, revised 2008). <em>Color Universal Design (CUD): How to make figures and presentations that are friendly to colorblind people.</em> <a href="https://jfly.uni-koeln.de/color/">jfly.uni-koeln.de/color</a> (the palette used for the dashboard's maps and bands)</li>
+    <li>censusdis contributors. <em>censusdis</em>, a Python package for U.S. Census data. <a href="https://github.com/censusdis/censusdis">github.com/censusdis/censusdis</a></li>
+    <li>Sources behind the user research are listed in <a href="docs/user-segments-and-needs.md">docs/user-segments-and-needs.md</a>.</li>
+  </ul>
 </section>
 
 <!-- ================================================================== -->
@@ -818,7 +857,8 @@ python ingestion/pull_rucc.py</code></pre>
   <p>Measuring America: People, Places, and Economy</p>
   <p>American Community Survey (2020-2024, 5-year). USDA ERS Rural-Urban Continuum Codes (2023).</p>
   <p>This is a student capstone demonstration. It is not an official Census Bureau product.</p>
-  <p>Handover prepared 2026-10-25 on branch <code style="background:none;color:inherit;padding:0">final-handoff</code> · <a href="https://www.census.gov">census.gov</a> · <a href="https://github.com/andrewswiniarski-hue/Census_Uncertainty_Analysis">GitHub repository</a></p>
+  <p>Authors: Andrew Swiniarski, Justus Long, Katie Christiansen, Garrett Spangler, Theodore Ruth · Georgetown University MSBA Capstone · Partner: U.S. Census Bureau · Completion date: TBD · License: CC0 1.0</p>
+  <p><a href="https://www.census.gov">census.gov</a> · <a href="https://github.com/andrewswiniarski-hue/Census_Uncertainty_Analysis">GitHub repository</a></p>
 </footer>
 </div>
 

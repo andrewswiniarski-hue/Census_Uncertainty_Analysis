@@ -124,7 +124,7 @@ It opens at <http://localhost:8501>. Pick a state, then a county, on the map or 
 
 ### Step 4 (optional): Refresh the Dashboard's Data from the Census Bureau
 
-These four scripts re-download the seven data files the dashboard reads. Run them in this order (the last one checks its county list against the first one's output). They take about six minutes in total and need the Census API key in `.env`, except `pull_rucc.py`.
+These four scripts re-download the seven data files the dashboard reads. A script skips its download when its output file already exists, so delete the files in `data/raw/` you want refreshed first. Run them in this order (the last one checks its county list against the first one's output). They take about six minutes in total and need the Census API key in `.env`, except `pull_rucc.py`.
 
 ```bash
 python ingestion/pull_usdash.py        # ACS 2020–2024 5-year and 2024 1-year estimates, state and county
