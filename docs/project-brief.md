@@ -1,0 +1,180 @@
+# Census Uncertainty Analytics: From Collection to Decision Making
+
+**MSBA Capstone Project — Sponsor: U.S. Census Bureau (USCB)**
+Kickoff: July 8, 2026 | First mentor meeting: July 22, 2026 (biweekly thereafter)
+
+> **About this file.** This was the repository's README from project kickoff until 2026-10-31, when the README was rewritten to follow the Census Bureau's capstone template. It is kept as the team's project brief: the research questions, deliverables, how the scope changed, the Phase 1 checklist, milestones, and the full list of open questions for Census mentors. For setup and an overview, start at the [README](../README.md).
+
+---
+
+## Project Summary
+
+The Census Bureau wants to understand and communicate the **uncertainty** in its published estimates. Uncertainty enters at multiple points in the statistical product lifecycle (sampling, nonresponse, imputation, disclosure avoidance noise), and today there is no unified way for a non-technical user to judge whether an estimate is reliable enough for their decision.
+
+Our job: **decompose the sources of uncertainty, explore a composite reliability score, and build visualizations that tell users whether an estimate is fit for their use.**
+
+All data is **public** — no NDA or special sworn status required.
+
+## Key Research Questions (anchor every phase to these)
+
+| # | Question |
+|---|----------|
+| Q1 | How is uncertainty introduced across the statistical product lifecycle? |
+| Q2 | Can multiple uncertainty components be combined into one interpretable score? |
+| Q3 | Which existing public uncertainty metrics are fit for which uses? |
+| Q4 | How should uncertainty be visualized and communicated to non-technical users? |
+
+## Deliverables
+
+**Must-have:**
+1. **Uncertainty Analysis Report** — decomposition, composite score (with reliability tiers/thresholds), fit-for-use guidance across 3–5 statistical products (chosen with Census mentor)
+2. **Reproducible Codebase** — ingestion → processing → uncertainty computation → composite score → geospatial layers; fully documented
+3. **Executive Dashboard** — linked micro-maps (tract / block group / county) with composite scores, color-coded reliability tiers, and explanatory tooltips
+
+**Nice-to-have (if time allows):** plain-language interpretive aids; interactive sliders for methodology/privacy tradeoffs; side-by-side comparisons; counterfactual tuning toolkit; uncertainty hot-spot maps.
+
+## Current Scope (biweekly #1 guidance 2026-07-22; lead decisions 2026-08-01, widened 2026-09-14)
+
+**Update 2026-09-14 (decision #18):** the dashboard covers **all US counties** and widens beyond income and poverty to measures the user-segment research ties to named federal programs: employment, housing cost, education and disability (see [`docs/dashboard-variable-shortlist.md`](dashboard-variable-shortlist.md)). Income and poverty remain the anchor. The 2026-08-01 decisions below are kept as the record of how the project first narrowed; where they conflict with this update (domain, NJ pilot geography), this update wins.
+
+**Update 2026-10-18 (decision #20):** dashboard v7 adds an "Ask about this county" panel: a language model words short answers built only from the county's own dashboard figures (no new data or measures). It serves Q4 and the "plain-language interpretive aids" nice-to-have; see [`Streamlit/README.md`](../Streamlit/README.md).
+
+Mentor guidance from the first biweekly: the EDA breadth is good — now **narrow the project to a specific product or metric the EDA found interesting and build the tool around that**, rather than an uncertainty reporting tool for the whole product catalog. Lead decisions implementing it:
+
+- **Domain: income & poverty** *(widened 2026-09-14 by decision #18; income and poverty remain the anchor)* — where our strongest findings already cluster (poverty defies the sampling law and is least reliable where poverty is suburbanizing, EDA 02/03; ~39% of median-tract households have imputed income, EDA 05; the 22.8% low-CV/high-allocation blind spot is an income finding, EDA 06).
+- **The composite score stays as-is as a deliverable.** The *form* of the reporting tool follows whichever product we anchor on.
+- **Geography: New Jersey pilot** for now; design should generalize by state. *(Superseded 2026-09-14: the dashboard covers all US counties, decision #18.)*
+- **Product-first:** before further EDA, propose a product shortlist and verify what uncertainty each product actually publishes — headline: ACS 5-year income & poverty (B19013 / B17001 / C17002) + allocation tables (B99192 / B99172); supporting: SAIPE (the Bureau's precedent for publishing income/poverty with confidence intervals), PUMS replicate weights / Variance Replicate Tables (exact SEs). Mentor confirmation of the mix is on the question list. **Done 2026-08-01: [`docs/product-shortlist-proposal.md`](product-shortlist-proposal.md) — all four candidates verified with live receipts.**
+- **DHC and Demographic Profile step back from scored products to report context.** Income does not exist in decennial products, so they cannot carry the anchor variable. The privacy-noise analysis (EDA 04) and the Trenton dashboard's DHC comparison remain valid evidence for the report; they no longer feed the composite score or the app's product pairing (mentor confirmation still open, see Open Questions).
+- **Whole-catalog work is parked** (CMS scrape etc.) — the Product Scope Tracker stands as the record of how the shortlist was chosen.
+- **EDA phase endpoint: 2026-08-12** — targeted income/poverty EDA only until then; concept pitch + wireframe ready by that date. *Progress: EDA 10 (SAIPE vs ACS, the two published uncertainty styles compared) done 2026-08-06 — [`notebooks/07-saipe-vs-acs-nj-counties.ipynb`](../notebooks/07-saipe-vs-acs-nj-counties.ipynb); headline: SAIPE's interval runs ~2× the ACS's relative width at NJ county scale, so tool verdicts must be product-aware. EDA 11 (tier stability across vintages) remains.*
+
+## Semester Milestones
+
+| Weeks | Phase | Exit criteria |
+|-------|-------|---------------|
+| 1–3 | Data Exploration & Research | Data sources catalogued; methodology & literature reviewed |
+| 4–6 | Concept Pitch & Wireframe | Composite score approach + dashboard wireframe presented to mentors |
+| 7–10 | MVP Product Demo | Working prototype: score logic, sample geographies, draft visuals |
+| 11–12 | Stakeholder Feedback | Formal review with Census leadership; feedback incorporated |
+| 13–14 | Launch Tool | Final dashboard, codebase, and report delivered |
+
+**Cadence:** biweekly status meetings with mentors. Ground rule: bring a one-slide status update — what worked, what's blocked, what you need from us.
+
+## Candidate Datasets — original shortlist confirmed with mentors 2026-07-22
+
+See **Current Scope** above for the narrower income & poverty stack this project is actually building against. This section records the original catalog-wide shortlist that the narrowing decision superseded.
+
+**Our 3 core products:** ACS 5-year estimates (2020–2024 vintage) · 2020 DHC (Demographic and Housing Characteristics) production release · 2020 Demographic Profile (DP1). See "Decisions already made" in [HANDOFF.md](../HANDOFF.md) for how uncertainty was scored on each before the Phase 2 narrowing.
+
+**Supporting/mechanism-only data (not scored products themselves):** DAS demonstration products + 2010 SF1 (used to empirically measure disclosure-avoidance noise, feeding the DHC/DP score as a modeled input) · TIGER/Line shapefiles (geometry)
+
+**Metadata & Methodology:** sampling design documentation; disclosure avoidance technical documentation; editing & imputation methodology; error measurement / quality indicator documentation
+
+**Likely additions:** ACS 5-year estimates (ships with margins of error — best starting point for empirical work)
+
+Data portal: [data.census.gov](https://data.census.gov) | Documentation: [census.gov](https://www.census.gov)
+
+---
+
+# Phase 1 Checklist — Getting Set Up & Familiar with the Data
+
+Work through these in order. Each step has a concrete "done when" so we can track progress.
+
+### Step 1: Infrastructure setup (Day 1)
+
+- [x] **Create the GitHub repo** (one team member creates, adds others as collaborators) *(done 2026-07-09)*
+  - Suggested structure:
+    ```
+    /data          (raw + processed; .gitignore large raw files)
+    /ingestion     (API pull scripts)
+    /notebooks     (EDA, exploratory work)
+    /analysis      (reusable analysis code)
+    /docs          (data dictionary, methodology notes, this README)
+    ```
+  - Add a `.gitignore` (Python template + `/data/raw/`) and commit this README to the root
+- [x] **Request a Census API key** — free and instant: https://api.census.gov/data/key_signup.html (each member can get their own) *(lead's key verified with a live call 2026-07-09; each teammate still gets their own)*
+- [x] **Set up the Python environment** — create `requirements.txt` with initial packages: `pandas`, `geopandas`, `matplotlib`, `censusdis` (or `census` + `us`), `jupyter` *(done 2026-07-09)*
+- [x] **Done when:** everyone has cloned the repo, installed the environment, and stored their API key locally (in a `.env` file — never commit keys) *(team has been actively contributing since mid-July — see WORKLOG for teammate commits; follow the Getting Started section above for a fresh clone)*
+
+### Step 2: Methodology grounding (Days 1–4, parallel with Step 1)
+
+Read before analyzing — this project's core insight is *where* uncertainty comes from:
+
+- [ ] **ACS "Accuracy of the Data" documentation** — how margins of error are computed and what they mean (search census.gov: "ACS accuracy of the data")
+- [ ] **2020 Disclosure Avoidance System (DAS) technical docs** — how the TopDown Algorithm injects privacy noise into Decennial counts (search: "2020 Census disclosure avoidance")
+- [ ] **ACS item allocation rates** — how imputation is measured (search: "ACS item allocation rates")
+- [ ] Note the key contrast: **Decennial = full count, so privacy noise + coverage error dominate; ACS = sample, so sampling error dominates**
+- [ ] **Done when:** each member can explain in one paragraph the 3–4 major sources of uncertainty and which products they affect. Write these paragraphs into `/docs/uncertainty-sources.md`
+
+### Step 3: First data pull (Days 4–7)
+
+Start small and concrete — one state, a few variables:
+
+- [x] Pull **ACS 5-year estimates with MOEs** via the API for one state (e.g., New Jersey) at **county, tract, and block group** levels *(done 2026-07-09 — `ingestion/pull_acs_nj.py`, vintage 2024, sanity checks pass)*
+  - Suggested starter variables: total population, median household income, poverty rate, plus one small-subgroup count (e.g., a specific age × race cell)
+- [x] Download the matching **TIGER/Line shapefiles** for those geographies *(done 2026-07-09 — `ingestion/pull_nj_geometry.py`, cartographic boundaries via censusdis, 1:1 join verified)*
+- [x] Download one **DAS demonstration product / PPMF comparison file** to see privacy noise empirically *(done 2026-07-15 — `ingestion/pull_das_demo_nj.py`; 2010 Demonstration Data Product–DHC, release 2022-08-25, NJ summary file + parsing docs; documented in `docs/data-dictionary.md`)*
+- [x] **Done when:** raw data is saved, the pull is scripted (not manual downloads where avoidable), and the script is committed to `/ingestion` *(ACS + geometry done 2026-07-09; DAS demo file done 2026-07-15 — all three pulls scripted and committed)*
+
+### Step 4: Data inventory / data dictionary (Week 2)
+
+- [x] Build `/docs/data-dictionary.md` cataloguing each product: geography levels available, what uncertainty measures ship with it (MOE? CV? nothing?), update frequency, file format, access method *(started 2026-07-15; DHC and Demographic Profile entries added 2026-07-31; SAIPE, PUMS, and Variance Replicate Tables added 2026-08-01 per the income/poverty product-shortlist sprint)*
+- [x] **Done when:** the dictionary covers ACS + allocation, boundaries, DAS demo, SF1, DHC, Demographic Profile, SAIPE, PUMS, and VRTs — this becomes the "data sources catalogued" milestone evidence
+
+### Step 5: First-pass EDA (Week 2–3)
+
+Each analysis answers a specific question — keep notebooks organized by question:
+
+- [x] **How does uncertainty scale with geography size?** Compute CV = (MOE / 1.645) / estimate; plot the distribution at county vs. tract vs. block group. (Expect it to explode at small geographies — this is the project's central empirical fact.) *(done 2026-07-15 — `notebooks/01-cv-by-geography-size.ipynb`; confirmed: median income CV 0.014 county → 0.128 tract → 0.204 block group)*
+- [x] **How does uncertainty vary by variable type?** Compare CVs for median income vs. small subgroup counts *(done 2026-07-15 — `notebooks/02-cv-by-variable-type.ipynb`; tract medians span CV 0.079 (population) to 0.886 (subgroup single cells); size-driven counts follow the 1/√N sampling law, poverty doesn't; aggregating the 65+ cells helps 1.4× but doesn't rescue tract-level subgroup analysis)*
+- [x] **Where is uncertainty geographically concentrated?** Choropleth of tract-level CVs for one variable — this is a crude prototype of the final dashboard view; great to show at the first biweekly *(done 2026-07-15 — `notebooks/03-cv-choropleth-nj-tracts.ipynb`; income vs. poverty side by side; poverty reliability maps as the inverse of poverty itself — most reliable in urban cores, least in affluent tracts)*
+- [x] **What does privacy noise look like?** Using DAS demonstration data, compare noisy vs. baseline counts by geography size *(done 2026-07-16 — `notebooks/04-privacy-noise-das-demo.ipynb`; noise = demo − published SF1 across five levels; within-level log-log slopes −0.78…−0.90 vs. sampling's −0.5 — the two noise mechanisms follow measurably different laws; surprise: block groups carry ~9× tract-level absolute noise — mentor question below)*
+- [x] **How prevalent is imputation?** Pull ACS allocation rates for a few variables; check whether they correlate with high-MOE geographies (if independent → justifies a multi-component composite score) *(done 2026-07-17 — `notebooks/05-allocation-rates-vs-cv.ipynb`; prevalence is variable-driven — ~39% of households at the median tract had income imputed vs. <1% for age/race — and allocation rates are INDEPENDENT of CVs once geography size is controlled (all controlled Spearman ρ in [−0.00, +0.19]) → multi-component composite score empirically justified)*
+- [x] **Done when:** notebooks are committed with markdown commentary, and we have 2–3 charts worth showing mentors *(satisfied 2026-07-15 — notebooks 01–03 committed, four mentor-ready charts in `data/processed/`; EDA 04 added three more 2026-07-16; **Step 5 complete 2026-07-17 with EDA 05** — eight charts total)*
+
+### Bridge toward composite score (post Step 5)
+
+- [x] **ACS composite prototype (matrix first):** income CV × income allocation at NJ tracts; matched-size validation; equal-weight vs worst-component sensitivity; poverty / Black 65+ labeled robustness only *(done 2026-07-18 — helpers in `analysis/alloc.py` + `analysis/composite.py`)*
+- [x] **Stronger CV driver model:** nested OLS separating place population from estimate size; matched estimate-size panel; composite V2 `cv_residual_high` seed *(done 2026-07-19 — `analysis/cv_model.py`; merged into [`notebooks/06-composite-reliability-and-cv-drivers.ipynb`](../notebooks/06-composite-reliability-and-cv-drivers.ipynb) 2026-07-31)*
+
+### Step 6: Prep for first biweekly — done, 2026-07-22
+
+- [x] One-slide status: what worked, what's blocked, what we need *(`docs/biweekly-2026-07-22.pptx`, on `main`; outcome logged 2026-08-01, see Current Scope)*
+- [x] Bring the product shortlist question to mentors: *"We're leaning toward ACS 5-year + DHC + Demographic Profile as our 3 core products — is that the right mix?"* *(asked 2026-07-22 — answer in principle: narrow to a specific product/metric from our EDA rather than a catalog-wide tool; implemented as the income & poverty scope above)*
+- [x] Confirm recurring biweekly meeting slot *(biweekly cadence confirmed; EDA endpoint set for 2026-08-12)*
+
+---
+
+## Open Questions for Mentors
+
+- ~~Which 3–5 statistical products should we prioritize?~~ **Resolved 2026-07-22:** ACS 5-year + DHC + Demographic Profile — **narrowed 2026-08-01** per biweekly #1 guidance to income & poverty (ACS anchor + allocation + SAIPE + PUMS; DHC/DP demoted to report context, see Current Scope). The scoped-stack confirmation question below is what remains open.
+- Are there internal precedents/prior work on composite quality scores we should review?
+- Preferred dashboard technology, or is that our call? (Sponsor doc: use professional judgment, open source encouraged)
+- Which DAS demonstration product vintage is best for the noise analysis? *(Provisional pick made 2026-07-15: the 2022-08-25 tabulated DHC demonstration summary file — newest tabulated release, closest to DHC production settings; the 2023-04-03 production suite is microdata-only and the 2022-03-16 release has a technical-issues alert. Please confirm or redirect.)*
+- Poverty (B17001) and detailed race×age tables aren't published below tract level (confirmed empirically, 2026-07-09). Is tract acceptable as the floor for poverty/subgroup analysis, or should we swap in a block-group-available alternative (e.g., C17002 income-to-poverty ratio) where BG granularity matters?
+- 131 NJ tracts (6%, in all 21 counties) publish total-population MOEs of ±14–143 people vs. a statewide median of ±546 — near-controlled precision, but with a published MOE rather than the controlled-estimate annotation (found 2026-07-15, EDA 02). What mechanism produces these (sub-county effects of population controls? administrative-records group quarters?), and should a reliability score treat them as their own class?
+- **Privacy noise is level-dependent, not just size-dependent** (found 2026-07-16, EDA 04): in the 2022-08-25 DHC demonstration data, NJ *block groups* carry ~9× the absolute total-population noise of tracts (RMSE 23.2 vs. 2.5 people; a same-size block group is ~12× noisier), and for the P12B subgroup table the *county* level is noisiest in absolute terms (RMSE 34.6 vs. 7.1 at tract). Our working hypothesis is privacy-budget allocation along the geographic spine (with tabulation block groups assembled off-spine from noisy blocks) — is that reading correct, and should we expect the same pattern in production 2020 DHC?
+- The numeric privacy-loss-budget allocations for the 2022-08-25 demonstration release live in a separate allocations file we haven't pulled. For the composite score, should we use the published ε allocations, or is empirically measured noise (EDA 04's per-level RMSE) the better input?
+- Income allocation shows a weak positive association with income CV even after controlling for geography size (Spearman ρ ≈ +0.19 across NJ tracts; every other allocation–CV pairing is ≈ 0; found 2026-07-17, EDA 05). Is there a known mechanism (e.g., populations that resist income questions also being harder to sample precisely), or is this small enough to ignore in the composite score?
+- **Composite tier philosophy** (EDA 06 prototype): keep a visible two-axis matrix (CV × allocation) as the user-facing view, or collapse to a single weighted score for the dashboard? Equal-weight vs worst-component only agreed on ~85% of top-risk-quartile membership. **Partially resolved 2026-08-12 (lead + sponsor direction, pending mentor confirmation):** for the nationwide county app specifically, the sponsor asked the app to strip judgment language and let the user decide (a federal-statistical-agency voice) — this conflicts with the "plain-language per-estimate verdicts" language in HANDOFF.md's 2026-08-01 concept pitch. Working resolution: the composite score stays computed and is shown without card-face verdicts; `analysis/composite.py`'s tier vocabulary is unchanged for the report and notebooks. **Update 2026-09-27 (lead decision #19):** the US dashboard now shows an equal-weight card score with a CV guard on the band and neutral band labels. For mentors: are the sampling anchors (ESRI 0.12, NCHS 0.30, interval reaching zero), the relative imputation scale (national percentile within each allocation table) and the guard the right choices?
+- ~~Should empirical DHC privacy RMSE stay a **separate product score** (our current boundary), rather than being mixed into ACS tract rows?~~ **Resolved 2026-07-31 (lead decision, pending mentor confirmation):** yes, separate. DHC and Demographic Profile were each scored using the EDA 04 demo-derived noise model (RMSE by geography level/size bin) applied to real 2020 production data as a labeled estimate, never mixed into ACS rows. **Superseded 2026-08-01:** under the income & poverty scope, DHC/DP step back from scored products entirely (see Current Scope) — is that the right consequence, or should the DHC reliability view stay in the tool as a separate product score?
+- Are labeled proxy/diagnostic pairings acceptable for poverty (family allocation) and Black 65+ (age/race allocation) in the concept pitch, with income remaining the exact headline case?
+- **Residual sampling flags** (EDA 07): for count estimates, flag CVs worse than predicted from estimate size. Prefer these alongside raw CV tiers on the dashboard, or raw CV only — especially since income medians are poorly predicted by household count (R² ≈ 0.01)?
+- **Plain-language reliability tiers** (Trenton dashboard prototype, 2026-07-31 — see `Streamlit/README.md`): are the labels "Solid / Use with care / Too risky," built on the ESRI 0.12 / NCHS 0.30 CV conventions, the right user-facing framing for a non-technical stakeholder, or should the thresholds or wording change before they reach the real dashboard?
+- **Showing a modeled range vs. showing no range** (Trenton dashboard prototype): for a product like DHC that publishes no uncertainty measure at all, is it better for a dashboard to show a clearly-labeled *modeled* range (2010-demonstration-derived, per decision #13), or to show no range and state plainly that no uncertainty measure exists? Under the income & poverty scope this question narrows to whether the DHC comparison belongs in the tool at all, versus staying report-only context.
+- **Approximate neighborhood names** (Trenton dashboard prototype): no official Census or City of Trenton neighborhood-boundary file exists, so the prototype labels each tract with its nearest OpenStreetMap community-tagged neighborhood point (all 25 within 0.70 mi, see `Streamlit/README.md`). Is a clearly-labeled, crowdsourced approximation acceptable for a stakeholder-facing dashboard, or does an unofficial label risk undermining trust in the correct statistics sitting right next to it?
+- Which non-API datasets should our product inventory include? The Data API covers ~1,800 dataset-vintages (~570 product families), but uncertainty-relevant products like ACS Variance Replicate Tables and some PUMS distributions ship as bulk files outside the API. We've hand-added TIGER and the DAS demonstration files — what else matters for the composite?
+- Is there an internal machine-readable index of the Bureau's file-only datasets (the ~6,158 on the website's Datasets page)? data.gov's harvest API is retired (all CKAN paths 404, confirmed 2026-07-26) and `census.gov/data.json` covers only the Data API — it's the same ~1,790-record catalog at a second URL. If none exists, our curated registry approach (35 uncertainty-relevant file-only datasets, hand-annotated in the Product Scope Tracker) may be worth flagging to the data-dissemination teams as a discoverability gap.
+- **Which CV threshold convention should the dashboard name (new, 2026-08-30):** Garrett's user research ([docs/user-segments-and-needs.md](user-segments-and-needs.md)) found that the state data centers who write ACS reliability guidance **disagree with each other** — Washington OFM, Chittenden County RPC, and the Missouri Census Data Center publish 12/40, 15, and 15/30 respectively, against Esri's 12/40 bands and the Census ACS Compass 15% caution. Our EDA charts have used CV > 0.30. Since a reliability label is the one need every user segment shares, the tool has to pick one convention and name it on the card. **Is there a Bureau-preferred convention we should adopt, or is naming our choice and citing it sufficient?** (Interacts with the composite tier-label question above.)
+- **Should a CV-from-estimate-size prediction ship as a user-facing feature (new, 2026-08-30):** the research proposes a "reliability-floor model" — user enters an estimate size, tool returns an expected CV — to give sub-county users a defensible expectation for geographies our data does not hold. EDA 14 supports this for **counts** (slope −0.54, R² 0.78 over 6.1M cells) but not for **medians**, which escape the size law entirely (within-table R² ≤ 0.01) — including median household income, our anchor variable. Our intent is to gate it to count estimates, label it a prediction rather than a measurement, and validate against one state's real tract MOEs first. **Is a labeled prediction of this kind acceptable to publish at all, or does extrapolating reliability below the published geography floor cross a line the Bureau would not want a tool to cross?**
+- **Scoped product stack confirmation (2026-08-01):** for the income & poverty scope — ACS 5-year (B19013/B17001/C17002) + allocation tables (B99192/B99172) + SAIPE + PUMS replicate weights / Variance Replicate Tables: is that the right mix? And since income doesn't exist in decennial products, does the DAS/privacy-noise analysis (EDA 04) stay as report context rather than a score component?
+- **Scope widening confirmation (2026-09-14, decision #18):** the dashboard now extends beyond income and poverty to employment, housing cost, education and disability measures, each tied to a named federal program, across all US counties. Does this fit what the Bureau wants the tool to demonstrate? And should minority status (B03002), held back as a sensitive variable, be included?
+- **AI-worded explanations in the dashboard (new, 2026-10-10):** we are designing an optional "Ask about this county" panel in which a large language model (a text-generating AI system) writes short plain-language answers about the selected county. Every figure is inserted by our code from the same values the cards show, the model is blocked from typing numbers itself (apart from numbers that define a measure, such as an age range or income bracket, and only in that defining wording), and the panel is labeled as AI-generated and not a Census Bureau statement. It is off unless an API key is configured. **Is a panel of this kind acceptable in a tool that carries the Census Bureau's name, and is there Census Bureau guidance on generative AI that we should follow?** Design: [docs/design-specs/2026-10-10-county-ai-assistant-design.md](design-specs/2026-10-10-county-ai-assistant-design.md).
+- **Quoting outside reliability rules (new, 2026-10-10):** the sponsor's 2026-08-12 direction was a neutral voice with no verdicts. To help a non-technical user who asks "can I rely on this number?", the panel above would quote three named outside rules as theirs, with the comparison done in code: ESRI's CV bands (0.12 and 0.40), the National Center for Health Statistics caution line (CV over 0.30), and HUD's rule that a median is usable when its margin of error is under half the estimate. **Does quoting other organizations' rules stay within the neutral-voice direction, or should the tool describe our own bands only?** (Interacts with the CV threshold convention question above.)
+
+## Guardrails / Lessons to Remember
+
+- **Timebox the statistical rabbit hole.** Uncertainty decomposition can go arbitrarily deep (total survey error literature is vast). Get a workable composite by week 6; save real energy for the dashboard and fit-for-use guidance — that's what leadership will remember.
+- **Reproducibility from day one.** The codebase is a graded deliverable; script every data pull.
+- **Actionable vs. structural error.** If our decomposition can separate undercount (fixable via get-out-the-count campaigns) from privacy noise (a policy choice), that directly serves the sponsor's stated goal.
